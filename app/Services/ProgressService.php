@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Exception;
 
 class ProgressService
@@ -175,23 +176,38 @@ class ProgressService
             // Filtro por status ativo
             $ativo = $filters['ativo'] ?? null;
             if ($ativo !== null) {
-                $whereConditions[] = $ativo === 'true' ? "flgati = 1" : "flgati = 0";
+                $whereConditions[] = ($ativo === 'true' || $ativo === '1' || $ativo === 1) ? "flgati = 1" : "flgati = 0";
             }
             
-            // Montar SQL final
-            $simpleSql = "SELECT TOP $perPage $campos FROM PUB.transporte";
-            if (!empty($whereConditions)) {
-                $simpleSql .= " WHERE " . implode(' AND ', $whereConditions);
+            // Solução alternativa para paginação no Progress usando array de IDs
+            $whereClause = !empty($whereConditions) ? " WHERE " . implode(' AND ', $whereConditions) : "";
+            
+            if ($page === 1 || $offset === 0) {
+                // Primeira página - SQL simples
+                $simpleSql = "SELECT TOP $perPage $campos FROM PUB.transporte$whereClause ORDER BY codtrn";
+            } else {
+                // Para páginas subsequentes, primeiro buscar todos os IDs, depois filtrar
+                // Busca só os IDs dos primeiros registros para pular
+                $skipSql = "SELECT TOP $offset codtrn FROM PUB.transporte$whereClause ORDER BY codtrn";
+                $skipResult = $this->executeCustomQuery($skipSql);
+                
+                if ($skipResult['success'] && !empty($skipResult['data']['results'])) {
+                    $lastId = end($skipResult['data']['results'])['codtrn'];
+                    $conditionPrefix = $whereClause ? " AND " : " WHERE ";
+                    $simpleSql = "SELECT TOP $perPage $campos FROM PUB.transporte$whereClause{$conditionPrefix}codtrn > $lastId ORDER BY codtrn";
+                } else {
+                    // Se não conseguiu pular, retorna vazio
+                    $simpleSql = "SELECT TOP $perPage $campos FROM PUB.transporte WHERE 1=0";
+                }
             }
-            $simpleSql .= " ORDER BY codtrn";
             
             Log::info('SQL simplificado para busca', ['sql' => $simpleSql]);
             
             $result = $this->executeCustomQuery($simpleSql);
 
             if ($result['success']) {
-                // Contar total de registros para paginação (simples sem filtros primeiro)
-                $countSql = "SELECT COUNT(*) as total FROM PUB.transporte";
+                // Contar total de registros para paginação (aplicando os mesmos filtros)
+                $countSql = "SELECT COUNT(*) as total FROM PUB.transporte$whereClause";
                 
                 $totalResult = $this->executeCustomQuery($countSql);
 
@@ -237,29 +253,37 @@ class ProgressService
     public function getTransporteById($id): array
     {
         try {
-            Log::info('Buscando transporte por ID via ODBC', ['id' => $id]);
+            Log::info('Buscando transporte por ID', ['id' => $id]);
 
-            $transporte = DB::connection($this->connection)
-                ->select('SELECT nomtrn, codtrn FROM PUB.transporte WHERE codtrn = ?', [$id]);
+            $sql = "SELECT codtrn, nomtrn, flgautonomo, natcam, tipcam, codcnpjcpf, numpla, numtel, dddtel, flgati, indcd FROM PUB.transporte WHERE codtrn = $id";
+
+            $result = $this->executeJavaConnector('query', $sql);
             
-            if (empty($transporte)) {
+            if (!$result['success']) {
                 return [
                     'success' => false,
-                    'message' => 'Transporte não encontrado',
-                    'data' => null
+                    'error' => $result['error'] ?? 'Erro na consulta do transporte'
                 ];
             }
 
-            Log::info('Transporte encontrado via ODBC', ['transporte_id' => $id]);
+            $transportes = $result['data']['results'] ?? [];
+            
+            if (empty($transportes)) {
+                return [
+                    'success' => false,
+                    'error' => 'Transporte não encontrado'
+                ];
+            }
+
+            Log::info('Transporte encontrado', ['transporte_id' => $id]);
 
             return [
                 'success' => true,
-                'message' => 'Transporte encontrado com sucesso',
-                'data' => $transporte[0]
+                'data' => $transportes[0]
             ];
 
         } catch (Exception $e) {
-            Log::error('Erro na busca de transporte por ID via ODBC', [
+            Log::error('Erro na busca de transporte', [
                 'id' => $id,
                 'error' => $e->getMessage()
             ]);
@@ -267,6 +291,180 @@ class ProgressService
             return [
                 'success' => false,
                 'error' => 'Erro na busca de transporte: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Lista pacotes com paginação e filtros
+     */
+    public function getPacotesPaginated($filters): array
+    {
+        try {
+            $page = $filters['page'] ?? 1;
+            $perPage = $filters['per_page'] ?? 15;
+            $search = $filters['search'] ?? '';
+            $codigo = $filters['codigo'] ?? '';
+            $transportador = $filters['transportador'] ?? '';
+            $motorista = $filters['motorista'] ?? '';
+            $rota = $filters['rota'] ?? '';
+            $situacao = $filters['situacao'] ?? '';
+            $dataInicio = $filters['data_inicio'] ?? '';
+            $dataFim = $filters['data_fim'] ?? '';
+
+            // Campos principais da consulta
+            $campos = "p.codpac, p.datforpac, p.horforpac, p.codtrn, p.codmot, p.numpla, p.valpac, p.volpac, p.pespac, p.sitpac, p.codrot, p.nroped, t.nomtrn";
+
+            // Construir condições WHERE
+            $whereConditions = [];
+
+            // Filtro por código do pacote
+            if (!empty($codigo)) {
+                $whereConditions[] = "p.codpac = $codigo";
+            }
+
+            // Filtro por busca geral (código do pacote ou nome do transportador)
+            if (!empty($search)) {
+                $whereConditions[] = "(p.codpac LIKE '%$search%' OR t.nomtrn LIKE '%$search%')";
+            }
+
+            // Filtro por transportador
+            if (!empty($transportador)) {
+                $whereConditions[] = "t.nomtrn LIKE '%$transportador%'";
+            }
+
+            // Filtro por rota
+            if (!empty($rota)) {
+                $whereConditions[] = "p.codrot LIKE '%$rota%'";
+            }
+
+            // Filtro por situação
+            if (!empty($situacao)) {
+                $whereConditions[] = "p.sitpac = '$situacao'";
+            }
+
+            // Filtro por período
+            if (!empty($dataInicio)) {
+                $whereConditions[] = "p.datforpac >= '$dataInicio'";
+            }
+            if (!empty($dataFim)) {
+                $whereConditions[] = "p.datforpac <= '$dataFim'";
+            }
+
+            // Sempre mostrar apenas pacotes com transportador
+            $whereConditions[] = "p.codtrn > 0";
+
+            $whereClause = " WHERE " . implode(' AND ', $whereConditions);
+            
+            // Query principal com paginação e JOIN para pegar nome do transportador
+            $offset = ($page - 1) * $perPage;
+            
+            if ($offset == 0) {
+                // Primeira página
+                $sql = "SELECT TOP $perPage $campos FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn $whereClause ORDER BY p.codpac DESC";
+            } else {
+                // Páginas subsequentes usando offset simulado
+                $offsetSql = "SELECT TOP $offset p.codpac FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn $whereClause ORDER BY p.codpac DESC";
+                $offsetResult = $this->executeCustomQuery($offsetSql);
+                
+                if ($offsetResult['success'] && !empty($offsetResult['data']['results'])) {
+                    $lastId = end($offsetResult['data']['results'])['codpac'];
+                    $sql = "SELECT TOP $perPage $campos FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn $whereClause AND p.codpac < $lastId ORDER BY p.codpac DESC";
+                } else {
+                    $sql = "SELECT TOP $perPage $campos FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn WHERE 1=0";
+                }
+            }
+
+            Log::info('SQL Pacotes', ['sql' => $sql]);
+            
+            $result = $this->executeCustomQuery($sql);
+
+            if ($result['success']) {
+                // Contar total com os mesmos filtros
+                $countSql = "SELECT COUNT(*) as total FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn $whereClause";
+                $totalResult = $this->executeCustomQuery($countSql);
+
+                $total = 0;
+                if ($totalResult['success'] && !empty($totalResult['data']['results'])) {
+                    $total = $totalResult['data']['results'][0]['total'] ?? 0;
+                }
+
+                $lastPage = ceil($total / $perPage);
+
+                $result['pagination'] = [
+                    'current_page' => $page,
+                    'per_page' => $perPage,
+                    'total' => $total,
+                    'last_page' => $lastPage,
+                    'from' => $offset + 1,
+                    'to' => min($offset + $perPage, $total),
+                    'has_more_pages' => $page < $lastPage
+                ];
+
+                Log::info('Pacotes encontrados', ['total' => count($result['data']['results'] ?? [])]);
+                
+                return $result;
+            }
+
+            return $result;
+
+        } catch (Exception $e) {
+            Log::error('Erro na busca de pacotes paginados', [
+                'filters' => $filters,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro na busca de pacotes: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Busca pacote específico por ID
+     */
+    public function getPacoteById($id): array
+    {
+        try {
+            Log::info('Buscando pacote por ID', ['id' => $id]);
+
+            $sql = "SELECT p.*, t.nomtrn, t.codcnpjcpf as transportador_cpf FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn WHERE p.codpac = $id";
+
+            $result = $this->executeCustomQuery($sql);
+            
+            if (!$result['success']) {
+                return [
+                    'success' => false,
+                    'error' => $result['error'] ?? 'Erro na consulta do pacote'
+                ];
+            }
+
+            $pacotes = $result['data']['results'] ?? [];
+            
+            if (empty($pacotes)) {
+                return [
+                    'success' => false,
+                    'error' => 'Pacote não encontrado'
+                ];
+            }
+
+            Log::info('Pacote encontrado', ['pacote_id' => $id]);
+
+            return [
+                'success' => true,
+                'data' => $pacotes[0]
+            ];
+
+        } catch (Exception $e) {
+            Log::error('Erro na busca de pacote', [
+                'id' => $id,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro na busca de pacote: ' . $e->getMessage()
             ];
         }
     }
@@ -477,5 +675,70 @@ class ProgressService
         }
 
         return implode(' AND ', $conditions);
+    }
+    
+    /**
+     * Busca motoristas por transportador
+     */
+    public function getMotoristasPorTransportador($codigoTransportador): array
+    {
+        try {
+            $sql = "SELECT codtrn, codmot, codcpf, nommot, desend, codest, codmun, codbai, numcep, dddtel, numtel, dddtel1, numtel1, numhab, nompai, nommae, sitmot, desnac, estciv, codrntrc, datvldrntrc, venhab, esthab, cathab, codmopp, estmopp, venmopp, numrg, orgrg, exprg, datnas, numrenach, sitseg, datvenseg, datprihab, datemihab, codseghab, cplend, numend, tiplog, codlog, catmot, desobs, email, flgpro, datvldtox FROM PUB.trnmot WHERE codtrn = $codigoTransportador";
+            
+            $result = $this->executeCustomQuery($sql);
+            
+            if ($result['success']) {
+                return [
+                    'success' => true,
+                    'data' => $result['data']['results'] ?? []
+                ];
+            }
+            
+            return $result;
+            
+        } catch (Exception $e) {
+            Log::error('Erro ao buscar motoristas por transportador', [
+                'transportador' => $codigoTransportador,
+                'error' => $e->getMessage()
+            ]);
+            
+            return [
+                'success' => false,
+                'error' => 'Erro ao buscar motoristas: ' . $e->getMessage()
+            ];
+        }
+    }
+    
+    /**
+     * Busca veículos por transportador
+     */
+    public function getVeiculosPorTransportador($codigoTransportador): array
+    {
+        try {
+            // Usar apenas a tabela transporte que já tem os dados dos veículos
+            $sql = "SELECT codtrn, numpla FROM PUB.transporte WHERE codtrn = $codigoTransportador";
+            
+            $result = $this->executeCustomQuery($sql);
+            
+            if ($result['success']) {
+                return [
+                    'success' => true,
+                    'data' => $result['data']['results'] ?? []
+                ];
+            }
+            
+            return $result;
+            
+        } catch (Exception $e) {
+            Log::error('Erro ao buscar veículos por transportador', [
+                'transportador' => $codigoTransportador,
+                'error' => $e->getMessage()
+            ]);
+            
+            return [
+                'success' => false,
+                'error' => 'Erro ao buscar veículos: ' . $e->getMessage()
+            ];
+        }
     }
 }

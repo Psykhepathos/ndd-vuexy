@@ -98,7 +98,7 @@ class Transporte extends BaseProgressModel
                 if (!$this->dddtel || !$this->numtel) {
                     return null;
                 }
-                return "({$this->dddtel}) " . preg_replace('/(\d{4,5})(\d{4})/', '$1-$2', (string)$this->numtel);
+                return $this->formatTelefone($this->dddtel, $this->numtel);
             }
         );
     }
@@ -113,8 +113,18 @@ class Transporte extends BaseProgressModel
                 if (!$this->dddcel || !$this->numcel) {
                     return null;
                 }
-                return "({$this->dddcel}) " . preg_replace('/(\d{4,5})(\d{4})/', '$1-$2', (string)$this->numcel);
+                return $this->formatTelefone($this->dddcel, $this->numcel);
             }
+        );
+    }
+    
+    /**
+     * Accessor para nome em uppercase
+     */
+    protected function nomeTransportador(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => strtoupper($this->nomtrn)
         );
     }
     
@@ -124,7 +134,7 @@ class Transporte extends BaseProgressModel
     protected function tipoTransportador(): Attribute
     {
         return Attribute::make(
-            get: fn () => $this->flgautonomo ? 'Autônomo' : 'Empresa'
+            get: fn () => $this->flgautonomo ? 'AUTÔNOMO' : 'EMPRESA'
         );
     }
     
@@ -134,7 +144,7 @@ class Transporte extends BaseProgressModel
     protected function statusAtivo(): Attribute
     {
         return Attribute::make(
-            get: fn () => $this->flgati ? 'Ativo' : 'Inativo'
+            get: fn () => $this->flgati ? 'ATIVO' : 'INATIVO'
         );
     }
     
@@ -145,12 +155,12 @@ class Transporte extends BaseProgressModel
     {
         return Attribute::make(
             get: function () {
-                $endereco = $this->desend;
+                $endereco = strtoupper($this->desend);
                 if ($this->numend) {
                     $endereco .= ", {$this->numend}";
                 }
                 if ($this->cplend) {
-                    $endereco .= ", {$this->cplend}";
+                    $endereco .= ", " . strtoupper($this->cplend);
                 }
                 return $endereco;
             }
@@ -160,6 +170,30 @@ class Transporte extends BaseProgressModel
     /**
      * Relacionamentos
      */
+    
+    /**
+     * Accessor para placa formatada como placa brasileira
+     */
+    protected function placaFormatada(): Attribute
+    {
+        return Attribute::make(
+            get: function () {
+                return $this->formatPlacaBrasileira($this->numpla);
+            }
+        );
+    }
+    
+    /**
+     * Accessor para placa com estilo visual
+     */
+    protected function placaEstilizada(): Attribute
+    {
+        return Attribute::make(
+            get: function () {
+                return $this->formatPlacaBrasileira($this->numpla, true);
+            }
+        );
+    }
     
     /**
      * Relacionamento com Motoristas
