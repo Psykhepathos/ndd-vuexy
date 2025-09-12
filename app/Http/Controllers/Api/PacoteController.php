@@ -30,6 +30,7 @@ class PacoteController extends Controller
             'motorista' => 'nullable|string|max:255',
             'rota' => 'nullable|string|max:10',
             'situacao' => 'nullable|string|max:1',
+            'apenas_recentes' => 'nullable|string|max:1',
             'data_inicio' => 'nullable|date',
             'data_fim' => 'nullable|date'
         ]);
@@ -42,6 +43,7 @@ class PacoteController extends Controller
         $motorista = $request->get('motorista', '');
         $rota = $request->get('rota', '');
         $situacao = $request->get('situacao', '');
+        $apenasRecentes = $request->get('apenas_recentes', '') === '1';
         $dataInicio = $request->get('data_inicio', '');
         $dataFim = $request->get('data_fim', '');
 
@@ -54,6 +56,7 @@ class PacoteController extends Controller
             'motorista' => $motorista,
             'rota' => $rota,
             'situacao' => $situacao,
+            'apenas_recentes' => $apenasRecentes,
             'data_inicio' => $dataInicio,
             'data_fim' => $dataFim
         ];
@@ -94,6 +97,34 @@ class PacoteController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Detalhes do pacote obtidos com sucesso',
+            'data' => $result['data']
+        ]);
+    }
+
+    /**
+     * Busca itinerário do pacote (baseado no Progress itinerario.p)
+     */
+    public function itinerario(Request $request): JsonResponse
+    {
+        $request->validate([
+            'Pacote.codPac' => 'required|integer'
+        ]);
+
+        $codPac = $request->input('Pacote.codPac');
+        
+        $result = $this->progressService->getItinerarioPacote($codPac);
+
+        if (!$result['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['error'] ?? 'Erro ao buscar itinerário',
+                'data' => null
+            ], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Itinerário obtido com sucesso',
             'data' => $result['data']
         ]);
     }

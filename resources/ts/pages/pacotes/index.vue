@@ -48,6 +48,7 @@ const searchCodigo = ref('')
 const searchTransportador = ref('')
 const searchRota = ref('')
 const selectedSituacao = ref('')
+const apenasRecentes = ref(false)
 const dataInicio = ref('')
 const dataFim = ref('')
 
@@ -57,9 +58,11 @@ const router = useRouter()
 // Opções de situação
 const situacaoOptions = [
   { title: 'Todas', value: '' },
-  { title: 'Finalizada (F)', value: 'F' },
-  { title: 'Marcada (M)', value: 'M' },
   { title: 'Urgente (U)', value: 'U' },
+  { title: 'Marcada (M)', value: 'M' },
+  { title: 'Em Separação (S)', value: 'S' },
+  { title: 'Aguardando (A)', value: 'A' },
+  { title: 'Finalizada (F)', value: 'F' },
   { title: 'Vazia', value: ' ' }
 ]
 
@@ -91,6 +94,7 @@ const fetchPacotes = async () => {
       transportador: searchTransportador.value || '',
       rota: searchRota.value || '',
       situacao: selectedSituacao.value || '',
+      apenas_recentes: apenasRecentes.value ? '1' : '',
       data_inicio: dataInicio.value || '',
       data_fim: dataFim.value || ''
     })
@@ -149,9 +153,11 @@ const formatTime = (time: string) => {
 // Formatar situação
 const formatSituacao = (situacao: string) => {
   const situacoes: { [key: string]: { text: string, color: string } } = {
-    'F': { text: 'FINALIZADA', color: 'success' },
-    'M': { text: 'MARCADA', color: 'warning' },
     'U': { text: 'URGENTE', color: 'error' },
+    'M': { text: 'MARCADA', color: 'warning' },
+    'S': { text: 'EM SEPARAÇÃO', color: 'info' },
+    'A': { text: 'AGUARDANDO', color: 'primary' },
+    'F': { text: 'FINALIZADA', color: 'success' },
     '': { text: 'NORMAL', color: 'primary' },
     ' ': { text: 'VAZIA', color: 'secondary' }
   }
@@ -181,6 +187,7 @@ const clearFilters = () => {
   searchTransportador.value = ''
   searchRota.value = ''
   selectedSituacao.value = ''
+  apenasRecentes.value = false
   dataInicio.value = ''
   dataFim.value = ''
   pagination.value.current_page = 1
@@ -271,6 +278,14 @@ onMounted(() => {
               :items="situacaoOptions"
               label="Situação"
               clearable
+            />
+          </VCol>
+          <VCol cols="12" sm="6" md="3">
+            <VCheckbox
+              v-model="apenasRecentes"
+              label="Apenas Recentes (Cód > 800.000)"
+              color="primary"
+              @change="applyFilters"
             />
           </VCol>
           <VCol cols="12" sm="6" md="3">
