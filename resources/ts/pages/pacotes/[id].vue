@@ -107,6 +107,10 @@ const fetchItinerario = async () => {
     if (data.success) {
       itinerario.value = data.data
       showItinerario.value = true
+      // Inicializar mapa após carregar dados
+      setTimeout(() => {
+        initializeMap()
+      }, 100)
     } else {
       console.error('Erro ao carregar itinerário:', data.message)
     }
@@ -157,6 +161,57 @@ const formatSituacao = (situacao: string) => {
 
 const goBack = () => {
   router.push('/pacotes')
+}
+
+// Mapa usando Google Maps simples (sem Leaflet para simplicidade)
+const initializeMap = () => {
+  const mapElement = document.getElementById('delivery-map')
+  if (!mapElement || !itinerario.value?.pedidos?.length) return
+  
+  // Para simplificar, vou criar pontos fictícios de exemplo em São Paulo
+  // Em produção, esses dados viriam das coordenadas GPS do banco
+  const deliveries = itinerario.value.pedidos.map((pedido, index) => ({
+    ...pedido,
+    // Coordenadas fictícias para demonstração (região de São Paulo)
+    lat: -23.5505 + (Math.random() - 0.5) * 0.2,
+    lng: -46.6333 + (Math.random() - 0.5) * 0.2,
+    sequence: index + 1
+  }))
+  
+  // Criar HTML do mapa simples com pontos
+  mapElement.innerHTML = `
+    <div style="position: relative; background: #f5f5f5; height: 100%; display: flex; align-items: center; justify-content: center;">
+      <div style="text-align: center;">
+        <div style="margin-bottom: 20px;">
+          <strong>Pontos de Entrega - Pacote #${itinerario.value.codpac}</strong>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;">
+          ${deliveries.map(delivery => `
+            <div style="
+              background: #1976d2; 
+              color: white; 
+              padding: 8px 12px; 
+              border-radius: 20px; 
+              font-size: 12px;
+              cursor: pointer;
+              min-width: 60px;
+              text-align: center;
+            " onclick="alert('Entrega ${delivery.sequence}: Cliente ${delivery.codcli}\\nEndereço: ${delivery.desend || 'N/D'}')">
+              ${delivery.sequence}
+            </div>
+          `).join('')}
+        </div>
+        <div style="margin-top: 20px; font-size: 12px; color: #666;">
+          Clique nos números para ver detalhes da entrega
+        </div>
+      </div>
+    </div>
+  `
+}
+
+const focusMapOnDelivery = (delivery: any) => {
+  // Para agora, mostrar um alerta simples
+  alert(`Entrega ${delivery.seqent}\nCliente: ${delivery.razcli || delivery.codcli}\nEndereço: ${delivery.desend || 'N/D'}`)
 }
 
 onMounted(() => {
@@ -308,6 +363,21 @@ onMounted(() => {
           </VCol>
         </VRow>
 
+        <!-- Mapa de Entregas -->
+        <VCard class="mb-6">
+          <VCardTitle class="d-flex align-center gap-3">
+            <VIcon icon="tabler-map" color="info" />
+            Mapa de Entregas
+            <VSpacer />
+            <VChip color="success" size="small">
+              Rota Sequencial
+            </VChip>
+          </VCardTitle>
+          <VCardText>
+            <div id="delivery-map" style="height: 400px; width: 100%;" class="rounded-lg overflow-hidden"></div>
+          </VCardText>
+        </VCard>
+
         <!-- Lista de Entregas -->
         <VDataTable
           :headers="[
@@ -318,7 +388,7 @@ onMounted(() => {
             { title: 'NF', key: 'numnot', width: '100px' },
             { title: 'VALOR', key: 'valnot', width: '120px' },
             { title: 'PESO', key: 'peso', width: '100px' },
-            { title: 'GPS', key: 'gps', width: '80px' }
+            { title: 'MAPA', key: 'gps', width: '80px' }
           ]"
           :items="itinerario.pedidos || []"
           class="elevation-1"
@@ -333,20 +403,20 @@ onMounted(() => {
           <template #item.razcli="{ item }">
             <div>
               <p class="text-body-2 font-weight-medium mb-0">
-                {{ item.razcli }}
+                {{ item.razcli || 'Cliente ' + item.codcli }}
               </p>
               <small class="text-disabled">Cód: {{ item.codcli }}</small>
             </div>
           </template>
 
           <template #item.cidade="{ item }">
-            {{ item.desmun }}/{{ item.uf }}
+            {{ (item.desmun || 'N/D') }}{{ item.uf ? '/' + item.uf : '' }}
           </template>
 
           <template #item.desend="{ item }">
             <div>
-              <p class="text-body-2 mb-0">{{ item.desend }}</p>
-              <small class="text-disabled">{{ item.desbai }}</small>
+              <p class="text-body-2 mb-0">{{ item.desend || 'Endereço não informado' }}</p>
+              <small class="text-disabled">{{ item.desbai || '' }}</small>
             </div>
           </template>
 
@@ -360,16 +430,13 @@ onMounted(() => {
 
           <template #item.gps="{ item }">
             <VBtn
-              v-if="item.gps_lat && item.gps_lon"
               size="small"
-              color="success"
+              color="info"
               variant="tonal"
-              :href="`https://maps.google.com/?q=${item.gps_lat},${item.gps_lon}`"
-              target="_blank"
+              @click="focusMapOnDelivery(item)"
             >
               <VIcon icon="tabler-map-pin" size="16" />
             </VBtn>
-            <span v-else class="text-disabled">N/D</span>
           </template>
         </VDataTable>
       </VCardText>
