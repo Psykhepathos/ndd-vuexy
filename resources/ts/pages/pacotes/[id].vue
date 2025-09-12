@@ -163,55 +163,107 @@ const goBack = () => {
   router.push('/pacotes')
 }
 
-// Mapa usando Google Maps simples (sem Leaflet para simplicidade)
+// Processar coordenadas GPS como no Progress itinerario.p
+const processGpsCoordinate = (coordinate: string): string => {
+  if (!coordinate) return ''
+  
+  let processedCoord = coordinate.toString().trim()
+  // Remover indicadores direcionais
+  processedCoord = processedCoord.replace(/[WNES]/g, '')
+  processedCoord = processedCoord.replace(/[-.,]/g, '')
+  
+  if (processedCoord.length >= 3) {
+    const intPart = processedCoord.substring(0, processedCoord.length - 6)
+    const decPart = processedCoord.substring(processedCoord.length - 6)
+    return `-${intPart}.${decPart}`
+  }
+  
+  return ''
+}
+
+// Inicializar mapa com dados reais GPS
 const initializeMap = () => {
   const mapElement = document.getElementById('delivery-map')
   if (!mapElement || !itinerario.value?.pedidos?.length) return
   
-  // Para simplificar, vou criar pontos fictícios de exemplo em São Paulo
-  // Em produção, esses dados viriam das coordenadas GPS do banco
-  const deliveries = itinerario.value.pedidos.map((pedido, index) => ({
-    ...pedido,
-    // Coordenadas fictícias para demonstração (região de São Paulo)
-    lat: -23.5505 + (Math.random() - 0.5) * 0.2,
-    lng: -46.6333 + (Math.random() - 0.5) * 0.2,
-    sequence: index + 1
-  }))
+  // Processar coordenadas reais dos pedidos
+  const deliveries = itinerario.value.pedidos.map((pedido, index) => {
+    const lat = processGpsCoordinate(pedido.lat || '')
+    const lng = processGpsCoordinate(pedido.long || '')
+    
+    return {
+      ...pedido,
+      latitude: lat,
+      longitude: lng,
+      sequence: index + 1,
+      hasGps: lat && lng
+    }
+  })
   
-  // Criar HTML do mapa simples com pontos
+  const deliveriesWithGps = deliveries.filter(d => d.hasGps)
+  
+  // Criar HTML do mapa com pontos reais
   mapElement.innerHTML = `
     <div style="position: relative; background: #f5f5f5; height: 100%; display: flex; align-items: center; justify-content: center;">
-      <div style="text-align: center;">
+      <div style="text-align: center; width: 100%; padding: 20px;">
         <div style="margin-bottom: 20px;">
-          <strong>Pontos de Entrega - Pacote #${itinerario.value.codpac}</strong>
+          <strong>Rota de Entrega - Pacote #${itinerario.value.codpac}</strong>
         </div>
-        <div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
           ${deliveries.map(delivery => `
             <div style="
-              background: #1976d2; 
+              background: ${delivery.hasGps ? '#1976d2' : '#9e9e9e'}; 
               color: white; 
-              padding: 8px 12px; 
-              border-radius: 20px; 
-              font-size: 12px;
+              padding: 12px; 
+              border-radius: 8px; 
+              font-size: 13px;
               cursor: pointer;
-              min-width: 60px;
-              text-align: center;
-            " onclick="alert('Entrega ${delivery.sequence}: Cliente ${delivery.codcli}\\nEndereço: ${delivery.desend || 'N/D'}')">
-              ${delivery.sequence}
+              text-align: left;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            " onclick="window.open('https://maps.google.com/?q=${delivery.latitude},${delivery.longitude}', '_blank')">
+              <div style="font-weight: bold; margin-bottom: 5px;">
+                🚚 Entrega ${delivery.sequence}
+              </div>
+              <div style="margin-bottom: 3px;">
+                👤 ${delivery.razcli || 'Cliente ' + delivery.codcli}
+              </div>
+              <div style="margin-bottom: 3px;">
+                📍 ${delivery.desend || 'Endereço não informado'}
+              </div>
+              <div style="margin-bottom: 3px;">
+                🌍 ${delivery.desmun || 'N/D'}${delivery.uf ? '/' + delivery.uf : ''}
+              </div>
+              <div style="font-size: 11px; opacity: 0.9;">
+                ${delivery.hasGps ? '🗺️ GPS: ' + delivery.latitude + ', ' + delivery.longitude : '❌ Sem coordenadas GPS'}
+              </div>
             </div>
           `).join('')}
         </div>
         <div style="margin-top: 20px; font-size: 12px; color: #666;">
-          Clique nos números para ver detalhes da entrega
+          ${deliveriesWithGps.length} de ${deliveries.length} entregas com coordenadas GPS
+          <br>Clique nos cards azuis para abrir no Google Maps
         </div>
       </div>
     </div>
   `
 }
 
+const openGoogleMaps = (delivery: any) => {
+  if (!delivery.lat || !delivery.long) return
+  
+  const lat = processGpsCoordinate(delivery.lat)
+  const lng = processGpsCoordinate(delivery.long)
+  
+  if (lat && lng) {
+    const url = `https://maps.google.com/?q=${lat},${lng}`
+    window.open(url, '_blank')
+  } else {
+    alert('Coordenadas GPS inválidas')
+  }
+}
+
 const focusMapOnDelivery = (delivery: any) => {
-  // Para agora, mostrar um alerta simples
-  alert(`Entrega ${delivery.seqent}\nCliente: ${delivery.razcli || delivery.codcli}\nEndereço: ${delivery.desend || 'N/D'}`)
+  openGoogleMaps(delivery)
 }
 
 onMounted(() => {
@@ -430,12 +482,24 @@ onMounted(() => {
 
           <template #item.gps="{ item }">
             <VBtn
+              v-if="item.lat && item.long"
               size="small"
-              color="info"
+              color="success"
               variant="tonal"
-              @click="focusMapOnDelivery(item)"
+              @click="openGoogleMaps(item)"
+              title="Abrir no Google Maps"
             >
               <VIcon icon="tabler-map-pin" size="16" />
+            </VBtn>
+            <VBtn
+              v-else
+              size="small"
+              color="grey"
+              variant="tonal"
+              disabled
+              title="Sem coordenadas GPS"
+            >
+              <VIcon icon="tabler-map-pin-off" size="16" />
             </VBtn>
           </template>
         </VDataTable>
