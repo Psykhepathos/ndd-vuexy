@@ -484,20 +484,7 @@ class ProgressService
             Log::info('Buscando itinerário do pacote', ['codpac' => $codPac]);
 
             // Buscar dados principais da carga (similar ao procedure coleta_cargas)
-            $sqlCarga = "
-                SELECT 
-                    p.codpac,
-                    p.codrot as rota,
-                    p.codmot as motorista,
-                    p.pespac as peso,
-                    p.volpac as volume,
-                    p.valpac as valor,
-                    COALESCE(cf.valfre, 0) as frete
-                FROM PUB.pacote p
-                LEFT JOIN PUB.cxapacote cp ON cp.codpac = p.codpac
-                LEFT JOIN PUB.caixafech cf ON cf.codcxa = cp.codcxa
-                WHERE p.codpac = $codPac
-            ";
+            $sqlCarga = "SELECT p.codpac, p.codrot as rota, p.codmot as motorista, p.pespac as peso, p.volpac as volume, p.valpac as valor, COALESCE(cf.valfre, 0) as frete FROM PUB.pacote p LEFT JOIN PUB.cxapacote cp ON cp.codpac = p.codpac LEFT JOIN PUB.caixafech cf ON cf.codcxa = cp.codcxa WHERE p.codpac = $codPac";
 
             $resultCarga = $this->executeJavaConnector('query', $sqlCarga);
             
@@ -519,34 +506,7 @@ class ProgressService
             $carga = $cargas[0];
 
             // Buscar pedidos/entregas (similar ao procedure coleta_entregas)
-            $sqlEntregas = "
-                SELECT 
-                    ped.numseqped as seqent,
-                    COALESCE(nf.numnotfis, 0) as nf,
-                    cli.codcli,
-                    raz.desraz as razcli,
-                    est.sigest as uf,
-                    mun.desmun,
-                    bai.desbai,
-                    cli.desend,
-                    COALESCE(CAST(nf.numnotfis as VARCHAR), '-') as numnot,
-                    ped.valtotateped as valnot,
-                    ped.pesped as peso,
-                    ped.volped as volume
-                FROM PUB.carga car
-                INNER JOIN PUB.pedido ped ON ped.codcar = car.codcar
-                INNER JOIN PUB.cliente cli ON cli.codcli = ped.codcli
-                INNER JOIN PUB.estado est ON est.codest = cli.codest
-                INNER JOIN PUB.municipio mun ON mun.codest = cli.codest AND mun.codmun = cli.codmun
-                INNER JOIN PUB.bairro bai ON bai.codest = cli.codest AND bai.codmun = cli.codmun AND bai.codbai = cli.codbai
-                INNER JOIN PUB.basecliente bc ON bc.codcli = cli.codcli
-                INNER JOIN PUB.razao raz ON raz.codraz = bc.codraz
-                LEFT JOIN PUB.notafiscal nf ON nf.codped = ped.codped
-                WHERE car.codpac = $codPac
-                AND ped.valtotateped > 0
-                AND ped.tipped != 'RAS'
-                ORDER BY ped.numseqped
-            ";
+            $sqlEntregas = "SELECT ped.numseqped as seqent, COALESCE(nf.numnotfis, 0) as nf, cli.codcli, raz.desraz as razcli, est.sigest as uf, mun.desmun, bai.desbai, cli.desend, COALESCE(CAST(nf.numnotfis as VARCHAR), '-') as numnot, ped.valtotateped as valnot, ped.pesped as peso, ped.volped as volume FROM PUB.carga car INNER JOIN PUB.pedido ped ON ped.codcar = car.codcar INNER JOIN PUB.cliente cli ON cli.codcli = ped.codcli INNER JOIN PUB.estado est ON est.codest = cli.codest INNER JOIN PUB.municipio mun ON mun.codest = cli.codest AND mun.codmun = cli.codmun INNER JOIN PUB.bairro bai ON bai.codest = cli.codest AND bai.codmun = cli.codmun AND bai.codbai = cli.codbai INNER JOIN PUB.basecliente bc ON bc.codcli = cli.codcli INNER JOIN PUB.razao raz ON raz.codraz = bc.codraz LEFT JOIN PUB.notafiscal nf ON nf.codped = ped.codped WHERE car.codpac = $codPac AND ped.valtotateped > 0 AND ped.tipped != 'RAS' ORDER BY ped.numseqped";
 
             $resultEntregas = $this->executeJavaConnector('query', $sqlEntregas);
             
