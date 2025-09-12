@@ -141,19 +141,49 @@ class ProgressService
             
             $sql .= " ORDER BY codtrn";
 
-            // Implementar busca que funcione no Progress - usar LEFT() para início do nome 
+            // Campos essenciais para diferenciar tipos de transportadores
+            $campos = "codtrn, nomtrn, flgautonomo, natcam, tipcam, codcnpjcpf, numpla, numtel, dddtel, flgati, indcd";
+            
+            // Construir condições WHERE baseadas nos filtros
+            $whereConditions = [];
+            
+            // Filtro de busca por código ou nome
             if (!empty($search)) {
                 $searchTerm = trim($search);
                 if (is_numeric($searchTerm)) {
-                    $simpleSql = "SELECT TOP $perPage codtrn, nomtrn FROM PUB.transporte WHERE codtrn = $searchTerm ORDER BY codtrn";
+                    $whereConditions[] = "codtrn = $searchTerm";
                 } else {
-                    // Para texto, buscar nomes que começam com o termo usando LEFT()
                     $searchLen = strlen($searchTerm);
-                    $simpleSql = "SELECT TOP $perPage codtrn, nomtrn FROM PUB.transporte WHERE LEFT(nomtrn, $searchLen) = '$searchTerm' ORDER BY codtrn";
+                    $whereConditions[] = "LEFT(nomtrn, $searchLen) = '$searchTerm'";
                 }
-            } else {
-                $simpleSql = "SELECT TOP $perPage codtrn, nomtrn FROM PUB.transporte ORDER BY codtrn";
             }
+            
+            // Filtro por tipo (autônomo vs empresa)
+            $tipo = $filters['tipo'] ?? 'todos';
+            if ($tipo === 'autonomo') {
+                $whereConditions[] = "flgautonomo = 1";
+            } elseif ($tipo === 'empresa') {
+                $whereConditions[] = "flgautonomo = 0";
+            }
+            
+            // Filtro por natureza do transporte
+            $natureza = $filters['natureza'] ?? '';
+            if (!empty($natureza)) {
+                $whereConditions[] = "natcam = '$natureza'";
+            }
+            
+            // Filtro por status ativo
+            $ativo = $filters['ativo'] ?? null;
+            if ($ativo !== null) {
+                $whereConditions[] = $ativo === 'true' ? "flgati = 1" : "flgati = 0";
+            }
+            
+            // Montar SQL final
+            $simpleSql = "SELECT TOP $perPage $campos FROM PUB.transporte";
+            if (!empty($whereConditions)) {
+                $simpleSql .= " WHERE " . implode(' AND ', $whereConditions);
+            }
+            $simpleSql .= " ORDER BY codtrn";
             
             Log::info('SQL simplificado para busca', ['sql' => $simpleSql]);
             
@@ -391,6 +421,36 @@ class ProgressService
         }
 
         Log::info('ProgressJDBCConnector compilado com sucesso');
+    }
+
+    /**
+     * Obtém o schema/estrutura da tabela transporte via JDBC
+     */
+    public function getTransporteTableSchema(): array
+    {
+        try {
+            Log::info('Obtendo schema da tabela transporte via JDBC');
+
+            $result = $this->executeJavaConnector('schema', 'transporte');
+
+            if ($result['success']) {
+                Log::info('Schema da tabela transporte obtido com sucesso', [
+                    'total_colunas' => count($result['data']['columns'] ?? [])
+                ]);
+            }
+
+            return $result;
+
+        } catch (Exception $e) {
+            Log::error('Erro ao obter schema da tabela transporte', [
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao obter schema da tabela: ' . $e->getMessage()
+            ];
+        }
     }
 
     /**

@@ -27,7 +27,9 @@ class TransporteController extends Controller
             'per_page' => 'integer|min:5|max:100',
             'search' => 'string|max:255',
             'codigo' => 'string|max:50',
-            'nome' => 'string|max:255'
+            'nome' => 'string|max:255',
+            'tipo' => 'string|in:autonomo,empresa,todos',
+            'natureza' => 'string|in:T,A'
         ]);
 
         $page = (int) $request->get('page', 1);
@@ -35,6 +37,9 @@ class TransporteController extends Controller
         $search = $request->get('search', '');
         $codigo = $request->get('codigo', '');
         $nome = $request->get('nome', '');
+        $tipo = $request->get('tipo', 'todos');
+        $natureza = $request->get('natureza', '');
+        $ativo = $request->get('status_ativo');
 
         // Preparar filtros para o service
         $filters = [
@@ -42,7 +47,10 @@ class TransporteController extends Controller
             'per_page' => $perPage,
             'search' => $search,
             'codigo' => $codigo,
-            'nome' => $nome
+            'nome' => $nome,
+            'tipo' => $tipo,
+            'natureza' => $natureza,
+            'ativo' => $ativo
         ];
 
         $result = $this->progressService->getTransportesPaginated($filters);
@@ -93,6 +101,86 @@ class TransporteController extends Controller
         $result = $this->progressService->testConnection();
 
         return response()->json($result, $result['success'] ? 200 : 500);
+    }
+
+    /**
+     * Obtém estatísticas dos transportadores
+     */
+    public function statistics(): JsonResponse
+    {
+        try {
+            $stats = [
+                'total' => 0,
+                'autonomos' => 0,
+                'empresas' => 0,
+                'ativos' => 0,
+                'inativos' => 0,
+                'natureza_T' => 0,
+                'natureza_A' => 0,
+                'natureza_F' => 0,
+                'com_placa' => 0,
+                'com_telefone' => 0
+            ];
+            
+            // Query simplificada para Progress
+            $sql = "SELECT COUNT(*) as total FROM PUB.transporte";
+            
+            $result = $this->progressService->executeCustomQuery($sql);
+            
+            if ($result['success'] && !empty($result['data']['results'])) {
+                $stats['total'] = (int)$result['data']['results'][0]['total'];
+                
+                // Queries adicionais para obter estatísticas específicas  
+                $queries = [
+                    'autonomos' => "SELECT COUNT(*) as total FROM PUB.transporte WHERE flgautonomo = 1",
+                    'empresas' => "SELECT COUNT(*) as total FROM PUB.transporte WHERE flgautonomo = 0", 
+                    'ativos' => "SELECT COUNT(*) as total FROM PUB.transporte WHERE flgati = 1",
+                    'inativos' => "SELECT COUNT(*) as total FROM PUB.transporte WHERE flgati = 0"
+                ];
+                
+                foreach ($queries as $key => $query) {
+                    $result = $this->progressService->executeCustomQuery($query);
+                    if ($result['success'] && !empty($result['data']['results'])) {
+                        $stats[$key] = (int)$result['data']['results'][0]['total'];
+                    }
+                }
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Estatísticas obtidas com sucesso',
+                'data' => $stats
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao obter estatísticas: ' . $e->getMessage(),
+                'data' => null
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtém o schema da tabela transporte
+     */
+    public function schema(): JsonResponse
+    {
+        $result = $this->progressService->getTransporteTableSchema();
+
+        if (!$result['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['error'],
+                'data' => null
+            ], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Schema da tabela transporte obtido com sucesso',
+            'data' => $result['data']
+        ]);
     }
 
     /**

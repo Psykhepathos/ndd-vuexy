@@ -28,8 +28,10 @@ Route::middleware('api')->group(function () {
         Route::post('query', [ProgressController::class, 'executeCustomQuery']);
     });
     
-    // Rotas para TransporteController (JDBC Progress)
-    Route::apiResource('transportes', TransporteController::class)->only(['index', 'show']);
+    // Rotas para TransporteController (JDBC Progress) - específicas primeiro
     Route::get('transportes/test-connection', [TransporteController::class, 'testConnection']);
+    Route::get('transportes/statistics', [TransporteController::class, 'statistics']);
+    Route::get('transportes/schema', [TransporteController::class, 'schema']);
     Route::post('transportes/query', [TransporteController::class, 'query']);
+    Route::apiResource('transportes', TransporteController::class)->only(['index', 'show']);
 });
