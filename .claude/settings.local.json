@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php artisan:*)",
+      "Bash(pnpm run dev:*)",
+      "Bash(curl:*)",
+      "Read(//c/Users/15857/Desktop/NDD/ndd-app/**)",
+      "Bash(php:*)",
+      "Bash(findstr:*)",
+      "Bash(copy:*)",
+      "Bash(javac:*)",
+      "Bash(java:*)",
+      "Bash(git init:*)",
+      "Bash(git remote add:*)",
+      "Bash(git add:*)",
+      "Bash(del nul)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
