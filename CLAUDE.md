@@ -207,6 +207,34 @@ curl -X POST http://localhost:8002/api/motoristas \
 - Criar paginação customizada
 - Usar cores hardcoded ao invés de theme colors
 
+### 🔄 COMMITS E GITHUB
+
+**SEMPRE fazer commits como o próprio usuário (não Claude):**
+
+#### Configuração Git Obrigatória:
+```bash
+# Commits devem ser sempre como Psykhepathos
+git config --global user.name "Psykhepathos"
+git config --global user.email "[email protegido]"
+
+# Verificar configuração
+git config --global user.name
+git config --global user.email
+```
+
+#### Fluxo de Commits:
+1. **SEMPRE** commitar mudanças funcionais testadas
+2. **NUNCA** mencionar Claude/AI nos commits
+3. **USAR** mensagens técnicas descritivas
+4. **PUSH** para: https://github.com/Psykhepathos/ndd-vuexy.git
+
+#### Exemplos de Commits Corretos:
+- ✅ `Add transporter search with Progress JDBC integration`
+- ✅ `Fix pagination issues in data table components`
+- ✅ `Update Vuexy template styling for consistency`
+- ❌ `Claude helped implement search functionality`
+- ❌ `AI-generated transporter page improvements`
+
 ## Estado Atual - Sistema Vuexy Funcionando ✅
 
 - ✅ Laravel API rodando na porta 8002
