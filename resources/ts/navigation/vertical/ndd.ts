@@ -13,6 +13,11 @@ export default [
         to: 'transportes',
         icon: { icon: 'tabler-truck-delivery' },
       },
+      {
+        title: 'Pacotes',
+        to: 'pacotes',
+        icon: { icon: 'tabler-package' },
+      },
     ],
   },
 ]

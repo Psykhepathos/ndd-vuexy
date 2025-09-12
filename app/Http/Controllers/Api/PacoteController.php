@@ -1,0 +1,157 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Services\ProgressService;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+
+class PacoteController extends Controller
+{
+    protected ProgressService $progressService;
+
+    public function __construct(ProgressService $progressService)
+    {
+        $this->progressService = $progressService;
+    }
+
+    /**
+     * Lista pacotes com paginação e filtros
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $request->validate([
+            'page' => 'integer|min:1',
+            'per_page' => 'integer|min:5|max:100',
+            'search' => 'nullable|string|max:255',
+            'codigo' => 'nullable|string|max:50',
+            'transportador' => 'nullable|string|max:255',
+            'motorista' => 'nullable|string|max:255',
+            'rota' => 'nullable|string|max:10',
+            'situacao' => 'nullable|string|max:1',
+            'data_inicio' => 'nullable|date',
+            'data_fim' => 'nullable|date'
+        ]);
+
+        $page = (int) $request->get('page', 1);
+        $perPage = (int) $request->get('per_page', 15);
+        $search = $request->get('search', '');
+        $codigo = $request->get('codigo', '');
+        $transportador = $request->get('transportador', '');
+        $motorista = $request->get('motorista', '');
+        $rota = $request->get('rota', '');
+        $situacao = $request->get('situacao', '');
+        $dataInicio = $request->get('data_inicio', '');
+        $dataFim = $request->get('data_fim', '');
+
+        $filters = [
+            'page' => $page,
+            'per_page' => $perPage,
+            'search' => $search,
+            'codigo' => $codigo,
+            'transportador' => $transportador,
+            'motorista' => $motorista,
+            'rota' => $rota,
+            'situacao' => $situacao,
+            'data_inicio' => $dataInicio,
+            'data_fim' => $dataFim
+        ];
+
+        $result = $this->progressService->getPacotesPaginated($filters);
+
+        if (!$result['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['error'],
+                'data' => null
+            ], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Pacotes obtidos com sucesso',
+            'data' => $result['data'],
+            'pagination' => $result['pagination'] ?? null
+        ]);
+    }
+
+    /**
+     * Busca pacote específico por ID com relacionamentos
+     */
+    public function show($id): JsonResponse
+    {
+        $result = $this->progressService->getPacoteById($id);
+
+        if (!$result['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['error'] ?? 'Pacote não encontrado',
+                'data' => null
+            ], $result['error'] ? 500 : 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Detalhes do pacote obtidos com sucesso',
+            'data' => $result['data']
+        ]);
+    }
+
+    /**
+     * Obtém estatísticas dos pacotes
+     */
+    public function statistics(): JsonResponse
+    {
+        try {
+            $stats = [
+                'total' => 0,
+                'por_situacao' => [],
+                'valor_total' => 0,
+                'peso_total' => 0,
+                'volume_total' => 0,
+                'pedidos_total' => 0
+            ];
+            
+            // Query para estatísticas básicas
+            $sql = "SELECT COUNT(*) as total, SUM(valpac) as valor_total, SUM(pespac) as peso_total, SUM(volpac) as volume_total, SUM(nroped) as pedidos_total FROM PUB.pacote WHERE datforpac >= '2024-01-01'";
+            
+            $result = $this->progressService->executeCustomQuery($sql);
+            
+            if ($result['success'] && !empty($result['data']['results'])) {
+                $dados = $result['data']['results'][0];
+                $stats['total'] = (int)$dados['total'];
+                $stats['valor_total'] = (float)$dados['valor_total'];
+                $stats['peso_total'] = (float)$dados['peso_total'];
+                $stats['volume_total'] = (float)$dados['volume_total'];
+                $stats['pedidos_total'] = (int)$dados['pedidos_total'];
+            }
+
+            // Query para situações
+            $sqlSituacao = "SELECT sitpac, COUNT(*) as quantidade FROM PUB.pacote WHERE datforpac >= '2024-01-01' GROUP BY sitpac";
+            $resultSituacao = $this->progressService->executeCustomQuery($sqlSituacao);
+            
+            if ($resultSituacao['success'] && !empty($resultSituacao['data']['results'])) {
+                foreach ($resultSituacao['data']['results'] as $situacao) {
+                    $stats['por_situacao'][] = [
+                        'situacao' => $situacao['sitpac'] ?: 'N/D',
+                        'quantidade' => (int)$situacao['quantidade']
+                    ];
+                }
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Estatísticas obtidas com sucesso',
+                'data' => $stats
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao obter estatísticas: ' . $e->getMessage(),
+                'data' => null
+            ], 500);
+        }
+    }
+}

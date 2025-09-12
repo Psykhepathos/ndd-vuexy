@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 // Interface para tipagem expandida
 interface Transporte {
@@ -183,20 +186,17 @@ const fetchTransportes = async () => {
 
 // Update data table options
 const updateOptions = (newOptions: any) => {
+  console.log('🔄 updateOptions chamado:', newOptions)
   options.value.page = newOptions.page
   options.value.itemsPerPage = newOptions.itemsPerPage
   options.value.sortBy = newOptions.sortBy || ['codtrn']
   options.value.sortDesc = newOptions.sortDesc || [false]
+  
+  // Chamar fetchTransportes quando as options mudarem
+  fetchTransportes()
 }
 
-// Watchers para recarregar dados quando necessário (padrão Vuexy)
-watch(options, (newOptions, oldOptions) => {
-  console.log(`📄 Mudança de paginação:`, {
-    page: `${oldOptions.page} → ${newOptions.page}`,
-    itemsPerPage: `${oldOptions.itemsPerPage} → ${newOptions.itemsPerPage}`
-  })
-  fetchTransportes()
-}, { deep: true })
+// Watchers removido - agora a paginação é controlada pelo updateOptions
 
 // Debounce para busca (aguardar parada de digitação)
 let searchTimeout: ReturnType<typeof setTimeout> | null = null
@@ -231,19 +231,35 @@ watch([filtroTipo, filtroNatureza, filtroStatus], ([novoTipo, novaNatureza, novo
 
 // Funções de interação
 const viewDetails = (item: Transporte) => {
-  console.log('Ver detalhes:', item)
-  // TODO: Implementar modal de detalhes
+  router.push(`/transportes/${item.codtrn}`)
 }
 
 const getTipoTransportador = (item: Transporte) => {
-  return item.flgautonomo ? 'Autônomo' : 'Empresa'
+  return item.flgautonomo ? 'AUTÔNOMO' : 'EMPRESA'
+}
+
+const formatPlacaBrasileira = (placa: string) => {
+  if (!placa) return null
+  
+  const placaClean = placa.toUpperCase().replace(/[^A-Z0-9]/g, '')
+  
+  // Formato Mercosul (ABC1D23)
+  if (/^[A-Z]{3}[0-9][A-Z][0-9]{2}$/.test(placaClean)) {
+    return placaClean.substring(0, 3) + '-' + placaClean.substring(3, 4) + placaClean.substring(4, 5) + placaClean.substring(5, 7)
+  }
+  // Formato antigo (ABC1234)
+  else if (/^[A-Z]{3}[0-9]{4}$/.test(placaClean)) {
+    return placaClean.substring(0, 3) + '-' + placaClean.substring(3)
+  }
+  
+  return placaClean
 }
 
 const getNaturezaLabel = (natcam: string) => {
   switch(natcam) {
-    case 'T': return 'Transporte'
-    case 'A': return 'Agregado'
-    default: return natcam || 'N/D'
+    case 'T': return 'TRANSPORTE'
+    case 'A': return 'AGREGADO'
+    default: return natcam?.toUpperCase() || 'N/D'
   }
 }
 
@@ -493,9 +509,9 @@ onMounted(() => {
                 />
               </VAvatar>
               <div class="d-flex flex-column ms-3">
-                <span class="d-block font-weight-medium text-high-emphasis text-truncate">{{ item.nomtrn }}</span>
+                <span class="d-block font-weight-medium text-high-emphasis text-truncate">{{ item.nomtrn?.toUpperCase() }}</span>
                 <small class="text-medium-emphasis">
-                  {{ item.codcnpjcpf ? `CNPJ/CPF: ${item.codcnpjcpf}` : 'Sem documento' }}
+                  {{ item.codcnpjcpf ? `CNPJ/CPF: ${item.codcnpjcpf}` : 'SEM DOCUMENTO' }}
                 </small>
               </div>
             </div>
@@ -514,7 +530,17 @@ onMounted(() => {
           
           <!-- Placa do Veículo -->
           <template #item.numpla="{ item }">
-            <span v-if="item.numpla" class="font-weight-medium">{{ item.numpla }}</span>
+            <div v-if="item.numpla" class="d-flex align-center">
+              <VChip
+                color="primary"
+                size="small"
+                variant="elevated"
+                class="font-mono font-weight-bold"
+                style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); color: white; letter-spacing: 1px; min-width: 70px; justify-content: center;"
+              >
+                {{ formatPlacaBrasileira(item.numpla) }}
+              </VChip>
+            </div>
             <span v-else class="text-disabled">N/D</span>
           </template>
           
@@ -529,7 +555,7 @@ onMounted(() => {
               :color="item.flgati ? 'success' : 'error'"
               size="small"
             >
-              {{ item.flgati ? 'Ativo' : 'Inativo' }}
+              {{ item.flgati ? 'ATIVO' : 'INATIVO' }}
             </VChip>
           </template>
 

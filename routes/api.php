@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\MotoristaController;
+use App\Http\Controllers\Api\PacoteController;
 use App\Http\Controllers\Api\ProgressController;
 use App\Http\Controllers\Api\TransporteController;
 use Illuminate\Http\Request;
@@ -34,4 +35,8 @@ Route::middleware('api')->group(function () {
     Route::get('transportes/schema', [TransporteController::class, 'schema']);
     Route::post('transportes/query', [TransporteController::class, 'query']);
     Route::apiResource('transportes', TransporteController::class)->only(['index', 'show']);
+
+    // Rotas para PacoteController (JDBC Progress)
+    Route::get('pacotes/statistics', [PacoteController::class, 'statistics']);
+    Route::apiResource('pacotes', PacoteController::class)->only(['index', 'show']);
 });

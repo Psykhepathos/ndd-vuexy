@@ -72,7 +72,7 @@ class TransporteController extends Controller
     }
 
     /**
-     * Busca transporte específico por ID
+     * Busca transporte específico por ID com relacionamentos
      */
     public function show($id): JsonResponse
     {
@@ -86,10 +86,19 @@ class TransporteController extends Controller
             ], $result['error'] ? 500 : 404);
         }
 
+        // Buscar motoristas (para empresas sempre, para autônomos se houver dados na trnmot)
+        $transporte = $result['data'];
+        $motoristasResult = $this->progressService->getMotoristasPorTransportador($id);
+        $transporte['motoristas'] = $motoristasResult['success'] ? $motoristasResult['data'] : [];
+        
+        // Buscar veículos
+        $veiculosResult = $this->progressService->getVeiculosPorTransportador($id);
+        $transporte['veiculos'] = $veiculosResult['success'] ? $veiculosResult['data'] : [];
+
         return response()->json([
             'success' => true,
-            'message' => 'Transporte encontrado',
-            'data' => $result['data']
+            'message' => 'Detalhes do transportador obtidos com sucesso',
+            'data' => $transporte
         ]);
     }
 
