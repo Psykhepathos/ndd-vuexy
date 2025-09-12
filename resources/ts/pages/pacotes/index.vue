@@ -48,7 +48,7 @@ const searchCodigo = ref('')
 const searchTransportador = ref('')
 const searchRota = ref('')
 const selectedSituacao = ref('')
-const apenasRecentes = ref(false)
+const apenasRecentes = ref(true)
 const dataInicio = ref('')
 const dataFim = ref('')
 
@@ -74,8 +74,6 @@ const headers = [
   { title: 'PLACA', key: 'numpla', sortable: false },
   { title: 'ROTA', key: 'codrot', sortable: false },
   { title: 'VALOR', key: 'valpac', sortable: true },
-  { title: 'PESO (KG)', key: 'pespac', sortable: true },
-  { title: 'VOLUME (M³)', key: 'volpac', sortable: true },
   { title: 'PEDIDOS', key: 'nroped', sortable: true },
   { title: 'SITUAÇÃO', key: 'sitpac', sortable: false },
   { title: 'AÇÕES', key: 'actions', sortable: false }
@@ -419,16 +417,6 @@ onMounted(() => {
             <span class="font-weight-medium">
               {{ formatCurrency(item.valpac) }}
             </span>
-          </template>
-
-          <!-- Peso -->
-          <template #item.pespac="{ item }">
-            <span>{{ formatNumber(item.pespac) }}</span>
-          </template>
-
-          <!-- Volume -->
-          <template #item.volpac="{ item }">
-            <span>{{ formatNumber(item.volpac) }}</span>
           </template>
 
           <!-- Número de Pedidos -->
