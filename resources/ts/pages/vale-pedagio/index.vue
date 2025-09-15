@@ -1,42 +1,59 @@
 <template>
-  <div class="vale-pedagio-container">
-    <!-- Header Verde -->
-    <VCard class="header-card mb-6" color="success" variant="flat">
-      <VCardText class="d-flex justify-space-between align-center pa-6">
-        <div class="d-flex align-center gap-4">
-          <VIcon icon="tabler-route-2" size="32" color="white" />
-          <div>
-            <h2 class="text-h4 text-white font-weight-bold mb-1">Calculadora de Rota</h2>
-            <p class="text-body-1 text-white mb-0 opacity-90">Calcule pedágios, combustível e distância</p>
-          </div>
+  <div class="vale-pedagio-fullscreen">
+    <!-- Mapa de Fundo -->
+    <div class="map-background">
+      <div id="map-container" class="w-100 h-100">
+        <div class="d-flex flex-column justify-center align-center h-100 text-center pa-6">
+          <VIcon icon="tabler-map" size="64" class="text-white mb-4" />
+          <h3 class="text-h5 font-weight-medium text-white mb-2">Mapa da Rota</h3>
+          <p class="text-body-1 text-white opacity-80">
+            O mapa será exibido aqui após calcular a rota
+          </p>
         </div>
-        
-        <div class="d-flex gap-3">
-          <VBtn
-            variant="outlined"
-            color="white"
-            prepend-icon="tabler-history"
-          >
-            Minhas Rotas
-          </VBtn>
-          <VBtn
-            variant="flat"
-            color="white"
-            prepend-icon="tabler-map-pin"
-          >
-            Ver no Mapa
-          </VBtn>
-        </div>
-      </VCardText>
-    </VCard>
+      </div>
+    </div>
 
-    <VRow>
-      <!-- Formulário Principal -->
-      <VCol cols="12" lg="6">
-        <VCard class="form-card">
-          <VCardText class="pa-6">
-            <!-- Data/Hora -->
-            <div class="d-flex align-center gap-4 mb-6">
+    <!-- Painel Lateral Deslizante -->
+    <div 
+      class="calculator-panel"
+      :class="{ 'panel-minimized': panelMinimized }"
+    >
+      <!-- Botão de Toggle -->
+      <VBtn
+        class="toggle-button"
+        :icon="panelMinimized ? 'tabler-chevron-right' : 'tabler-chevron-left'"
+        variant="flat"
+        color="primary"
+        size="small"
+        @click="togglePanel"
+      />
+
+      <!-- Conteúdo do Painel -->
+      <div class="panel-content">
+        <!-- Header Verde -->
+        <VCard class="header-card" color="success" variant="flat">
+          <VCardText class="d-flex justify-space-between align-center pa-4">
+            <div class="d-flex align-center gap-3">
+              <VIcon icon="tabler-route-2" size="24" color="white" />
+              <div>
+                <h3 class="text-h6 text-white font-weight-bold mb-0">Calculadora de Rota</h3>
+                <p class="text-caption text-white mb-0 opacity-90">Calcule pedágios e combustível</p>
+              </div>
+            </div>
+            
+            <VBtn
+              icon="tabler-history"
+              variant="text"
+              color="white"
+              size="small"
+            />
+          </VCardText>
+        </VCard>
+
+        <!-- Formulário Scrollável -->
+        <div class="form-scroll">
+          <!-- Data/Hora -->
+          <div class="d-flex align-center gap-4 mb-6">
               <VIcon icon="tabler-calendar" class="text-primary" />
               <AppTextField
                 v-model="dataHoraFormatted"
@@ -368,46 +385,10 @@
                 Calcular Rota
               </VBtn>
             </div>
-          </VCardText>
-        </VCard>
-      </VCol>
-
-      <!-- Mapa -->
-      <VCol cols="12" lg="6">
-        <VCard class="map-card h-100">
-          <VCardText class="pa-0 h-100">
-            <div id="map-container" class="w-100" style="height: 800px; background: #f5f5f5; border-radius: 8px;">
-              <div class="d-flex flex-column justify-center align-center h-100 text-center pa-6">
-                <VIcon icon="tabler-map" size="64" class="text-medium-emphasis mb-4" />
-                <h3 class="text-h5 font-weight-medium text-medium-emphasis mb-2">Mapa da Rota</h3>
-                <p class="text-body-1 text-medium-emphasis">
-                  O mapa será exibido aqui após calcular a rota
-                </p>
-                
-                <!-- Botões do Mapa -->
-                <div class="mt-6">
-                  <VBtn
-                    variant="outlined"
-                    color="success"
-                    prepend-icon="tabler-route"
-                    class="me-3"
-                  >
-                    Nova Rota
-                  </VBtn>
-                  <VBtn
-                    variant="outlined"
-                    color="primary"
-                    prepend-icon="tabler-eye"
-                  >
-                    Ver no Mapa
-                  </VBtn>
-                </div>
-              </div>
-            </div>
-          </VCardText>
-        </VCard>
-      </VCol>
-    </VRow>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -417,6 +398,7 @@ import { ref, computed } from 'vue'
 // Estados do formulário
 const dataHora = ref(new Date())
 const loading = ref(false)
+const panelMinimized = ref(false)
 
 // Computed para formatar data e hora
 const dataHoraFormatted = computed(() => {
@@ -463,6 +445,10 @@ const tempo = ref({ valor: '0' })
 const eixos = ref({ valor: '2' })
 
 // Funções
+function togglePanel() {
+  panelMinimized.value = !panelMinimized.value
+}
+
 function inverterOrigemDestino() {
   const temp = { ...origem.value }
   origem.value = { ...destino.value }
@@ -503,28 +489,129 @@ async function calcularRota() {
 </script>
 
 <style scoped>
-.vale-pedagio-container {
-  padding: 24px;
+/* Layout Full Screen */
+.vale-pedagio-fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  z-index: 1;
+}
+
+/* Mapa de Fundo */
+.map-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
+  z-index: 1;
+}
+
+/* Painel Lateral Deslizante */
+.calculator-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 500px;
+  height: 100vh;
+  background: white;
+  box-shadow: -2px 0 20px rgba(0,0,0,0.1);
+  transition: transform 0.3s ease-in-out;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+}
+
+.calculator-panel.panel-minimized {
+  transform: translateX(450px);
+}
+
+/* Botão de Toggle */
+.toggle-button {
+  position: absolute;
+  left: -40px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 8px 0 0 8px !important;
+  z-index: 11;
+}
+
+/* Conteúdo do Painel */
+.panel-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .header-card {
-  border-radius: 12px;
+  border-radius: 0;
+  flex-shrink: 0;
 }
 
-.form-card {
-  border-radius: 12px;
+.form-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
 }
 
-.map-card {
-  border-radius: 12px;
-}
-
+/* Seções da Rota */
 .route-section {
   border-left: 3px solid rgb(var(--v-theme-primary));
   padding-left: 16px;
+  background: rgba(var(--v-theme-surface), 1);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
 }
 
+/* Cards de Informação */
 .route-info .border {
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)) !important;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.route-info .border:hover {
+  border-color: rgb(var(--v-theme-primary));
+  box-shadow: 0 2px 8px rgba(var(--v-theme-primary), 0.1);
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+  .calculator-panel {
+    width: 100vw;
+  }
+  
+  .calculator-panel.panel-minimized {
+    transform: translateX(calc(100vw - 50px));
+  }
+  
+  .toggle-button {
+    left: -50px;
+  }
+}
+
+/* Scroll personalizado */
+.form-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.form-scroll::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.form-scroll::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+
+.form-scroll::-webkit-scrollbar-thumb:hover {
+  background: #555;
 }
 </style>
