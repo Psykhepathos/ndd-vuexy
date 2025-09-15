@@ -18,6 +18,11 @@ export default [
         to: 'pacotes',
         icon: { icon: 'tabler-package' },
       },
+      {
+        title: 'Vale Pedágio',
+        to: 'vale-pedagio',
+        icon: { icon: 'tabler-route-2' },
+      },
     ],
   },
 ]

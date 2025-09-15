@@ -32,7 +32,10 @@
       "Bash(pnpm add:*)",
       "Bash(start http://localhost:5173/itinerario/3043824)",
       "Bash(start http://localhost:8002/itinerario/3043824)",
-      "Bash(start http://localhost:5174/itinerario/3043824)"
+      "Bash(start http://localhost:5174/itinerario/3043824)",
+      "WebFetch(domain:www.webrouter.com.br)",
+      "Read(//c/Users/15857/Pictures/**)",
+      "Bash(start http://localhost:8002/vale-pedagio)"
     ],
     "deny": [],
     "ask": []

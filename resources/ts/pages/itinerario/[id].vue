@@ -34,7 +34,7 @@
       <VCard class="stats-card flex-fill">
         <VCardText class="text-center pa-4">
           <VIcon icon="tabler-route" size="28" class="text-success mb-2" />
-          <div class="text-h4 font-weight-bold mb-1">{{ distanciaTotal.toFixed(0) }}km</div>
+          <div class="text-h4 font-weight-bold mb-1">{{ typeof distanciaTotal === 'number' ? distanciaTotal.toFixed(0) : '0' }}km</div>
           <p class="text-body-2 mb-0 text-medium-emphasis">Distância</p>
         </VCardText>
       </VCard>
@@ -226,7 +226,7 @@ const pacoteData = ref<ItinerarioData>({
   frete: 0,
   pedidos: []
 })
-const distanciaTotal = ref(0)
+const distanciaTotal = ref<number>(0)
 
 let map: L.Map | null = null
 let markersLayer: L.LayerGroup | null = null
@@ -283,7 +283,7 @@ function calculateTotalDistance() {
     total += calculateDistance(lat1, lon1, lat2, lon2)
   }
   
-  distanciaTotal.value = total
+  distanciaTotal.value = Number(total) || 0
 }
 
 // Função para focar em um marcador específico
@@ -452,7 +452,7 @@ async function processSingleGoogleRoute(directionsService: any, waypoints: Array
         
         // Atualizar distância total
         const segmentDistance = route.legs.reduce((total: number, leg: any) => total + leg.distance.value, 0) / 1000
-        distanciaTotal.value += segmentDistance
+        distanciaTotal.value += Number(segmentDistance) || 0
         
         resolve(routeCoordinates)
       } else {
@@ -545,7 +545,7 @@ async function getCachedRoute(coordinates: Array<[number, number]>): Promise<L.L
         )
         
         // Atualizar distância total
-        distanciaTotal.value = data.route.total_distance
+        distanciaTotal.value = Number(data.route.total_distance) || 0
         
         return cachedCoords
       }
