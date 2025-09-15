@@ -306,6 +306,8 @@ onMounted(() => {
               item-value="value"
               @update:search="fetchTransportadores"
               @update:model-value="applyFilters"
+              no-data-text="Nenhum transportador encontrado"
+              loading-text="Buscando transportadores..."
             />
           </VCol>
           <VCol cols="12" sm="6" md="3">
