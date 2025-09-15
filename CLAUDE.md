@@ -290,8 +290,197 @@ curl http://localhost:8002/api/motoristas    # Teste API
 # Abrir: http://localhost:5174               # Frontend Vue
 ```
 
+## 🗄️ ACESSO AO SCHEMA DO BANCO PROGRESS
+
+### Conexão JDBC Progress OpenEdge
+O sistema utiliza **JDBC direto** com Progress OpenEdge via Laravel:
+
+```php
+// Configuração no config/database.php
+'progress' => [
+    'driver' => 'odbc',
+    'dsn' => 'odbc:Driver={DataDirect 32-BIT OpenEdge Wire Protocol};Host=192.168.80.113;Port=13361;Database=tambasa',
+    'username' => 'sysprogress',
+    'password' => 'sysprogress',
+]
+```
+
+### 🔍 COMANDOS PARA EXPLORAR O SCHEMA
+
+#### 1. Teste de Conexão
+```bash
+# Via API (método mais confiável)
+curl "http://localhost:8002/api/progress/test-connection"
+
+# Via PHP Artisan Tinker
+php artisan tinker
+DB::connection('progress')->select('SELECT COUNT(*) as total FROM PUB.pacote')
+```
+
+#### 2. Listar Todas as Tabelas
+```bash
+# Query para listar tabelas do schema PUB
+curl -X POST "http://localhost:8002/api/progress/query" \
+  -H "Content-Type: application/json" \
+  -d '{"sql":"SELECT TBL FROM SYSPROGRESS.SYSTABLES WHERE OWNER = '\''PUB'\'' ORDER BY TBL"}'
+```
+
+#### 3. Ver Estrutura de uma Tabela
+```bash
+# Schema da tabela pacote
+curl -X POST "http://localhost:8002/api/progress/query" \
+  -H "Content-Type: application/json" \
+  -d '{"sql":"SELECT COL, COLTYPE, WIDTH, SCALE FROM SYSPROGRESS.SYSCOLUMNS WHERE TBL = '\''pacote'\'' AND OWNER = '\''PUB'\'' ORDER BY COL"}'
+
+# Schema da tabela transporte
+curl -X POST "http://localhost:8002/api/progress/query" \
+  -H "Content-Type: application/json" \
+  -d '{"sql":"SELECT COL, COLTYPE, WIDTH, SCALE FROM SYSPROGRESS.SYSCOLUMNS WHERE TBL = '\''transporte'\'' AND OWNER = '\''PUB'\'' ORDER BY COL"}'
+```
+
+#### 4. Explorar Relacionamentos (Chaves Estrangeiras)
+```bash
+# Ver índices e relacionamentos
+curl -X POST "http://localhost:8002/api/progress/query" \
+  -H "Content-Type: application/json" \
+  -d '{"sql":"SELECT IDXNAME, COL, ASCENDING FROM SYSPROGRESS.SYSINDEXES WHERE TBL = '\''pacote'\'' AND OWNER = '\''PUB'\'' ORDER BY IDXNAME, IDXSEQ"}'
+```
+
+#### 5. Amostras de Dados
+```bash
+# Ver primeiros registros de uma tabela
+curl -X POST "http://localhost:8002/api/progress/query" \
+  -H "Content-Type: application/json" \
+  -d '{"sql":"SELECT TOP 5 * FROM PUB.pacote ORDER BY codpac DESC"}'
+
+# Contar registros
+curl -X POST "http://localhost:8002/api/progress/query" \
+  -H "Content-Type: application/json" \
+  -d '{"sql":"SELECT COUNT(*) as total FROM PUB.pacote"}'
+```
+
+### 📋 TABELAS PRINCIPAIS IDENTIFICADAS
+
+#### Sistema de Transporte:
+- **`PUB.transporte`** - Transportadores (empresas e autônomos)
+- **`PUB.motorista`** - Motoristas associados aos transportadores  
+- **`PUB.veiculos`** - Veículos dos transportadores
+- **`PUB.trnmot`** - Relacionamento transporte-motorista
+
+#### Sistema de Pacotes:
+- **`PUB.pacote`** - Pacotes de entrega
+- **`PUB.carga`** - Cargas dentro dos pacotes
+- **`PUB.pedido`** - Pedidos individuais nas cargas
+- **`PUB.cliente`** - Dados dos clientes destinatários
+- **`PUB.notafiscal`** - Notas fiscais dos pedidos
+
+#### Dados Geográficos:
+- **`PUB.arqrdnt`** - Coordenadas GPS (lat/long) dos pedidos
+- **`PUB.estado`** - Estados (UF)
+- **`PUB.municipio`** - Municípios
+- **`PUB.bairro`** - Bairros
+- **`PUB.basecliente`** - Base de dados dos clientes
+- **`PUB.razao`** - Razão social das empresas
+
+### 🔗 RELACIONAMENTOS PRINCIPAIS
+
+#### Estrutura de Pacotes:
+```
+PACOTE (codpac) 
+  ↓ 1:N
+CARGA (codpac, codcar)
+  ↓ 1:N  
+PEDIDO (codcar, numseqped)
+  ↓ 1:1
+CLIENTE (codcli)
+  ↓ 1:1
+ARQRDNT (asdped) -- GPS coordinates
+```
+
+#### Query de Exemplo - Itinerário Completo:
+```sql
+SELECT 
+  p.codpac,
+  ped.numseqped as seqent,
+  cli.codcli,
+  cli.desend,
+  ard.lat as gps_lat,
+  ard.long as gps_lon
+FROM PUB.pacote p
+  INNER JOIN PUB.carga car ON car.codpac = p.codpac
+  INNER JOIN PUB.pedido ped ON ped.codcar = car.codcar  
+  INNER JOIN PUB.cliente cli ON cli.codcli = ped.codcli
+  LEFT JOIN PUB.arqrdnt ard ON ard.asdped = ped.asdped
+WHERE p.codpac = 3000001
+  AND ped.valtotateped > 0
+ORDER BY ped.numseqped
+```
+
+### 🛠️ FERRAMENTAS DE DESENVOLVIMENTO
+
+#### ProgressService.php - Métodos Úteis:
+```php
+// Classe: App\Services\ProgressService
+$service = new ProgressService();
+
+// Testar conexão
+$service->testConnection()
+
+// Query customizada  
+$service->executeCustomQuery($sql)
+
+// Métodos específicos
+$service->getPacotesPaginated($filters)
+$service->getItinerarioPacote($codPac)
+$service->getTransportesPaginated($filters)
+```
+
+#### Controllers API Disponíveis:
+- **`/api/progress/test-connection`** - Teste de conexão
+- **`/api/progress/query`** - Query SQL customizada
+- **`/api/pacotes`** - CRUD pacotes
+- **`/api/pacotes/itinerario`** - Itinerário de entregas
+- **`/api/transportes`** - CRUD transportadores
+
+### 🚨 IMPORTANTE - JDBC vs ELOQUENT
+
+**O sistema usa JDBC DIRETO, NÃO Eloquent ORM:**
+
+❌ **NUNCA fazer:**
+```php
+// ERRADO - Eloquent models não funcionam
+$pacote = Pacote::find(123);
+$transporte = Transporte::where('nome', 'like', '%test%')->get();
+```
+
+✅ **SEMPRE fazer:**
+```php
+// CORRETO - JDBC direto via DB::connection
+$pacotes = DB::connection('progress')->select(
+    'SELECT * FROM PUB.pacote WHERE codpac = ?', [$id]
+);
+
+// Ou via ProgressService
+$result = $this->progressService->executeCustomQuery($sql);
+```
+
+### 📝 NOTAS DE DESENVOLVIMENTO
+
+#### Convenções Progress:
+- **Schema**: Sempre usar `PUB.tabela`
+- **Campos**: Progress é case-sensitive
+- **TOP N**: Usar `SELECT TOP 10` (não LIMIT)
+- **Strings**: Usar aspas simples `'valor'`
+- **Booleans**: 0/1 (não true/false)
+
+#### Performance:
+- **Sempre** usar índices nas consultas
+- **Evitar** SELECT * em tabelas grandes
+- **Usar** paginação com TOP/SKIP
+- **Testar** queries grandes via `/api/progress/query` primeiro
+
 ### Notas Importantes
 - **Não criar arquivos desnecessários de teste** - usar terminal para sequências
 - **Economia de tokens**: resposta mínima, sem emojis
 - **Não modificar CLAUDE.md** no comando /init
-- **Focar nos testes ODBC** como próxima prioridade
+- **Usar APIs para explorar schema** - mais confiável que tinker direto
