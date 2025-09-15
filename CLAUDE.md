@@ -442,6 +442,248 @@ $service->getTransportesPaginated($filters)
 - **`/api/pacotes`** - CRUD pacotes
 - **`/api/pacotes/itinerario`** - Itinerário de entregas
 - **`/api/transportes`** - CRUD transportadores
+- **`/api/rotas`** - Autocomplete de rotas Progress
+
+## 🔄 IMPLEMENTAÇÃO DE AUTOCOMPLETES - GUIA COMPLETO
+
+### Como Implementar Novos Autocompletes Progress
+
+**Exemplo implementado**: Sistema de autocomplete de rotas na página /pacotes
+
+#### 1. **Investigar Estrutura da Tabela Progress**
+
+```bash
+# Encontrar tabelas relacionadas
+curl -X POST "http://localhost:8002/api/progress/query" \
+  -H "Content-Type: application/json" \
+  -d '{"sql":"SELECT TBL FROM SYSPROGRESS.SYSTABLES WHERE OWNER = '\''PUB'\'' AND TBL LIKE '\''%rota%'\'' ORDER BY TBL"}'
+
+# Ver estrutura da tabela
+curl -X POST "http://localhost:8002/api/progress/query" \
+  -H "Content-Type: application/json" \
+  -d '{"sql":"SELECT COL, COLTYPE, WIDTH, SCALE FROM SYSPROGRESS.SYSCOLUMNS WHERE TBL = '\''introt'\'' AND OWNER = '\''PUB'\'' ORDER BY COL"}'
+
+# Verificar dados de exemplo
+curl -X POST "http://localhost:8002/api/progress/query" \
+  -H "Content-Type: application/json" \
+  -d '{"sql":"SELECT TOP 10 codrot, desrot FROM PUB.introt ORDER BY codrot"}'
+```
+
+#### 2. **Criar Método no ProgressService**
+
+```php
+// Em app/Services/ProgressService.php - adicionar no final da classe
+public function getRotas($search = ''): array
+{
+    try {
+        Log::info('Buscando rotas via JDBC', ['search' => $search]);
+        
+        $sql = "SELECT codrot, desrot FROM PUB.introt";
+        
+        if (!empty($search)) {
+            $searchUpper = strtoupper($search);
+            $sql .= " WHERE UPPER(codrot) LIKE '%" . $searchUpper . "%' OR UPPER(desrot) LIKE '%" . $searchUpper . "%'";
+        }
+        
+        $sql .= " ORDER BY codrot";
+        
+        $result = $this->executeCustomQuery($sql);
+        
+        if ($result['success']) {
+            return [
+                'success' => true,
+                'data' => $result['data']['results'] ?? []
+            ];
+        }
+        
+        return $result;
+        
+    } catch (Exception $e) {
+        Log::error('Erro ao buscar rotas', [
+            'search' => $search,
+            'error' => $e->getMessage()
+        ]);
+        
+        return [
+            'success' => false,
+            'error' => 'Erro ao buscar rotas: ' . $e->getMessage()
+        ];
+    }
+}
+```
+
+#### 3. **Criar Controller API**
+
+```php
+// Criar app/Http/Controllers/Api/RotaController.php
+<?php
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Services\ProgressService;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+
+class RotaController extends Controller
+{
+    protected ProgressService $progressService;
+
+    public function __construct(ProgressService $progressService)
+    {
+        $this->progressService = $progressService;
+    }
+
+    public function index(Request $request): JsonResponse
+    {
+        $request->validate([
+            'search' => 'string|max:255'
+        ]);
+
+        $search = $request->get('search', '');
+        $result = $this->progressService->getRotas($search);
+
+        if (!$result['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['error'],
+                'data' => []
+            ], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Rotas obtidas com sucesso',
+            'data' => $result['data']
+        ]);
+    }
+}
+```
+
+#### 4. **Adicionar Rota da API**
+
+```php
+// Em routes/api.php - adicionar:
+use App\Http\Controllers\Api\RotaController;
+
+// Dentro do middleware 'api' group:
+Route::get('rotas', [RotaController::class, 'index']);
+```
+
+#### 5. **Implementar Frontend Vue**
+
+```typescript
+// Em resources/ts/pages/[pagina]/index.vue
+
+// 5.1. Adicionar variáveis reativas
+const loadingRotas = ref(false)
+const rotasOptions = ref<Array<{title: string, value: string}>>([])
+const selectedRota = ref<string | null>(null)
+
+// 5.2. Criar função de busca
+const fetchRotas = async (searchTerm: string = '') => {
+  if (searchTerm.length < 2 && searchTerm !== '') return
+  
+  loadingRotas.value = true
+  
+  try {
+    const params = new URLSearchParams({
+      search: searchTerm
+    })
+    const response = await fetch(`http://localhost:8002/api/rotas?${params}`, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+    
+    const data = await response.json()
+    if (data.success && data.data) {
+      rotasOptions.value = data.data.map((r: any) => ({
+        title: `${r.codrot} - ${r.desrot.toUpperCase()}`,
+        value: r.codrot
+      }))
+    }
+  } catch (error) {
+    console.error('Erro ao buscar rotas:', error)
+    rotasOptions.value = []
+  } finally {
+    loadingRotas.value = false
+  }
+}
+
+// 5.3. Adicionar no onMounted
+onMounted(() => {
+  fetchRotas() // Carregar algumas rotas inicialmente
+})
+
+// 5.4. Incluir na função clearFilters
+const clearFilters = () => {
+  selectedRota.value = null
+  // ... outros campos
+}
+
+// 5.5. Template VAutocomplete
+<VAutocomplete
+  v-model="selectedRota"
+  :items="rotasOptions"
+  :loading="loadingRotas"
+  label="Rota"
+  placeholder="Ex: AC, BAR, CBE"
+  clearable
+  item-title="title"
+  item-value="value"
+  @update:search="fetchRotas"
+  @update:model-value="applyFilters"
+  no-data-text="Nenhuma rota encontrada"
+  loading-text="Buscando rotas..."
+/>
+```
+
+#### 6. **Padrões e Convenções**
+
+**Padrão de nomenclatura:**
+- Service: `get[Entidade]s($search = '')` 
+- Controller: `[Entidade]Controller` com método `index()`
+- Frontend: `fetch[Entidade]s()`, `[entidade]Options`, `selected[Entidade]`
+
+**Estrutura do retorno da API:**
+```json
+{
+  "success": true,
+  "message": "Entidades obtidas com sucesso",
+  "data": [
+    {"campo_codigo": "valor", "campo_descricao": "descrição"}
+  ]
+}
+```
+
+**Formatação no Frontend:**
+```typescript
+// Sempre formato: "CODIGO - DESCRIÇÃO"
+title: `${item.codigo} - ${item.descricao.toUpperCase()}`
+value: item.codigo
+```
+
+#### 7. **Testes Essenciais**
+
+```bash
+# Testar API diretamente
+curl "http://localhost:8002/api/rotas"
+curl "http://localhost:8002/api/rotas?search=acre"
+
+# Verificar no frontend:
+# - Digitar para ativar busca
+# - Selecionar item aplica filtros
+# - Limpar filtros funciona
+# - Loading states aparecem
+```
+
+**Exemplo de uso prático realizado:**
+- **Tabela**: `PUB.introt` (código: `codrot`, descrição: `desrot`)
+- **API**: `GET /api/rotas?search=termo` 
+- **Página**: `/pacotes` - campo "Rota" convertido para autocomplete
+- **Funcionalidade**: Busca por código (AC, BAR) ou descrição (ACRE, BAHIA)
 
 ### 🚨 IMPORTANTE - JDBC vs ELOQUENT
 

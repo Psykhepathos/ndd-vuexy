@@ -33,7 +33,9 @@ interface Pagination {
 const pacotes = ref<Pacote[]>([])
 const loading = ref(false)
 const loadingTransportadores = ref(false)
+const loadingRotas = ref(false)
 const transportadoresOptions = ref<Array<{title: string, value: number}>>([])
+const rotasOptions = ref<Array<{title: string, value: string}>>([])
 const pagination = ref<Pagination>({
   current_page: 1,
   last_page: 1,
@@ -50,6 +52,7 @@ const searchCodigo = ref('')
 const searchTransportador = ref('')
 const selectedTransportador = ref<number | null>(null)
 const searchRota = ref('')
+const selectedRota = ref<string | null>(null)
 const selectedSituacao = ref('')
 const apenasRecentes = ref(true)
 const dataInicio = ref('')
@@ -118,6 +121,39 @@ const fetchTransportadores = async (searchTerm: string = '') => {
   }
 }
 
+// Buscar rotas para o autocomplete
+const fetchRotas = async (searchTerm: string = '') => {
+  if (searchTerm.length < 2 && searchTerm !== '') return
+  
+  loadingRotas.value = true
+  
+  try {
+    const params = new URLSearchParams({
+      search: searchTerm
+    })
+    const response = await fetch(`http://localhost:8002/api/rotas?${params}`, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+    
+    const data = await response.json()
+    if (data.success && data.data) {
+      rotasOptions.value = data.data.map((r: any) => ({
+        title: `${r.codrot} - ${r.desrot.toUpperCase()}`,
+        value: r.codrot
+      }))
+    }
+  } catch (error) {
+    console.error('Erro ao buscar rotas:', error)
+    rotasOptions.value = []
+  } finally {
+    loadingRotas.value = false
+  }
+}
+
 // Carregar dados
 const fetchPacotes = async () => {
   loading.value = true
@@ -130,7 +166,7 @@ const fetchPacotes = async () => {
       codigo: searchCodigo.value || '',
       transportador: searchTransportador.value || '',
       codigo_transportador: selectedTransportador.value?.toString() || '',
-      rota: searchRota.value || '',
+      rota: selectedRota.value || searchRota.value || '',
       situacao: selectedSituacao.value || '',
       apenas_recentes: apenasRecentes.value ? '1' : '',
       data_inicio: dataInicio.value || '',
@@ -225,6 +261,7 @@ const clearFilters = () => {
   searchTransportador.value = ''
   selectedTransportador.value = null
   searchRota.value = ''
+  selectedRota.value = null
   selectedSituacao.value = ''
   apenasRecentes.value = false
   dataInicio.value = ''
@@ -254,6 +291,7 @@ const paginationDisplay = computed(() => {
 onMounted(() => {
   fetchPacotes()
   fetchTransportadores() // Carregar alguns transportadores inicialmente
+  fetchRotas() // Carregar algumas rotas inicialmente
 })
 </script>
 
@@ -311,12 +349,19 @@ onMounted(() => {
             />
           </VCol>
           <VCol cols="12" sm="6" md="3">
-            <VTextField
-              v-model="searchRota"
+            <VAutocomplete
+              v-model="selectedRota"
+              :items="rotasOptions"
+              :loading="loadingRotas"
               label="Rota"
-              placeholder="Ex: BAR, CBE"
+              placeholder="Ex: AC, BAR, CBE"
               clearable
-              @keyup.enter="applyFilters"
+              item-title="title"
+              item-value="value"
+              @update:search="fetchRotas"
+              @update:model-value="applyFilters"
+              no-data-text="Nenhuma rota encontrada"
+              loading-text="Buscando rotas..."
             />
           </VCol>
           <VCol cols="12" sm="6" md="3">

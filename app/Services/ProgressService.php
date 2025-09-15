@@ -831,4 +831,45 @@ class ProgressService
             ];
         }
     }
+    
+    /**
+     * Busca rotas com filtro de texto (código e descrição)
+     */
+    public function getRotas($search = ''): array
+    {
+        try {
+            Log::info('Buscando rotas via JDBC', ['search' => $search]);
+            
+            $sql = "SELECT codrot, desrot FROM PUB.introt";
+            
+            if (!empty($search)) {
+                $searchUpper = strtoupper($search);
+                $sql .= " WHERE UPPER(codrot) LIKE '%" . $searchUpper . "%' OR UPPER(desrot) LIKE '%" . $searchUpper . "%'";
+            }
+            
+            $sql .= " ORDER BY codrot";
+            
+            $result = $this->executeCustomQuery($sql);
+            
+            if ($result['success']) {
+                return [
+                    'success' => true,
+                    'data' => $result['data']['results'] ?? []
+                ];
+            }
+            
+            return $result;
+            
+        } catch (Exception $e) {
+            Log::error('Erro ao buscar rotas', [
+                'search' => $search,
+                'error' => $e->getMessage()
+            ]);
+            
+            return [
+                'success' => false,
+                'error' => 'Erro ao buscar rotas: ' . $e->getMessage()
+            ];
+        }
+    }
 }
