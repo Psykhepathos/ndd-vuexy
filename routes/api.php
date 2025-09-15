@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\MotoristaController;
 use App\Http\Controllers\Api\PacoteController;
 use App\Http\Controllers\Api\ProgressController;
+use App\Http\Controllers\Api\RotaController;
 use App\Http\Controllers\Api\TransporteController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -40,4 +41,7 @@ Route::middleware('api')->group(function () {
     Route::get('pacotes/statistics', [PacoteController::class, 'statistics']);
     Route::post('pacotes/itinerario', [PacoteController::class, 'itinerario']);
     Route::apiResource('pacotes', PacoteController::class)->only(['index', 'show']);
+
+    // Rotas para RotaController (JDBC Progress) - para autocomplete
+    Route::get('rotas', [RotaController::class, 'index']);
 });
