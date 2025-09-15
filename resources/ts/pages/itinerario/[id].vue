@@ -22,56 +22,38 @@
     </div>
 
     <!-- Cards de Estatísticas -->
-    <div class="row mb-6">
-      <div class="col-md-3">
-        <VCard>
-          <VCardText class="text-center">
-            <div class="d-flex align-center justify-center mb-2">
-              <VIcon icon="tabler-map-pin" size="24" class="me-2 text-primary" />
-              <span class="text-h5 font-weight-semibold">{{ pacoteData.pedidos?.length || 0 }}</span>
-            </div>
-            <p class="text-body-2 mb-0 text-medium-emphasis">Entregas</p>
-          </VCardText>
-        </VCard>
-      </div>
+    <div class="d-flex gap-4 mb-6">
+      <VCard class="stats-card flex-fill">
+        <VCardText class="text-center pa-4">
+          <VIcon icon="tabler-map-pin" size="28" class="text-primary mb-2" />
+          <div class="text-h4 font-weight-bold mb-1">{{ pacoteData.pedidos?.length || 0 }}</div>
+          <p class="text-body-2 mb-0 text-medium-emphasis">Entregas</p>
+        </VCardText>
+      </VCard>
       
-      <div class="col-md-3">
-        <VCard>
-          <VCardText class="text-center">
-            <div class="d-flex align-center justify-center mb-2">
-              <VIcon icon="tabler-route" size="24" class="me-2 text-success" />
-              <span class="text-h5 font-weight-semibold">{{ distanciaTotal.toFixed(0) }}</span>
-              <span class="text-body-2 ms-1">km</span>
-            </div>
-            <p class="text-body-2 mb-0 text-medium-emphasis">Distância Total</p>
-          </VCardText>
-        </VCard>
-      </div>
+      <VCard class="stats-card flex-fill">
+        <VCardText class="text-center pa-4">
+          <VIcon icon="tabler-route" size="28" class="text-success mb-2" />
+          <div class="text-h4 font-weight-bold mb-1">{{ distanciaTotal.toFixed(0) }}km</div>
+          <p class="text-body-2 mb-0 text-medium-emphasis">Distância</p>
+        </VCardText>
+      </VCard>
       
-      <div class="col-md-3">
-        <VCard>
-          <VCardText class="text-center">
-            <div class="d-flex align-center justify-center mb-2">
-              <VIcon icon="tabler-weight" size="24" class="me-2 text-warning" />
-              <span class="text-h5 font-weight-semibold">{{ (pacoteData.peso || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) }}</span>
-              <span class="text-body-2 ms-1">kg</span>
-            </div>
-            <p class="text-body-2 mb-0 text-medium-emphasis">Peso Total</p>
-          </VCardText>
-        </VCard>
-      </div>
+      <VCard class="stats-card flex-fill">
+        <VCardText class="text-center pa-4">
+          <VIcon icon="tabler-weight" size="28" class="text-warning mb-2" />
+          <div class="text-h4 font-weight-bold mb-1">{{ (pacoteData.peso || 0).toFixed(0) }}kg</div>
+          <p class="text-body-2 mb-0 text-medium-emphasis">Peso Total</p>
+        </VCardText>
+      </VCard>
       
-      <div class="col-md-3">
-        <VCard>
-          <VCardText class="text-center">
-            <div class="d-flex align-center justify-center mb-2">
-              <VIcon icon="tabler-currency-real" size="24" class="me-2 text-info" />
-              <span class="text-h5 font-weight-semibold">{{ (pacoteData.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }}</span>
-            </div>
-            <p class="text-body-2 mb-0 text-medium-emphasis">Valor Total</p>
-          </VCardText>
-        </VCard>
-      </div>
+      <VCard class="stats-card flex-fill">
+        <VCardText class="text-center pa-4">
+          <VIcon icon="tabler-currency-real" size="28" class="text-info mb-2" />
+          <div class="text-h4 font-weight-bold mb-1">{{ formatCurrency(pacoteData.valor || 0) }}</div>
+          <p class="text-body-2 mb-0 text-medium-emphasis">Valor Total</p>
+        </VCardText>
+      </VCard>
     </div>
 
     <!-- Mapa -->
@@ -259,6 +241,17 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
     Math.sin(dLon/2) * Math.sin(dLon/2)
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
   return R * c
+}
+
+// Função para formatar moeda
+function formatCurrency(value: number): string {
+  if (value >= 1000000) {
+    return `R$ ${(value / 1000000).toFixed(1)}M`
+  } else if (value >= 1000) {
+    return `R$ ${(value / 1000).toFixed(0)}k`
+  } else {
+    return `R$ ${value.toFixed(0)}`
+  }
 }
 
 // Função para calcular distância total da rota
@@ -488,6 +481,21 @@ onMounted(async () => {
   border: none !important;
 }
 
+/* Stats Cards */
+.stats-card {
+  min-width: 120px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stats-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(var(--v-theme-on-surface), 0.12);
+}
+
+.stats-card .v-card-text {
+  padding: 16px !important;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .entrega-stats {
@@ -497,6 +505,15 @@ onMounted(async () => {
   
   #mapa-itinerario {
     height: 400px !important;
+  }
+  
+  /* Stack cards vertically on mobile */
+  .d-flex.gap-4 {
+    flex-direction: column !important;
+  }
+  
+  .stats-card {
+    min-width: unset;
   }
 }
 </style>
