@@ -624,7 +624,14 @@ class ProgressService
 
             // Adicionar parâmetros extras se fornecidos
             foreach ($params as $param) {
-                $cmdParts[] = escapeshellarg((string)$param);
+                // Para SQL queries, não usar escapeshellarg que remove % e outros caracteres
+                if ($action === 'query' && str_contains(strtoupper($param), 'SELECT')) {
+                    // Escapar aspas duplas mas preservar % e outros caracteres SQL
+                    $escapedParam = '"' . str_replace('"', '\\"', (string)$param) . '"';
+                    $cmdParts[] = $escapedParam;
+                } else {
+                    $cmdParts[] = escapeshellarg((string)$param);
+                }
             }
 
             $cmd = implode(' ', $cmdParts);
