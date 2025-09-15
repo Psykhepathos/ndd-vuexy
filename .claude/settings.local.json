@@ -28,7 +28,8 @@
       "Bash(dir:*)",
       "Read(//p//**)",
       "Read(//c/Users/15857/Desktop/appM/**)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(pnpm add:*)"
     ],
     "deny": [],
     "ask": []

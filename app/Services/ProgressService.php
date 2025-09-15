@@ -526,7 +526,7 @@ class ProgressService
             $carga = $cargas[0];
 
             // Buscar pedidos/entregas seguindo a estrutura: pacote -> carga -> pedido (como no itinerario.p)
-            $sqlEntregas = "SELECT ped.numseqped as seqent, cli.codcli, cli.descnt as razcli, cli.desend, ped.valtotateped as valnot, ped.pesped as peso, ped.volped as volume FROM PUB.carga car INNER JOIN PUB.pedido ped ON ped.codcar = car.codcar INNER JOIN PUB.cliente cli ON cli.codcli = ped.codcli WHERE car.codpac = $pacoteParaBuscar AND ped.valtotateped > 0 ORDER BY ped.numseqped";
+            $sqlEntregas = "SELECT ped.numseqped as seqent, cli.codcli, cli.descnt as razcli, est.sigest as uf, mun.desmun, bai.desbai, cli.desend, ped.valtotateped as valnot, ped.pesped as peso, ped.volped as volume, ard.latitute as latitude, ard.longitude FROM PUB.carga car INNER JOIN PUB.pedido ped ON ped.codcar = car.codcar INNER JOIN PUB.cliente cli ON cli.codcli = ped.codcli INNER JOIN PUB.estado est ON est.codest = cli.codest INNER JOIN PUB.municipio mun ON mun.codest = cli.codest AND mun.codmun = cli.codmun INNER JOIN PUB.bairro bai ON bai.codest = cli.codest AND bai.codmun = cli.codmun AND bai.codbai = cli.codbai LEFT JOIN PUB.arqrdnt ard ON ard.asdped = ped.asdped WHERE car.codpac = $pacoteParaBuscar AND ped.valtotateped > 0 AND ped.tipped != 'RAS' ORDER BY ped.numseqped";
 
             $resultEntregas = $this->executeJavaConnector('query', $sqlEntregas);
             
@@ -535,6 +535,19 @@ class ProgressService
                 $entregas = [];
             } else {
                 $entregas = $resultEntregas['data']['results'] ?? [];
+                
+                // Processar coordenadas GPS da mesma forma que o itinerario.p
+                foreach ($entregas as &$entrega) {
+                    if (!empty($entrega['latitude']) && !empty($entrega['longitude'])) {
+                        $entrega['gps_lat'] = $this->processGpsCoordinate($entrega['latitude']);
+                        $entrega['gps_lon'] = $this->processGpsCoordinate($entrega['longitude']);
+                    } else {
+                        $entrega['gps_lat'] = null;
+                        $entrega['gps_lon'] = null;
+                    }
+                    // Remover campos brutos de coordenadas
+                    unset($entrega['latitude'], $entrega['longitude']);
+                }
             }
 
             // Estruturar dados no formato esperado pelo frontend
@@ -886,5 +899,29 @@ class ProgressService
                 'error' => 'Erro ao buscar rotas: ' . $e->getMessage()
             ];
         }
+    }
+
+    /**
+     * Processa coordenadas GPS seguindo a mesma lógica do itinerario.p
+     * Converte formato Progress para decimal brasileiro
+     */
+    private function processGpsCoordinate($coordinate)
+    {
+        if (empty($coordinate)) {
+            return null;
+        }
+
+        // Limpar coordenada seguindo a mesma lógica do itinerario.p
+        $coord = trim($coordinate);
+        $coord = str_replace(['W', 'N', 'E', 'S'], '', $coord);
+        $coord = str_replace(['-', '.', ','], '', $coord);
+        
+        if (strlen($coord) >= 3) {
+            // Formato brasileiro: "-14,0876543" (sinal negativo + 2 dígitos + vírgula + demais dígitos)
+            $formatted = '-' . substr($coord, 0, 2) . ',' . substr($coord, 2);
+            return trim($formatted);
+        }
+        
+        return null;
     }
 }

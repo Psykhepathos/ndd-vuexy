@@ -552,14 +552,25 @@ onMounted(() => {
 
           <!-- Ações -->
           <template #item.actions="{ item }">
-            <VBtn
-              size="small"
-              color="primary"
-              variant="tonal"
-              @click="viewDetails(item)"
-            >
-              <VIcon icon="tabler-eye" size="16" />
-            </VBtn>
+            <div class="d-flex gap-2">
+              <VBtn
+                size="small"
+                color="primary"
+                variant="tonal"
+                @click="viewDetails(item)"
+              >
+                <VIcon icon="tabler-eye" size="16" />
+              </VBtn>
+              
+              <VBtn
+                size="small"
+                color="success"
+                variant="tonal"
+                :to="`/itinerario/${item.codpac}`"
+              >
+                <VIcon icon="tabler-map" size="16" />
+              </VBtn>
+            </div>
           </template>
 
           <!-- Bottom (paginação customizada) -->
