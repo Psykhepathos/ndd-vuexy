@@ -526,7 +526,7 @@ class ProgressService
             $carga = $cargas[0];
 
             // Buscar pedidos/entregas seguindo a estrutura: pacote -> carga -> pedido (como no itinerario.p)
-            $sqlEntregas = "SELECT ped.numseqped as seqent, COALESCE(nf.numnotfis, 0) as nf, cli.codcli, raz.desraz as razcli, est.sigest as uf, mun.desmun, bai.desbai, cli.desend, COALESCE(CAST(nf.numnotfis AS CHAR), '-') as numnot, ped.valtotateped as valnot, ped.pesped as peso, ped.volped as volume, ard.lat, ard.long FROM PUB.carga car INNER JOIN PUB.pedido ped ON ped.codcar = car.codcar INNER JOIN PUB.cliente cli ON cli.codcli = ped.codcli INNER JOIN PUB.estado est ON est.codest = cli.codest INNER JOIN PUB.municipio mun ON mun.codest = cli.codest AND mun.codmun = cli.codmun INNER JOIN PUB.bairro bai ON bai.codest = cli.codest AND bai.codmun = cli.codmun AND bai.codbai = cli.codbai INNER JOIN PUB.basecliente bc ON bc.codcli = cli.codcli INNER JOIN PUB.razao raz ON raz.codraz = bc.codraz LEFT JOIN PUB.notafiscal nf ON nf.codped = ped.codped LEFT JOIN PUB.arqrdnt ard ON ard.asdped = ped.asdped WHERE car.codpac = $pacoteParaBuscar AND ped.valtotateped > 0 AND ped.tipped != 'RAS' ORDER BY ped.numseqped";
+            $sqlEntregas = "SELECT ped.numseqped as seqent, cli.codcli, cli.descnt as razcli, cli.desend, ped.valtotateped as valnot, ped.pesped as peso, ped.volped as volume FROM PUB.carga car INNER JOIN PUB.pedido ped ON ped.codcar = car.codcar INNER JOIN PUB.cliente cli ON cli.codcli = ped.codcli WHERE car.codpac = $pacoteParaBuscar AND ped.valtotateped > 0 ORDER BY ped.numseqped";
 
             $resultEntregas = $this->executeJavaConnector('query', $sqlEntregas);
             
