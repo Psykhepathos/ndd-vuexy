@@ -177,6 +177,16 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png'
 })
 
+// Google Maps API
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+let googleMapsLoaded = false
+declare global {
+  interface Window {
+    google: any
+    initGoogleMaps: () => void
+  }
+}
+
 interface PedidoItinerario {
   seqent: number
   codcli: number
@@ -254,7 +264,7 @@ function formatCurrency(value: number): string {
   }
 }
 
-// Função para calcular distância total da rota
+// Função para calcular distância total da rota (fallback usando Haversine)
 function calculateTotalDistance() {
   if (!pacoteData.value.pedidos?.length) return
   
@@ -296,6 +306,163 @@ function focusOnMarker(index: number) {
   }
 }
 
+// Função para carregar Google Maps API
+function loadGoogleMapsAPI(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (googleMapsLoaded) {
+      resolve()
+      return
+    }
+
+    window.initGoogleMaps = () => {
+      googleMapsLoaded = true
+      console.log('✅ Google Maps API carregada com sucesso!')
+      resolve()
+    }
+
+    const script = document.createElement('script')
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=geometry,places&callback=initGoogleMaps`
+    script.async = true
+    script.defer = true
+    script.onerror = reject
+    document.head.appendChild(script)
+  })
+}
+
+// Função para calcular rota usando Google Maps Directions API com múltiplas chamadas
+async function getGoogleRoute(waypoints: Array<[number, number]>): Promise<L.LatLng[] | null> {
+  if (!googleMapsLoaded || waypoints.length < 2) return null
+
+  try {
+    console.log('🗺️ Calculando rota com Google Maps para', waypoints.length, 'pontos')
+    
+    const directionsService = new window.google.maps.DirectionsService()
+    const allRouteCoordinates: L.LatLng[] = []
+    
+    // Resetar distância total
+    distanciaTotal.value = 0
+    
+    // Google Maps suporta máximo 25 waypoints por request (origem + 23 intermediários + destino)
+    const MAX_WAYPOINTS_PER_REQUEST = 23
+    
+    if (waypoints.length <= MAX_WAYPOINTS_PER_REQUEST + 2) {
+      // Único request - processo normal
+      console.log('📍 Processando rota única com', waypoints.length, 'pontos')
+      return await processSingleGoogleRoute(directionsService, waypoints)
+    } else {
+      // Múltiplos requests necessários
+      console.log('📊 Dividindo', waypoints.length, 'pontos em múltiplas chamadas Google Maps')
+      
+      // Dividir waypoints em chunks
+      let currentIndex = 0
+      let segmentNumber = 1
+      
+      while (currentIndex < waypoints.length - 1) {
+        const remainingPoints = waypoints.length - currentIndex
+        const segmentSize = Math.min(MAX_WAYPOINTS_PER_REQUEST + 1, remainingPoints)
+        
+        const segmentWaypoints = waypoints.slice(currentIndex, currentIndex + segmentSize)
+        
+        console.log(`🚗 Processando segmento ${segmentNumber}: pontos ${currentIndex + 1} a ${currentIndex + segmentSize}`)
+        
+        const segmentRoute = await processSingleGoogleRoute(directionsService, segmentWaypoints)
+        
+        if (segmentRoute && segmentRoute.length > 0) {
+          // Conectar com o segmento anterior (evitar duplicação do ponto de conexão)
+          const coordsToAdd = segmentNumber === 1 ? segmentRoute : segmentRoute.slice(1)
+          allRouteCoordinates.push(...coordsToAdd)
+          
+          console.log(`✅ Segmento ${segmentNumber}: ${segmentRoute.length} pontos adicionados`)
+        } else {
+          console.warn(`⚠️ Segmento ${segmentNumber} falhou, usando linha reta`)
+          
+          // Fallback para linha reta
+          if (segmentNumber === 1) {
+            allRouteCoordinates.push(L.latLng(segmentWaypoints[0][1], segmentWaypoints[0][0]))
+          }
+          allRouteCoordinates.push(L.latLng(segmentWaypoints[segmentWaypoints.length - 1][1], segmentWaypoints[segmentWaypoints.length - 1][0]))
+        }
+        
+        // Mover para o próximo segmento (sobrepondo 1 ponto)
+        currentIndex += segmentSize - 1
+        segmentNumber++
+        
+        // Pausa entre requests para evitar rate limiting
+        if (currentIndex < waypoints.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 200))
+        }
+      }
+      
+      console.log(`✅ Rota completa: ${allRouteCoordinates.length} pontos de ${segmentNumber - 1} segmentos`)
+      return allRouteCoordinates.length > 0 ? allRouteCoordinates : null
+    }
+  } catch (error) {
+    console.error('❌ Erro na requisição Google Maps:', error)
+    return null
+  }
+}
+
+// Função auxiliar para processar um único segmento de rota
+async function processSingleGoogleRoute(directionsService: any, waypoints: Array<[number, number]>): Promise<L.LatLng[] | null> {
+  if (waypoints.length < 2) return null
+  
+  return new Promise((resolve, reject) => {
+    const origin = new window.google.maps.LatLng(waypoints[0][1], waypoints[0][0])
+    const destination = new window.google.maps.LatLng(waypoints[waypoints.length - 1][1], waypoints[waypoints.length - 1][0])
+    
+    // Waypoints intermediários
+    const intermediateWaypoints = waypoints.slice(1, -1).map(point => ({
+      location: new window.google.maps.LatLng(point[1], point[0]),
+      stopover: true
+    }))
+
+    const request = {
+      origin,
+      destination,
+      waypoints: intermediateWaypoints,
+      travelMode: window.google.maps.TravelMode.DRIVING,
+      optimizeWaypoints: false, // Não otimizar para manter ordem
+      unitSystem: window.google.maps.UnitSystem.METRIC
+    }
+
+    directionsService.route(request, (result: any, status: any) => {
+      if (status === 'OK' && result?.routes?.[0]) {
+        const route = result.routes[0]
+        const routeCoordinates: L.LatLng[] = []
+        
+        // Usar overview_polyline para ter a rota completa
+        if (route.overview_polyline?.points) {
+          const decodedPath = window.google.maps.geometry.encoding.decodePath(route.overview_polyline.points)
+          decodedPath.forEach((point: any) => {
+            routeCoordinates.push(L.latLng(point.lat(), point.lng()))
+          })
+        } else {
+          // Fallback: usar os steps
+          route.legs.forEach((leg: any) => {
+            leg.steps.forEach((step: any) => {
+              if (step.polyline?.points) {
+                const stepPath = window.google.maps.geometry.encoding.decodePath(step.polyline.points)
+                stepPath.forEach((point: any) => {
+                  routeCoordinates.push(L.latLng(point.lat(), point.lng()))
+                })
+              }
+            })
+          })
+        }
+        
+        // Atualizar distância total
+        const segmentDistance = route.legs.reduce((total: number, leg: any) => total + leg.distance.value, 0) / 1000
+        distanciaTotal.value += segmentDistance
+        
+        resolve(routeCoordinates)
+      } else {
+        console.warn('❌ Erro no Google Maps segment:', status)
+        resolve(null)
+      }
+    })
+  })
+}
+
 // Função para inicializar o mapa
 function initMap() {
   if (!mapContainer.value) return
@@ -311,8 +478,124 @@ function initMap() {
   routeLayer = L.layerGroup().addTo(map)
 }
 
+
+// Função principal usando Google Maps com cache
+async function fetchRealRoute(coordinates: Array<[number, number]>): Promise<L.LatLng[] | null> {
+  console.log('🛣️ Buscando rotas reais para', coordinates.length, 'pontos')
+  if (coordinates.length < 2) return null
+  
+  try {
+    // PRIMEIRO: Verificar se existe no cache
+    console.log('🔍 Verificando cache de rotas...')
+    const cachedRoute = await getCachedRoute(coordinates)
+    if (cachedRoute) {
+      console.log('✅ Rota encontrada no cache! Economizando API request')
+      return cachedRoute
+    }
+    
+    console.log('📡 Rota não encontrada no cache, usando Google Maps API...')
+    
+    // Carregar Google Maps API se necessário
+    if (!googleMapsLoaded) {
+      console.log('🌐 Carregando Google Maps API...')
+      await loadGoogleMapsAPI()
+    }
+    
+    // Usar Google Maps para calcular a rota
+    const googleRoute = await getGoogleRoute(coordinates)
+    if (googleRoute && googleRoute.length > 0) {
+      console.log('✅ Rota calculada com Google Maps!')
+      
+      // SALVAR no cache para próximas vezes
+      await saveRouteToCache(coordinates, googleRoute, distanciaTotal.value)
+      
+      return googleRoute
+    }
+    
+    console.warn('❌ Google Maps falhou, usando linhas retas')
+    return null
+  } catch (error) {
+    console.error('❌ Erro no sistema de rotas:', error)
+    return null
+  }
+}
+
+// Função para buscar rota no cache via API Laravel
+async function getCachedRoute(coordinates: Array<[number, number]>): Promise<L.LatLng[] | null> {
+  try {
+    const response = await fetch('http://localhost:8002/api/route-cache/find', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        waypoints: coordinates
+      })
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      if (data.success && data.route) {
+        console.log(`💾 Cache hit! Rota de ${data.route.waypoints_count} pontos encontrada`)
+        
+        // Converter coordenadas do cache para Leaflet
+        const cachedCoords = data.route.coordinates.map((coord: [number, number]) => 
+          L.latLng(coord[0], coord[1])
+        )
+        
+        // Atualizar distância total
+        distanciaTotal.value = data.route.total_distance
+        
+        return cachedCoords
+      }
+    }
+  } catch (error) {
+    console.warn('⚠️ Erro ao buscar cache:', error)
+  }
+  
+  return null
+}
+
+// Função para salvar rota no cache via API Laravel
+async function saveRouteToCache(
+  coordinates: Array<[number, number]>, 
+  routeCoords: L.LatLng[], 
+  totalDistance: number
+): Promise<void> {
+  try {
+    console.log('💾 Salvando rota no cache...')
+    
+    // Converter Leaflet coords para array simples
+    const coordsArray = routeCoords.map(coord => [coord.lat, coord.lng])
+    
+    const response = await fetch('http://localhost:8002/api/route-cache/save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        waypoints: coordinates,
+        route_coordinates: coordsArray,
+        total_distance: totalDistance,
+        source: 'google_maps'
+      })
+    })
+    
+    if (response.ok) {
+      console.log('✅ Rota salva no cache com sucesso!')
+    } else {
+      console.warn('⚠️ Falha ao salvar no cache')
+    }
+  } catch (error) {
+    console.warn('⚠️ Erro ao salvar cache:', error)
+  }
+}
+
+
 // Função para adicionar marcadores e rota
-function addMarkersAndRoute() {
+async function addMarkersAndRoute() {
   if (!map || !markersLayer || !routeLayer) return
   
   // Limpar camadas existentes
@@ -326,6 +609,7 @@ function addMarkersAndRoute() {
   if (!entregasComGPS.length) return
   
   const latlngs: L.LatLng[] = []
+  const routeCoordinates: Array<[number, number]> = []
   
   // Adicionar marcadores
   entregasComGPS.forEach((entrega, index) => {
@@ -334,6 +618,7 @@ function addMarkersAndRoute() {
     
     if (lat && lng) {
       latlngs.push(L.latLng(lat, lng))
+      routeCoordinates.push([lng, lat]) // Para OSRM: [longitude, latitude]
       
       // Criar ícone personalizado baseado na sequência
       const isFirst = index === 0
@@ -386,19 +671,52 @@ function addMarkersAndRoute() {
     }
   })
   
-  // Adicionar linha da rota
-  if (latlngs.length > 1) {
-    const polyline = L.polyline(latlngs, {
-      color: '#2196F3',
-      weight: 4,
-      opacity: 0.8,
-      dashArray: '10, 5'
+  // Buscar e adicionar rota real seguindo as ruas
+  if (routeCoordinates.length > 1) {
+    // Mostrar um indicador de carregamento na rota
+    const loadingPolyline = L.polyline(latlngs, {
+      color: '#cccccc',
+      weight: 2,
+      opacity: 0.5,
+      dashArray: '5, 5'
     })
+    routeLayer.addLayer(loadingPolyline)
     
-    routeLayer.addLayer(polyline)
+    // Buscar rota real
+    const realRoute = await fetchRealRoute(routeCoordinates)
     
-    // Ajustar zoom para mostrar toda a rota
-    map.fitBounds(polyline.getBounds(), { padding: [20, 20] })
+    // Remover linha temporária
+    routeLayer.removeLayer(loadingPolyline)
+    
+    if (realRoute) {
+      // Adicionar rota real seguindo as ruas
+      const realPolyline = L.polyline(realRoute, {
+        color: '#2196F3',
+        weight: 5,
+        opacity: 0.8,
+        lineJoin: 'round',
+        lineCap: 'round'
+      })
+      
+      routeLayer.addLayer(realPolyline)
+      
+      // Ajustar zoom para mostrar toda a rota real
+      map.fitBounds(realPolyline.getBounds(), { padding: [20, 20] })
+    } else {
+      // Fallback: usar linha reta se não conseguir buscar rota real
+      const fallbackPolyline = L.polyline(latlngs, {
+        color: '#FF9800', // Laranja para indicar que é fallback
+        weight: 4,
+        opacity: 0.7,
+        dashArray: '10, 5'
+      })
+      
+      routeLayer.addLayer(fallbackPolyline)
+      map.fitBounds(fallbackPolyline.getBounds(), { padding: [20, 20] })
+      
+      // Calcular distância usando Haversine como fallback
+      calculateTotalDistance()
+    }
   } else if (latlngs.length === 1) {
     // Se há apenas um ponto, centralizar nele
     map.setView(latlngs[0], 14)
@@ -425,7 +743,6 @@ async function fetchItinerario() {
       
       await nextTick()
       addMarkersAndRoute()
-      calculateTotalDistance()
     } else {
       console.error('Erro ao buscar itinerário:', response.message)
     }

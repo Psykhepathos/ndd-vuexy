@@ -21,6 +21,11 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\CorsMiddleware::class,
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
+        
+        // Middleware de proteção para Google Maps (apenas em rotas específicas)
+        $middleware->alias([
+            'google.quota' => \App\Http\Middleware\GoogleMapsQuotaProtection::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

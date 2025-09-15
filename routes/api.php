@@ -44,4 +44,24 @@ Route::middleware('api')->group(function () {
 
     // Rotas para RotaController (JDBC Progress) - para autocomplete
     Route::get('rotas', [RotaController::class, 'index']);
+    
+    // Rotas para proxy de roteamento (contorna CORS)
+    Route::prefix('routing')->group(function () {
+        Route::get('test', [\App\Http\Controllers\Api\RoutingController::class, 'testConnection']);
+        Route::post('route', [\App\Http\Controllers\Api\RoutingController::class, 'getRoute']);
+    });
+    
+    // Rotas para monitoramento Google Maps
+    Route::prefix('google-maps')->group(function () {
+        Route::get('quota', [\App\Http\Controllers\Api\GoogleMapsQuotaController::class, 'getUsageStats']);
+        Route::post('reset-counters', [\App\Http\Controllers\Api\GoogleMapsQuotaController::class, 'resetCounters']);
+    });
+    
+    // Rotas para cache de rotas
+    Route::prefix('route-cache')->group(function () {
+        Route::post('find', [\App\Http\Controllers\Api\RouteCacheController::class, 'findRoute']);
+        Route::post('save', [\App\Http\Controllers\Api\RouteCacheController::class, 'saveRoute']);
+        Route::get('stats', [\App\Http\Controllers\Api\RouteCacheController::class, 'getStats']);
+        Route::delete('clear-expired', [\App\Http\Controllers\Api\RouteCacheController::class, 'clearExpired']);
+    });
 });
