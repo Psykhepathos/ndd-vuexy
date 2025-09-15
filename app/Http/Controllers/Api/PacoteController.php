@@ -27,6 +27,7 @@ class PacoteController extends Controller
             'search' => 'nullable|string|max:255',
             'codigo' => 'nullable|string|max:50',
             'transportador' => 'nullable|string|max:255',
+            'codigo_transportador' => 'nullable|integer',
             'motorista' => 'nullable|string|max:255',
             'rota' => 'nullable|string|max:10',
             'situacao' => 'nullable|string|max:1',
@@ -40,6 +41,7 @@ class PacoteController extends Controller
         $search = $request->get('search', '');
         $codigo = $request->get('codigo', '');
         $transportador = $request->get('transportador', '');
+        $codigoTransportador = $request->get('codigo_transportador', '');
         $motorista = $request->get('motorista', '');
         $rota = $request->get('rota', '');
         $situacao = $request->get('situacao', '');
@@ -53,6 +55,7 @@ class PacoteController extends Controller
             'search' => $search,
             'codigo' => $codigo,
             'transportador' => $transportador,
+            'codigo_transportador' => $codigoTransportador,
             'motorista' => $motorista,
             'rota' => $rota,
             'situacao' => $situacao,

@@ -287,6 +287,7 @@ composer dev                    # Laravel + Queue + Logs + Vite concorrente
 
 # Verificação manual
 curl http://localhost:8002/api/motoristas    # Teste API
+curl http://localhost:8002/api/transportes   # Teste API transportes
 # Abrir: http://localhost:5174               # Frontend Vue
 ```
 

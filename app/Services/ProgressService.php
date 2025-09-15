@@ -306,6 +306,7 @@ class ProgressService
             $search = $filters['search'] ?? '';
             $codigo = $filters['codigo'] ?? '';
             $transportador = $filters['transportador'] ?? '';
+            $codigoTransportador = $filters['codigo_transportador'] ?? '';
             $motorista = $filters['motorista'] ?? '';
             $rota = $filters['rota'] ?? '';
             $situacao = $filters['situacao'] ?? '';
@@ -326,12 +327,17 @@ class ProgressService
 
             // Filtro por busca geral (código do pacote ou nome do transportador)
             if (!empty($search)) {
-                $whereConditions[] = "(p.codpac LIKE '%$search%' OR t.nomtrn LIKE '%$search%')";
+                $whereConditions[] = "(p.codpac LIKE '%$search%' OR UPPER(t.nomtrn) LIKE '%". strtoupper($search) ."%')";
             }
 
-            // Filtro por transportador
+            // Filtro por transportador (nome)
             if (!empty($transportador)) {
-                $whereConditions[] = "t.nomtrn LIKE '%$transportador%'";
+                $whereConditions[] = "UPPER(t.nomtrn) LIKE '%". strtoupper($transportador) ."%'";
+            }
+
+            // Filtro por código do transportador
+            if (!empty($codigoTransportador)) {
+                $whereConditions[] = "p.codtrn = $codigoTransportador";
             }
 
             // Filtro por rota
