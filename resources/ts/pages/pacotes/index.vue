@@ -17,6 +17,7 @@ interface Pacote {
   codrot: string
   nroped: number
   nomtrn: string
+  flg_tcd: number
 }
 
 interface Pagination {
@@ -79,6 +80,7 @@ const headers = [
   { title: 'TRANSPORTADOR', key: 'nomtrn', sortable: false },
   { title: 'PLACA', key: 'numpla', sortable: false },
   { title: 'ROTA', key: 'codrot', sortable: false },
+  { title: 'TCD', key: 'flg_tcd', sortable: false },
   { title: 'VALOR', key: 'valpac', sortable: true },
   { title: 'PEDIDOS', key: 'nroped', sortable: true },
   { title: 'SITUAÇÃO', key: 'sitpac', sortable: false },
@@ -506,6 +508,18 @@ onMounted(() => {
             >
               {{ item.codrot }}
             </VChip>
+          </template>
+          <!-- TCD -->
+          <template #item.flg_tcd="{ item }">
+            <VChip
+              v-if="item.flg_tcd === 1"
+              color="warning"
+              size="small"
+              variant="flat"
+            >
+              TCD
+            </VChip>
+            <span v-else class="text-disabled">-</span>
           </template>
 
           <!-- Valor -->
