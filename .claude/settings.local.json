@@ -27,7 +27,8 @@
       "Read(//p/wsprgs/**)",
       "Bash(dir:*)",
       "Read(//p//**)",
-      "Read(//c/Users/15857/Desktop/appM/**)"
+      "Read(//c/Users/15857/Desktop/appM/**)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []
