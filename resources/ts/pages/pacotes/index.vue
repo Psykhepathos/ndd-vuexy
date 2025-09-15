@@ -32,6 +32,8 @@ interface Pagination {
 // Estados reativos
 const pacotes = ref<Pacote[]>([])
 const loading = ref(false)
+const loadingTransportadores = ref(false)
+const transportadoresOptions = ref<Array<{title: string, value: number}>>([])
 const pagination = ref<Pagination>({
   current_page: 1,
   last_page: 1,
@@ -46,6 +48,7 @@ const pagination = ref<Pagination>({
 const search = ref('')
 const searchCodigo = ref('')
 const searchTransportador = ref('')
+const selectedTransportador = ref<number | null>(null)
 const searchRota = ref('')
 const selectedSituacao = ref('')
 const apenasRecentes = ref(true)
@@ -79,6 +82,42 @@ const headers = [
   { title: 'AÇÕES', key: 'actions', sortable: false }
 ]
 
+// Buscar transportadores para o autocomplete
+const fetchTransportadores = async (searchTerm: string = '') => {
+  if (searchTerm.length < 2 && searchTerm !== '') return
+  
+  loadingTransportadores.value = true
+  
+  try {
+    const params = new URLSearchParams({
+      search: searchTerm,
+      per_page: '20'
+    })
+
+    const response = await fetch(`http://localhost:8002/api/transportes?${params}`, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+    
+    const data = await response.json()
+
+    if (data.success && data.data.results) {
+      transportadoresOptions.value = data.data.results.map((t: any) => ({
+        title: `${t.codtrn} - ${t.nomtrn.toUpperCase()}`,
+        value: t.codtrn
+      }))
+    }
+  } catch (error) {
+    console.error('Erro ao buscar transportadores:', error)
+    transportadoresOptions.value = []
+  } finally {
+    loadingTransportadores.value = false
+  }
+}
+
 // Carregar dados
 const fetchPacotes = async () => {
   loading.value = true
@@ -90,6 +129,7 @@ const fetchPacotes = async () => {
       search: search.value || '',
       codigo: searchCodigo.value || '',
       transportador: searchTransportador.value || '',
+      codigo_transportador: selectedTransportador.value?.toString() || '',
       rota: searchRota.value || '',
       situacao: selectedSituacao.value || '',
       apenas_recentes: apenasRecentes.value ? '1' : '',
@@ -183,6 +223,7 @@ const clearFilters = () => {
   search.value = ''
   searchCodigo.value = ''
   searchTransportador.value = ''
+  selectedTransportador.value = null
   searchRota.value = ''
   selectedSituacao.value = ''
   apenasRecentes.value = false
@@ -212,6 +253,7 @@ const paginationDisplay = computed(() => {
 // Lifecycle
 onMounted(() => {
   fetchPacotes()
+  fetchTransportadores() // Carregar alguns transportadores inicialmente
 })
 </script>
 
@@ -253,12 +295,17 @@ onMounted(() => {
             />
           </VCol>
           <VCol cols="12" sm="6" md="3">
-            <VTextField
-              v-model="searchTransportador"
+            <VAutocomplete
+              v-model="selectedTransportador"
+              :items="transportadoresOptions"
               label="Transportador"
-              placeholder="Nome do transportador"
+              placeholder="Busque pelo código ou nome"
+              :loading="loadingTransportadores"
               clearable
-              @keyup.enter="applyFilters"
+              item-title="title"
+              item-value="value"
+              @update:search="fetchTransportadores"
+              @update:model-value="applyFilters"
             />
           </VCol>
           <VCol cols="12" sm="6" md="3">
