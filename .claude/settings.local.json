@@ -29,7 +29,10 @@
       "Read(//p//**)",
       "Read(//c/Users/15857/Desktop/appM/**)",
       "Bash(git checkout:*)",
-      "Bash(pnpm add:*)"
+      "Bash(pnpm add:*)",
+      "Bash(start http://localhost:5173/itinerario/3043824)",
+      "Bash(start http://localhost:8002/itinerario/3043824)",
+      "Bash(start http://localhost:5174/itinerario/3043824)"
     ],
     "deny": [],
     "ask": []
