@@ -238,12 +238,9 @@
                 </div>
               </VCol>
             </VRow>
-          </VCardText>
-        </VCard>
 
-        <!-- Mais Opções da Rota -->
-        <VCard class="mt-6">
-          <VCardText class="pa-6">
+            <!-- Mais Opções da Rota -->
+            <div class="route-section">
             <h3 class="text-h6 font-weight-medium mb-4">Mais opções da rota</h3>
             
             <VRow>
@@ -384,6 +381,7 @@
               >
                 Calcular Rota
               </VBtn>
+            </div>
             </div>
           </div>
         </div>
