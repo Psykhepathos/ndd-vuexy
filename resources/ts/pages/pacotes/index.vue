@@ -384,6 +384,8 @@ onMounted(() => {
           @update:items-per-page="(value) => { pagination.per_page = value; fetchPacotes() }"
           class="text-no-wrap"
           hover
+          loading-text="Carregando pacotes..."
+          no-data-text="Nenhum pacote encontrado"
         >
           <!-- Código do Pacote -->
           <template #item.codpac="{ item }">
