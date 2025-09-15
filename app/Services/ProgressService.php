@@ -313,8 +313,8 @@ class ProgressService
             $dataInicio = $filters['data_inicio'] ?? '';
             $dataFim = $filters['data_fim'] ?? '';
 
-            // Campos principais da consulta
-            $campos = "p.codpac, p.datforpac, p.horforpac, p.codtrn, p.codmot, p.numpla, p.valpac, p.volpac, p.pespac, p.sitpac, p.codrot, p.nroped, t.nomtrn";
+            // Campos principais da consulta - incluindo flag TCD
+            $campos = "p.codpac, p.datforpac, p.horforpac, p.codtrn, p.codmot, p.numpla, p.valpac, p.volpac, p.pespac, p.sitpac, p.codrot, p.nroped, t.nomtrn, CASE WHEN pcd.codpaccd IS NOT NULL THEN 1 ELSE 0 END as flg_tcd";
 
             // Construir condições WHERE
             $whereConditions = [];
@@ -372,17 +372,17 @@ class ProgressService
             
             if ($offset == 0) {
                 // Primeira página
-                $sql = "SELECT TOP $perPage $campos FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn $whereClause ORDER BY p.codpac DESC";
+                $sql = "SELECT TOP $perPage $campos FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn LEFT JOIN PUB.paccd pcd ON pcd.codpaccd = p.codpac $whereClause ORDER BY p.codpac DESC";
             } else {
                 // Páginas subsequentes usando offset simulado
-                $offsetSql = "SELECT TOP $offset p.codpac FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn $whereClause ORDER BY p.codpac DESC";
+                $offsetSql = "SELECT TOP $offset p.codpac FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn LEFT JOIN PUB.paccd pcd ON pcd.codpaccd = p.codpac $whereClause ORDER BY p.codpac DESC";
                 $offsetResult = $this->executeCustomQuery($offsetSql);
                 
                 if ($offsetResult['success'] && !empty($offsetResult['data']['results'])) {
                     $lastId = end($offsetResult['data']['results'])['codpac'];
-                    $sql = "SELECT TOP $perPage $campos FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn $whereClause AND p.codpac < $lastId ORDER BY p.codpac DESC";
+                    $sql = "SELECT TOP $perPage $campos FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn LEFT JOIN PUB.paccd pcd ON pcd.codpaccd = p.codpac $whereClause AND p.codpac < $lastId ORDER BY p.codpac DESC";
                 } else {
-                    $sql = "SELECT TOP $perPage $campos FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn WHERE 1=0";
+                    $sql = "SELECT TOP $perPage $campos FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn LEFT JOIN PUB.paccd pcd ON pcd.codpaccd = p.codpac WHERE 1=0";
                 }
             }
 
@@ -392,7 +392,7 @@ class ProgressService
 
             if ($result['success']) {
                 // Contar total com os mesmos filtros
-                $countSql = "SELECT COUNT(*) as total FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn $whereClause";
+                $countSql = "SELECT COUNT(*) as total FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn LEFT JOIN PUB.paccd pcd ON pcd.codpaccd = p.codpac $whereClause";
                 $totalResult = $this->executeCustomQuery($countSql);
 
                 $total = 0;
@@ -488,8 +488,23 @@ class ProgressService
         try {
             Log::info('Buscando itinerário do pacote', ['codpac' => $codPac]);
 
-            // Buscar dados principais da carga (similar ao procedure coleta_cargas)
-            $sqlCarga = "SELECT p.codpac, p.codrot as rota, p.codmot as motorista, p.pespac as peso, p.volpac as volume, p.valpac as valor, COALESCE(cf.valfre, 0) as frete FROM PUB.pacote p LEFT JOIN PUB.cxapacote cp ON cp.codpac = p.codpac LEFT JOIN PUB.caixafech cf ON cf.codcxa = cp.codcxa WHERE p.codpac = $codPac";
+            // Primeiro verificar se o pacote é TCD - se sim, buscar o pacote original
+            $sqlVerificaTCD = "SELECT pcd.codpac as pacote_original FROM PUB.paccd pcd WHERE pcd.codpaccd = $codPac";
+            $resultTCD = $this->executeJavaConnector('query', $sqlVerificaTCD);
+            
+            $pacoteParaBuscar = $codPac;
+            $isTCD = false;
+            
+            if ($resultTCD['success'] && !empty($resultTCD['data']['results'])) {
+                // É um pacote TCD, usar o pacote original para buscar entregas
+                $pacoteOriginal = $resultTCD['data']['results'][0]['pacote_original'];
+                $pacoteParaBuscar = $pacoteOriginal;
+                $isTCD = true;
+                Log::info('Pacote TCD detectado', ['tcd' => $codPac, 'original' => $pacoteOriginal]);
+            }
+
+            // Buscar dados principais da carga usando o pacote correto
+            $sqlCarga = "SELECT p.codpac, p.codrot as rota, p.codmot as motorista, p.pespac as peso, p.volpac as volume, p.valpac as valor, COALESCE(cf.valfre, 0) as frete FROM PUB.pacote p LEFT JOIN PUB.cxapacote cp ON cp.codpac = p.codpac LEFT JOIN PUB.caixafech cf ON cf.codcxa = cp.codcxa WHERE p.codpac = $pacoteParaBuscar";
 
             $resultCarga = $this->executeJavaConnector('query', $sqlCarga);
             
@@ -511,7 +526,7 @@ class ProgressService
             $carga = $cargas[0];
 
             // Buscar pedidos/entregas seguindo a estrutura: pacote -> carga -> pedido (como no itinerario.p)
-            $sqlEntregas = "SELECT ped.numseqped as seqent, COALESCE(nf.numnotfis, 0) as nf, cli.codcli, raz.desraz as razcli, est.sigest as uf, mun.desmun, bai.desbai, cli.desend, COALESCE(CAST(nf.numnotfis AS CHAR), '-') as numnot, ped.valtotateped as valnot, ped.pesped as peso, ped.volped as volume, ard.lat, ard.long FROM PUB.carga car INNER JOIN PUB.pedido ped ON ped.codcar = car.codcar INNER JOIN PUB.cliente cli ON cli.codcli = ped.codcli INNER JOIN PUB.estado est ON est.codest = cli.codest INNER JOIN PUB.municipio mun ON mun.codest = cli.codest AND mun.codmun = cli.codmun INNER JOIN PUB.bairro bai ON bai.codest = cli.codest AND bai.codmun = cli.codmun AND bai.codbai = cli.codbai INNER JOIN PUB.basecliente bc ON bc.codcli = cli.codcli INNER JOIN PUB.razao raz ON raz.codraz = bc.codraz LEFT JOIN PUB.notafiscal nf ON nf.codped = ped.codped LEFT JOIN PUB.arqrdnt ard ON ard.asdped = ped.asdped WHERE car.codpac = $codPac AND ped.valtotateped > 0 AND ped.tipped != 'RAS' ORDER BY ped.numseqped";
+            $sqlEntregas = "SELECT ped.numseqped as seqent, COALESCE(nf.numnotfis, 0) as nf, cli.codcli, raz.desraz as razcli, est.sigest as uf, mun.desmun, bai.desbai, cli.desend, COALESCE(CAST(nf.numnotfis AS CHAR), '-') as numnot, ped.valtotateped as valnot, ped.pesped as peso, ped.volped as volume, ard.lat, ard.long FROM PUB.carga car INNER JOIN PUB.pedido ped ON ped.codcar = car.codcar INNER JOIN PUB.cliente cli ON cli.codcli = ped.codcli INNER JOIN PUB.estado est ON est.codest = cli.codest INNER JOIN PUB.municipio mun ON mun.codest = cli.codest AND mun.codmun = cli.codmun INNER JOIN PUB.bairro bai ON bai.codest = cli.codest AND bai.codmun = cli.codmun AND bai.codbai = cli.codbai INNER JOIN PUB.basecliente bc ON bc.codcli = cli.codcli INNER JOIN PUB.razao raz ON raz.codraz = bc.codraz LEFT JOIN PUB.notafiscal nf ON nf.codped = ped.codped LEFT JOIN PUB.arqrdnt ard ON ard.asdped = ped.asdped WHERE car.codpac = $pacoteParaBuscar AND ped.valtotateped > 0 AND ped.tipped != 'RAS' ORDER BY ped.numseqped";
 
             $resultEntregas = $this->executeJavaConnector('query', $sqlEntregas);
             
