@@ -154,8 +154,7 @@ class ProgressService
                 if (is_numeric($searchTerm)) {
                     $whereConditions[] = "codtrn = $searchTerm";
                 } else {
-                    $searchLen = strlen($searchTerm);
-                    $whereConditions[] = "LEFT(nomtrn, $searchLen) = '$searchTerm'";
+                    $whereConditions[] = "UPPER(nomtrn) LIKE '%" . strtoupper($searchTerm) . "%'";
                 }
             }
             
