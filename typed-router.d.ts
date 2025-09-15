@@ -98,6 +98,7 @@ declare module 'vue-router/auto-routes' {
     'front-pages-landing-page': RouteRecordInfo<'front-pages-landing-page', '/front-pages/landing-page', Record<never, never>, Record<never, never>>,
     'front-pages-payment': RouteRecordInfo<'front-pages-payment', '/front-pages/payment', Record<never, never>, Record<never, never>>,
     'front-pages-pricing': RouteRecordInfo<'front-pages-pricing', '/front-pages/pricing', Record<never, never>, Record<never, never>>,
+    'itinerario-id': RouteRecordInfo<'itinerario-id', '/itinerario/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
     'login': RouteRecordInfo<'login', '/login', Record<never, never>, Record<never, never>>,
     'motoristas-id': RouteRecordInfo<'motoristas-id', '/motoristas/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
     'ndd-dashboard': RouteRecordInfo<'ndd-dashboard', '/ndd-dashboard', Record<never, never>, Record<never, never>>,

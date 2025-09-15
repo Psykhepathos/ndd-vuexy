@@ -49,6 +49,9 @@ importers:
       '@tiptap/vue-3':
         specifier: ^2.12.0
         version: 2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)(vue@3.5.14(typescript@5.8.3))
+      '@types/leaflet':
+        specifier: ^1.9.20
+        version: 1.9.20
       '@vueuse/core':
         specifier: 10.11.1
         version: 10.11.1(vue@3.5.14(typescript@5.8.3))
@@ -73,6 +76,9 @@ importers:
       jwt-decode:
         specifier: 4.0.0
         version: 4.0.0
+      leaflet:
+        specifier: ^1.9.4
+        version: 1.9.4
       mapbox-gl:
         specifier: 3.5.2
         version: 3.5.2
@@ -1346,6 +1352,9 @@ packages:
 
   '@types/json5@0.0.29':
     resolution: {integrity: sha512-dRLjCWHYg4oaA77cxO64oO+7JwCwnIzkZPdrrC71jQmQtlhM556pwKo5bUzqvZndkVbeFLIIi+9TC40JNF5hNQ==}
+
+  '@types/leaflet@1.9.20':
+    resolution: {integrity: sha512-rooalPMlk61LCaLOvBF2VIf9M47HgMQqi5xQ9QRi7c8PkdIe0WrIi5IxXUXQjAdL0c+vcQ01mYWbthzmp9GHWw==}
 
   '@types/linkify-it@5.0.0':
     resolution: {integrity: sha512-sVDA58zAw4eWAffKOaQH5/5j3XeayukzDk+ewSsnv3p4yJEZHCCzMDiZM8e0OUrRvmpGZ85jf4yDHkHsgBNr9Q==}
@@ -3245,6 +3254,9 @@ packages:
     hasBin: true
     peerDependencies:
       vite: ^5.0.0 || ^6.0.0
+
+  leaflet@1.9.4:
+    resolution: {integrity: sha512-nxS1ynzJOmOlHp+iL3FyWqK89GtNL8U8rvlMOsQdTTssxZwCXh8N2NB3GDQOL+YR3XnWyZAxwQixURb+FA74PA==}
 
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
@@ -5940,6 +5952,10 @@ snapshots:
 
   '@types/json5@0.0.29': {}
 
+  '@types/leaflet@1.9.20':
+    dependencies:
+      '@types/geojson': 7946.0.16
+
   '@types/linkify-it@5.0.0': {}
 
   '@types/mapbox-gl@3.4.1':
@@ -8212,6 +8228,8 @@ snapshots:
       picocolors: 1.1.1
       vite: 6.3.5(@types/node@22.15.21)(sass@1.76.0)(tsx@4.19.4)(yaml@2.8.1)
       vite-plugin-full-reload: 1.2.0
+
+  leaflet@1.9.4: {}
 
   levn@0.4.1:
     dependencies:
