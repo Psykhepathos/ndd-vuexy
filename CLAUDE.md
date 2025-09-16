@@ -2,7 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Este arquivo fornece orientações para o Claude Code (claude.ai/code) ao trabalhar neste repositório.
+## Quick Start Summary
+
+This is a Laravel + Vue.js unified transport management system using the Vuexy template, connected to Progress OpenEdge database via ODBC.
+
+**Key Commands:**
+```bash
+php artisan serve --port=8002  # Laravel API
+pnpm run dev                   # Vue frontend at :5174
+pnpm run typecheck            # TypeScript validation
+pnpm run lint                 # ESLint with auto-fix
+php artisan test              # Backend tests
+```
+
+**Architecture:** Vue/Vuexy ← REST API → Laravel ← ODBC → Progress Database
+
+**Login:** admin@ndd.com / 123456
 
 ## Workflow de Desenvolvimento
 
@@ -24,24 +39,17 @@ Este é o **novo sistema unificado** Laravel + Vue usando o template **Vuexy Typ
 - ❌ Frontend Flutter (ANTIGO): https://github.com/Psykhepathos/ndd-flutter.git  
 - ✅ Sistema Unificado (NOVO): https://github.com/Psykhepathos/ndd-vuexy.git
 
-## Estado da Migração - O QUE FOI FEITO
+## Current System Status
 
-### ✅ Concluído
-- ✅ Setup Vuexy TypeScript template completo
-- ✅ Migração código Laravel de `ndd-app` → `ndd-vuexy`
-- ✅ Remoção completa da arquitetura Kafka (substituída por ODBC direto)
-- ✅ AuthController migrado com formato compatível Vuexy
-- ✅ MotoristaController migrado com CRUD completo
-- ✅ CORS configurado corretamente entre Laravel + Vue
-- ✅ Vue dashboard criado em `/ndd-dashboard` 
-- ✅ Login funcionando com Laravel Sanctum
-- ✅ MSW (Mock Service Worker) desabilitado - usando APIs reais
-- ✅ Estrutura de usuários criada para testes
-
-### 🔄 PRÓXIMA ETAPA - TESTES ODBC PROGRESS
-- **Testar conectividade ODBC com banco Progress**
-- **Validar consultas SQL diretas ao banco corporativo**
-- **Verificar se credenciais e configurações estão corretas**
+### Implemented Features
+- Laravel + Vue.js unified system with Vuexy template
+- Progress OpenEdge direct ODBC connection (Kafka removed)
+- Laravel Sanctum authentication
+- Vale Pedágio route calculator with Google Maps integration
+- Real-time route caching system
+- Drag & drop interface with vuedraggable
+- Responsive design with dark/light theme support
+- Progress database integration with 6,913+ transporter records
 
 ## Instruções Importantes de Desenvolvimento
 
@@ -76,46 +84,34 @@ Email: test@ndd.com
 Senha: 123456
 ```
 
-## Comandos de Inicialização
+## Development Commands
 
-### /init - Sequência de Inicialização (ATUALIZADA)
-Execute SEMPRE nesta ordem:
-
+### Starting the Application
 ```bash
-# 1. Sistema Laravel + Vue (Terminal único)
-cd "C:\Users\15857\Desktop\NDD\ndd-vuexy"
+# Terminal 1: Laravel API
+php artisan serve --port=8002
 
-# 2. Backend Laravel (Terminal 1)
-php artisan serve --port=8002        # API Laravel na porta 8002
+# Terminal 2: Vue frontend
+pnpm run dev
 
-# 3. Frontend Vue (Terminal 2)
-pnpm run dev                         # Vue Vuexy na porta 5174
-
-# 4. Verificação de Status
-curl http://localhost:8002/api/motoristas    # Deve retornar JSON
-# Abrir Vue: http://localhost:5174
+# Access points:
+# Frontend: http://localhost:5174
+# API: http://localhost:8002
 # Login: admin@ndd.com / 123456
 ```
 
-### Arquitetura do Sistema (NOVA)
-
-#### Stack Tecnológica Atual
-- **Laravel 12.15.0** - API backend unificado
-- **Vue 3.5.14 + TypeScript 5.8.3** - Frontend com Vuexy template
+### Technology Stack
+- **Laravel 12.15.0** - API backend
+- **Vue 3.5.14 + TypeScript 5.8.3** - Frontend with Vuexy template
 - **Vuetify 3.8.5** - Material Design components
-- **Pinia 3.0.2** - State management Vue
-- **Laravel Sanctum** - Autenticação API
-- **Progress ODBC** - Conexão direta banco corporativo (sem Kafka)
-- **Vite 6.3.5** - Build tool frontend
-- **PNPM** - Gerenciador de pacotes
+- **Progress OpenEdge** - Corporate database via ODBC
+- **Laravel Sanctum** - API authentication
+- **Vite 6.3.5** - Build tool
+- **PNPM** - Package manager
 
-#### Mudanças Arquiteturais
+### Architecture
 ```
-ANTES (Flutter + Laravel):
-Flutter App ← REST API → Laravel ← Kafka → Progress (via Java JDBC)
-
-AGORA (Vuexy + Laravel):  
-Vue/Vuexy ← REST API → Laravel ← ODBC DIRETO → Progress Database
+Vue/Vuexy ← REST API → Laravel ← ODBC → Progress Database
 ```
 
 #### Estrutura de Diretórios
@@ -132,14 +128,16 @@ ndd-vuexy/
 └── CLAUDE.md                   # Este arquivo
 ```
 
-### URLs Importantes  
+### URLs Importantes
 - **Laravel API**: http://localhost:8002
-- **Vue Frontend**: http://localhost:5174
+- **Vue Frontend**: http://localhost:5174 (ou 5173)
 - **Login Page**: http://localhost:5174/login
 - **Dashboard NDD**: http://localhost:5174/ndd-dashboard
 - **API Motoristas**: http://localhost:8002/api/motoristas
 - **Itinerário**: http://localhost:8002/itinerario/3043368
-- **Vale Pedágio**: http://localhost:5174/vale-pedagio
+- **Vale Pedágio**: http://localhost:5174/vale-pedagio ⭐ **PRINCIPAL**
+- **API Cache Rotas**: http://localhost:8002/api/route-cache/find
+- **API Progress Query**: http://localhost:8002/api/progress/query
 
 ## PRÓXIMOS TESTES OBRIGATÓRIOS
 
@@ -740,6 +738,91 @@ $result = $this->progressService->executeCustomQuery($sql);
 - **Economia de tokens**: resposta mínima, sem emojis
 - **Não modificar CLAUDE.md** no comando /init
 - **Usar APIs para explorar schema** - mais confiável que tinker direto
+
+## 🚨 TROUBLESHOOTING E SOLUÇÕES COMUNS
+
+### Problemas Frequentes
+
+#### 1. **Servers não iniciam**
+```bash
+# Verificar se portas estão ocupadas
+netstat -ano | findstr :8002
+netstat -ano | findstr :5173
+netstat -ano | findstr :5174
+
+# Matar processos se necessário
+taskkill /PID [PID_NUMBER] /F
+
+# Reiniciar servers
+php artisan serve --port=8002
+pnpm run dev
+```
+
+#### 2. **Vue compilation errors**
+```bash
+# Limpar cache do Vite
+rm -rf node_modules/.vite
+pnpm run dev
+
+# Se persistir, verificar syntax errors no console
+```
+
+#### 3. **Drag and drop não funciona**
+- ✅ Verificar se `vuedraggable` está importado
+- ✅ Confirmar que `v-model` aponta para um `ref()` mutável, não `computed()`
+- ✅ Handle deve ter classe `.drag-handle`
+- ✅ Função `onDragEnd` deve estar definida
+
+#### 4. **Rotas não carregam no mapa**
+```bash
+# Verificar se API Laravel está rodando
+curl http://localhost:8002/api/pacotes/itinerario -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"Pacote":{"codPac":3043368}}'
+
+# Verificar se Google Maps API key está configurada
+# No arquivo .env: VITE_GOOGLE_MAPS_API_KEY=your_key_here
+```
+
+#### 5. **Loading screen no modo errado**
+- ✅ Verificar localStorage: `vuexy-vuetify-theme`
+- ✅ Script em `application.blade.php` deve detectar tema correto
+- ✅ Limpar cache do navegador se necessário
+
+#### 6. **Paginação com números errados**
+- ✅ Usar `getGlobalIndex(localIndex)` para numeração
+- ✅ Verificar se `currentPage` e `itemsPerPage` estão corretos
+- ✅ Função deve calcular: `(página - 1) * itens + índice`
+
+### Comandos de Emergência
+
+```bash
+# Reset completo do projeto
+git status
+git stash  # salva mudanças locais
+git pull origin master
+pnpm install
+php artisan cache:clear
+php artisan config:clear
+
+# Verificar se tudo funciona
+php artisan serve --port=8002 &
+pnpm run dev &
+```
+
+### Arquivos Críticos
+- **vale-pedagio**: `resources/ts/pages/vale-pedagio/index.vue`
+- **loading**: `resources/views/application.blade.php`
+- **favicon**: `public/favicon.ico` + `public/iconetambasa.png`
+- **api rotas**: `routes/api.php` + controllers em `app/Http/Controllers/Api/`
+
+### Estado Atual Funcionando ✅
+- ✅ Laravel API: porta 8002
+- ✅ Vue dev server: porta 5173 ou 5174
+- ✅ Vale Pedágio: interface drag & drop funcional
+- ✅ Rotas reais: Google Maps + cache integrado
+- ✅ Temas: loading adaptativo dark/light
+- ✅ Favicon: Tambasa no lugar do Vuexy
 
 ## Testing Strategy
 
