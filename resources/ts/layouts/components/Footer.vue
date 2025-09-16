@@ -4,14 +4,14 @@
     <span class="d-flex align-center text-medium-emphasis">
       &copy;
       {{ new Date().getFullYear() }}
-      Made With
+      Feito com
       <VIcon
         icon="tabler-heart-filled"
         color="error"
         size="1.25rem"
         class="mx-1"
       />
-      By <a
+      por <a
         href="https://pixinvent.com"
         target="_blank"
         rel="noopener noreferrer"

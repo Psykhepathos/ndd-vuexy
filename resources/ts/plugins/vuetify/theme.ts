@@ -1,7 +1,11 @@
 import type { ThemeDefinition } from 'vuetify'
 
-export const staticPrimaryColor = '#7367F0'
-export const staticPrimaryDarkenColor = '#675DD8'
+// Cores Tambasa - Paletê Oficial
+export const staticPrimaryColor = '#003595' // Pantone 661C - Azul Tambasa
+export const staticPrimaryDarkenColor = '#002770' // Versão mais escura do azul
+export const tambasaSecondaryColor = '#FFB648' // Pantone 1365C - Amarelo complementar
+export const tambasaGray = '#898B8E' // Pantone Cool Gray 8C - Cinza apoio
+export const tambasaLightGray = '#DAD9D7' // Pantone Cool Gray 1C - Cinza claro apoio
 
 export const themes: Record<string, ThemeDefinition> = {
   light: {
@@ -9,19 +13,19 @@ export const themes: Record<string, ThemeDefinition> = {
     colors: {
       'primary': staticPrimaryColor,
       'on-primary': '#fff',
-      'primary-darken-1': '#675DD8',
-      'secondary': '#808390',
+      'primary-darken-1': staticPrimaryDarkenColor,
+      'secondary': tambasaSecondaryColor,
       'on-secondary': '#fff',
-      'secondary-darken-1': '#737682',
+      'secondary-darken-1': '#E6A03C',
       'success': '#28C76F',
       'on-success': '#fff',
       'success-darken-1': '#24B364',
       'info': '#00BAD1',
       'on-info': '#fff',
       'info-darken-1': '#00A7BC',
-      'warning': '#FF9F43',
+      'warning': tambasaSecondaryColor,
       'on-warning': '#fff',
-      'warning-darken-1': '#E68F3C',
+      'warning-darken-1': '#E6A03C',
       'error': '#FF4C51',
       'on-error': '#fff',
       'error-darken-1': '#E64449',
@@ -81,28 +85,28 @@ export const themes: Record<string, ThemeDefinition> = {
   dark: {
     dark: true,
     colors: {
-      'primary': staticPrimaryColor,
+      'primary': '#4A6ACE',
       'on-primary': '#fff',
-      'primary-darken-1': '#675DD8',
-      'secondary': '#808390',
+      'primary-darken-1': '#3A5BBF',
+      'secondary': '#D49948',
       'on-secondary': '#fff',
-      'secondary-darken-1': '#737682',
+      'secondary-darken-1': '#C08A3C',
       'success': '#28C76F',
       'on-success': '#fff',
       'success-darken-1': '#24B364',
       'info': '#00BAD1',
       'on-info': '#fff',
       'info-darken-1': '#00A7BC',
-      'warning': '#FF9F43',
+      'warning': '#D49948',
       'on-warning': '#fff',
-      'warning-darken-1': '#E68F3C',
+      'warning-darken-1': '#C08A3C',
       'error': '#FF4C51',
       'on-error': '#fff',
       'error-darken-1': '#E64449',
-      'background': '#25293C',
-      'on-background': '#E1DEF5',
-      'surface': '#2F3349',
-      'on-surface': '#E1DEF5',
+      'background': '#1A1D29',
+      'on-background': '#E4E6EA',
+      'surface': '#2B2F42',
+      'on-surface': '#E4E6EA',
       'grey-50': '#26293A',
       'grey-100': '#2F3349',
       'grey-200': '#26293A',
