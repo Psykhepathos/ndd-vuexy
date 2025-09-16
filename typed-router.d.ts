@@ -138,6 +138,7 @@ declare module 'vue-router/auto-routes' {
     'transportes': RouteRecordInfo<'transportes', '/transportes', Record<never, never>, Record<never, never>>,
     'transportes-id': RouteRecordInfo<'transportes-id', '/transportes/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
     'vale-pedagio': RouteRecordInfo<'vale-pedagio', '/vale-pedagio', Record<never, never>, Record<never, never>>,
+    'vale-pedagio-new-sidebar': RouteRecordInfo<'vale-pedagio-new-sidebar', '/vale-pedagio/new-sidebar', Record<never, never>, Record<never, never>>,
     'wizard-examples-checkout': RouteRecordInfo<'wizard-examples-checkout', '/wizard-examples/checkout', Record<never, never>, Record<never, never>>,
     'wizard-examples-create-deal': RouteRecordInfo<'wizard-examples-create-deal', '/wizard-examples/create-deal', Record<never, never>, Record<never, never>>,
     'wizard-examples-property-listing': RouteRecordInfo<'wizard-examples-property-listing', '/wizard-examples/property-listing', Record<never, never>, Record<never, never>>,

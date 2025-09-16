@@ -35,7 +35,10 @@
       "Bash(start http://localhost:5174/itinerario/3043824)",
       "WebFetch(domain:www.webrouter.com.br)",
       "Read(//c/Users/15857/Pictures/**)",
-      "Bash(start http://localhost:8002/vale-pedagio)"
+      "Bash(start http://localhost:8002/vale-pedagio)",
+      "Read(//c/Users/15857/Downloads/**)",
+      "Read(//c/Users/15857/Desktop/NDD/**)",
+      "Bash(tasklist)"
     ],
     "deny": [],
     "ask": []

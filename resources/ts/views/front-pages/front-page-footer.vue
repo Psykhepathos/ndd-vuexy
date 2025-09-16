@@ -205,8 +205,8 @@ const demoList = [
               target="_blank"
               rel="noopener noreferrer"
               class="font-weight-bold ms-1 text-white"
-            >Pixinvent</a>,
-            Made With ❤️ for a better web.
+            >Diogo Fontoura</a>,
+            Feito com ❤️ para uma melhor web.
           </div>
 
           <div class="d-flex gap-x-6">

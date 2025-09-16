@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 Este arquivo fornece orientações para o Claude Code (claude.ai/code) ao trabalhar neste repositório.
 
 ## Workflow de Desenvolvimento
@@ -136,6 +138,8 @@ ndd-vuexy/
 - **Login Page**: http://localhost:5174/login
 - **Dashboard NDD**: http://localhost:5174/ndd-dashboard
 - **API Motoristas**: http://localhost:8002/api/motoristas
+- **Itinerário**: http://localhost:8002/itinerario/3043368
+- **Vale Pedágio**: http://localhost:5174/vale-pedagio
 
 ## PRÓXIMOS TESTES OBRIGATÓRIOS
 
@@ -289,6 +293,15 @@ composer dev                    # Laravel + Queue + Logs + Vite concorrente
 curl http://localhost:8002/api/motoristas    # Teste API
 curl http://localhost:8002/api/transportes   # Teste API transportes
 # Abrir: http://localhost:5174               # Frontend Vue
+
+# Build e verificação de tipos
+pnpm run build                  # Build produção
+pnpm run typecheck              # Verificação TypeScript
+pnpm run lint                   # ESLint + formatação automática
+
+# Testes Laravel
+php artisan test                # Executar testes PHPUnit
+composer test                   # Alias para testes (limpa cache primeiro)
 ```
 
 ## 🗄️ ACESSO AO SCHEMA DO BANCO PROGRESS
@@ -727,3 +740,47 @@ $result = $this->progressService->executeCustomQuery($sql);
 - **Economia de tokens**: resposta mínima, sem emojis
 - **Não modificar CLAUDE.md** no comando /init
 - **Usar APIs para explorar schema** - mais confiável que tinker direto
+
+## Testing Strategy
+
+### Running Tests
+```bash
+# Frontend tests
+pnpm run typecheck              # TypeScript validation
+pnpm run lint                   # ESLint checks with auto-fix
+
+# Backend tests
+php artisan test                # PHPUnit test suite
+composer test                   # Clears cache then runs tests
+
+# API endpoint testing
+curl http://localhost:8002/api/progress/test-connection  # JDBC connection test
+```
+
+### Key Testing Points
+- **ODBC Progress connection** via `/api/progress/test-connection`
+- **Vue/Laravel integration** by accessing frontend with real APIs
+- **Vuexy component consistency** following template patterns
+- **TypeScript compliance** before committing changes
+
+## Common Development Tasks
+
+### Creating New API Endpoints
+1. Add method to `ProgressService.php` for database queries
+2. Create controller in `app/Http/Controllers/Api/`
+3. Register route in `routes/api.php`
+4. Test with curl before frontend integration
+
+### Adding Vue Pages
+1. Copy similar existing Vuexy template from `resources/ts/pages/apps/`
+2. Follow naming conventions: kebab-case for files
+3. Use `VDataTableServer` for pagination, `AppTextField` for inputs
+4. Implement proper error handling and loading states
+
+### Database Schema Exploration
+```bash
+# Always use Progress API endpoints instead of direct queries
+curl -X POST "http://localhost:8002/api/progress/query" \
+  -H "Content-Type: application/json" \
+  -d '{"sql":"DESCRIBE TABLE PUB.tablename"}'
+```
