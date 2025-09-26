@@ -1,0 +1,429 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[brazilian]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{subcaption}
+
+% Configuração de cores
+\definecolor{nddblue}{RGB}{0,82,147}
+\definecolor{nddgray}{RGB}{128,128,128}
+
+% Configuração de cabeçalho e rodapé
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{nddblue}{\textbf{Sistema NDD Transport}}}
+\fancyhead[R]{\textcolor{nddgray}{\today}}
+\fancyfoot[C]{\textcolor{nddgray}{\thepage}}
+\renewcommand{\headrulewidth}{2pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{nddblue}\leaders\hrule height \headrulewidth\hfill}}
+
+% Configuração de títulos
+\titleformat{\section}
+{\color{nddblue}\Large\bfseries}
+{\thesection}{1em}{}
+\titleformat{\subsection}
+{\color{nddblue}\large\bfseries}
+{\thesubsection}{1em}{}
+
+% Configuração de hyperlinks
+\hypersetup{
+    colorlinks=true,
+    linkcolor=nddblue,
+    filecolor=nddblue,
+    urlcolor=nddblue,
+}
+
+\begin{document}
+
+% Página de título
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+
+    {\Huge\textcolor{nddblue}{\textbf{Sistema NDD Transport}}}\\[0.5cm]
+    {\LARGE\textcolor{nddgray}{Sistema Integrado de Gestão de Transporte}}\\[1.5cm]
+
+    {\Large\textbf{Plataforma Completa de Operações}}\\[0.3cm]
+    {\large Integrando APIs NDD + SemParar + Sistema Corporativo}\\[2cm]
+
+    % Logo placeholder
+    \begin{figure}[H]
+        \centering
+        \fbox{\begin{minipage}{10cm}
+            \centering
+            \vspace{3cm}
+            {\Large [LOGO NDD TRANSPORT]}
+            \vspace{3cm}
+        \end{minipage}}
+    \end{figure}
+
+    \vfill
+
+    {\large Versão: 1.0}\\[0.3cm]
+    {\large Data: \today}\\[0.3cm]
+    {\large Desenvolvido por: Equipe NDD}
+
+\end{titlepage}
+
+% Sumário
+\tableofcontents
+\newpage
+
+\section{Visão Geral do Projeto}
+
+\subsection{O que é o Sistema NDD Transport}
+O Sistema NDD Transport é uma plataforma moderna e completa para gestão de transporte que centraliza todas as operações necessárias para o dia a dia das empresas transportadoras. O sistema conecta diretamente com as APIs oficiais da NDD e integra funcionalidades do SemParar, oferecendo uma solução única para todas as necessidades operacionais.
+
+\subsection{Objetivos do Sistema}
+\begin{itemize}[leftmargin=2cm]
+    \item \textbf{Simplicidade:} Interface fácil de usar, mesmo para usuários não técnicos
+    \item \textbf{Integração Total:} Conecta com sistemas NDD, SemParar e banco corporativo
+    \item \textbf{Economia de Tempo:} Automatiza processos que hoje são manuais
+    \item \textbf{Conformidade Legal:} Garante que todos os documentos estejam de acordo com a legislação
+    \item \textbf{Controle Total:} Visão completa de todas as operações em um só lugar
+\end{itemize}
+
+\section{Base Técnica do Sistema}
+
+\subsection{Tecnologias Utilizadas}
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|X|X|}
+        \hline
+        \textbf{Componente} & \textbf{Tecnologia} \\
+        \hline
+        Interface do Usuário & Vue.js + Material Design (Vuexy) \\
+        Sistema Backend & Laravel (PHP) \\
+        Banco de Dados & Progress OpenEdge (sistema corporativo) \\
+        Integrações & APIs NDD + SemParar \\
+        Segurança & Autenticação integrada \\
+        \hline
+    \end{tabularx}
+    \caption{Tecnologias que fazem o sistema funcionar}
+\end{table}
+
+\subsection{Como o Sistema Funciona}
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{minipage}{14cm}
+        \centering
+        \vspace{1cm}
+        {\large \textbf{FLUXO DO SISTEMA}}\\[0.5cm]
+        Usuário → Interface Web → Servidor → Banco Corporativo\\[0.5cm]
+        {\footnotesize ↕ Integração Automática ↕}\\[0.3cm]
+        {\large \textbf{APIs NDD + SemParar}}\\[0.3cm]
+        {\footnotesize (CIOT, Vale Pedágio, Pagamentos, Rotas)}
+        \vspace{1cm}
+    \end{minipage}}
+    \caption{Como o sistema conecta tudo automaticamente}
+\end{figure}
+
+\section{O que Já Está Funcionando}
+
+\textbf{Demonstração Atual:} O sistema já possui uma versão funcional que demonstra a interface moderna e as conexões com o sistema corporativo Progress. Esta versão serve para mostrar como ficará o produto final.
+
+\subsection{Acesso Seguro ao Sistema}
+\begin{itemize}
+    \item Tela de login moderna e segura
+    \item Controle de permissões por usuário
+    \item Sessões protegidas
+\end{itemize}
+
+% Placeholder para screenshot
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{minipage}{12cm}
+        \centering
+        \vspace{4cm}
+        {\large [SCREENSHOT - Tela de Login]}
+        \vspace{4cm}
+    \end{minipage}}
+    \caption{Tela de login do sistema}
+\end{figure}
+
+\subsection{Painel Principal}
+\begin{itemize}
+    \item Visão geral de todas as operações do dia
+    \item Números importantes em tempo real
+    \item Navegação fácil para todas as funções
+\end{itemize}
+
+% Placeholder para screenshot
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{minipage}{12cm}
+        \centering
+        \vspace{4cm}
+        {\large [SCREENSHOT - Dashboard Principal]}
+        \vspace{4cm}
+    \end{minipage}}
+    \caption{Painel principal com resumo das operações}
+\end{figure}
+
+\subsection{Cadastro de Transportadores}
+\begin{itemize}
+    \item Lista completa com mais de 6.900 transportadores
+    \item Busca rápida por nome ou código
+    \item Interface limpa e fácil de usar
+    \item Dados sempre atualizados do sistema corporativo
+\end{itemize}
+
+% Placeholder para screenshot
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{minipage}{12cm}
+        \centering
+        \vspace{4cm}
+        {\large [SCREENSHOT - Gestão de Transportadores]}
+        \vspace{4cm}
+    \end{minipage}}
+    \caption{Tela de cadastro e consulta de transportadores}
+\end{figure}
+
+\subsection{Calculadora de Vale Pedágio (Estilo SemParar)}
+\begin{itemize}
+    \item Arrastar e soltar pontos no mapa para reorganizar
+    \item Mapas reais do Google para calcular rotas
+    \item Cálculo automático de valores de pedágio
+    \item Funciona no computador, tablet e celular
+\end{itemize}
+
+% Placeholder para screenshot
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{minipage}{12cm}
+        \centering
+        \vspace{4cm}
+        {\large [SCREENSHOT - Calculadora Vale Pedágio]}
+        \vspace{4cm}
+    \end{minipage}}
+    \caption{Calculadora de vale pedágio com mapa interativo}
+\end{figure}
+
+\subsection{Planejamento de Rotas}
+\begin{itemize}
+    \item Carrega automaticamente os dados das entregas
+    \item Mostra até 15 pontos de entrega por viagem
+    \item Organiza em páginas para facilitar a visualização
+    \item Cores diferentes para início, meio e fim da rota
+\end{itemize}
+
+% Placeholder para screenshot
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{minipage}{12cm}
+        \centering
+        \vspace{4cm}
+        {\large [SCREENSHOT - Sistema de Rotas]}
+        \vspace{4cm}
+    \end{minipage}}
+    \caption{Sistema de planejamento de rotas de entrega}
+\end{figure}
+
+\section{Funcionalidades que Serão Implementadas}
+
+O sistema será integrado com as APIs oficiais da NDD e incluirá todas as funcionalidades do SemParar. Abaixo estão as principais funções que você poderá usar:
+
+\subsection{Gestão de Vale Pedágio}
+\textbf{O que faz:} Cria e gerencia vales pedagio eletrônicos automaticamente
+\begin{itemize}
+    \item \textbf{Criação Automática:} Sistema cria o vale baseado na rota planejada
+    \item \textbf{Dados Completos:} Inclui informações do motorista, veículo e rota
+    \item \textbf{Valores Reais:} Calcula valores de pedágio atualizados
+    \item \textbf{Impressão:} Gera documentos para impressão quando necessário
+    \item \textbf{Controle:} Acompanha status dos vales emitidos
+\end{itemize}
+
+\subsection{Sistema CIOT (Conhecimento de Transporte)}
+\textbf{O que faz:} Gera documentos oficiais obrigatórios para transporte de carga
+\begin{itemize}
+    \item \textbf{Emissão Automática:} Cria CIOT baseado nos dados da carga
+    \item \textbf{Conformidade Legal:} Garante que está de acordo com a ANTT
+    \item \textbf{Dados da Carga:} Inclui remetente, destinatário e detalhes da mercadoria
+    \item \textbf{Cancelamento:} Permite cancelar CIOTs quando necessário
+    \item \textbf{Histórico:} Mantém registro de todos os documentos emitidos
+\end{itemize}
+
+\subsection{Otimização de Rotas}
+\textbf{O que faz:} Calcula as melhores rotas para economizar tempo e combustível
+\begin{itemize}
+    \item \textbf{Rotas Inteligentes:} Encontra o caminho mais eficiente
+    \item \textbf{Cálculo de Distância:} Mostra quilometragem real
+    \item \textbf{Tempo de Viagem:} Estima duração da viagem
+    \item \textbf{Custos:} Calcula combustível e pedagio
+    \item \textbf{Alternativas:} Oferece opções de rota diferentes
+\end{itemize}
+
+\subsection{Sistema de Pagamentos}
+\textbf{O que faz:} Processa pagamentos de pedágio e outras despesas automaticamente
+\begin{itemize}
+    \item \textbf{Pagamento Imediato:} Efetua pagamentos na hora
+    \item \textbf{Verificação:} Confirma se pagamentos foram processados
+    \item \textbf{Histórico:} Mantém registro de todas as transações
+    \item \textbf{Relatórios:} Gera resumos de gastos por período
+    \item \textbf{Controle:} Permite acompanhar status dos pagamentos
+\end{itemize}
+
+\subsection{Funcionalidades do SemParar Integradas}
+\textbf{O que será incluído:} Todas as funções que você já conhece do SemParar
+\begin{itemize}
+    \item \textbf{Cálculo de Pedagio:} Como no site do SemParar
+    \item \textbf{Múltiplas Rotas:} Comparação de caminhos alternativos
+    \item \textbf{Mapas Interativos:} Visualização das rotas no mapa
+    \item \textbf{Custos Detalhados:} Breakdown completo dos valores
+    \item \textbf{Histórico de Rotas:} Salva rotas já calculadas
+    \item \textbf{Exportação:} Salva resultados em Excel/PDF
+\end{itemize}
+
+\section{Etapas do Projeto}
+
+\subsection{Primeira Etapa - Base do Sistema (Concluída)}
+\textbf{Objetivo:} Criar a demonstração funcional e estabelecer a base
+\begin{itemize}[leftmargin=3cm]
+    \item[\checkmark] Interface moderna criada
+    \item[\checkmark] Conexão com sistema corporativo funcionando
+    \item[\checkmark] Sistema de login seguro
+    \item[\checkmark] Cadastro de transportadores
+    \item[\checkmark] Calculadora de vale pedágio básica
+    \item[\checkmark] Visualização de rotas no mapa
+    \item[\checkmark] Sistema responsivo (funciona em celular/tablet)
+\end{itemize}
+
+\subsection{Segunda Etapa - Implementação das Funcionalidades (Próxima)}
+\textbf{Objetivo:} Implementar todas as funcionalidades que o usuário vai usar no dia a dia
+
+\subsubsection{Integração com APIs NDD}
+\begin{itemize}
+    \item Conexão com todas as 15+ APIs da NDD
+    \item Sistema completo de CIOT (criar, consultar, cancelar)
+    \item Vale Pedágio automático completo
+    \item Sistema de pagamentos integrado
+    \item Geração automática de todos os documentos
+\end{itemize}
+
+\subsubsection{Funcionalidades do SemParar}
+\begin{itemize}
+    \item Todas as funções de cálculo de pedágio
+    \item Comparação de rotas alternativas
+    \item Mapas interativos completos
+    \item Histórico de consultas
+    \item Exportação para Excel e PDF
+    \item Sistema de favoritos
+\end{itemize}
+
+\subsubsection{Melhorias e Recursos Avançados}
+\begin{itemize}
+    \item Painel executivo com gráficos e estatísticas
+    \item Relatórios personalizados
+    \item Notificações automáticas
+    \item Sistema de aprovações
+    \item Auditoria completa das operações
+    \item Backup automático dos dados
+\end{itemize}
+
+\section{O que Você Pode Cobrar na Primeira Etapa}
+
+\subsection{Funcionalidades que Devem Estar Funcionando}
+\begin{enumerate}
+    \item \textbf{Sistema no ar} - Você consegue acessar de qualquer lugar
+    \item \textbf{Telas bonitas} - Interface moderna e fácil de usar
+    \item \textbf{Dados reais} - Informações do sistema corporativo aparecem
+    \item \textbf{Cadastro de transportadores} - Lista, busca e visualiza
+    \item \textbf{Vale pedágio básico} - Calcula valores e rotas
+    \item \textbf{Login seguro} - Acesso protegido ao sistema
+\end{enumerate}
+
+\subsection{Documentação que Deve Ser Entregue}
+\begin{itemize}
+    \item Manual de como usar o sistema
+    \item Lista completa das 15+ APIs que serão implementadas
+    \item Instruções de instalação
+    \item Plano detalhado da segunda etapa
+\end{itemize}
+
+\section{Como Saber se Está Funcionando}
+
+\subsection{Testes que Devem Passar}
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|X|c|}
+        \hline
+        \textbf{Teste} & \textbf{Deve Funcionar} \\
+        \hline
+        Páginas carregam rápido (menos de 2 segundos) & ✓ \\
+        Sistema não sai do ar & ✓ \\
+        Mostra mais de 6.900 transportadores & ✓ \\
+        Funciona no celular e tablet & ✓ \\
+        Conecta com banco Progress & ✓ \\
+        \hline
+    \end{tabularx}
+    \caption{Checklist de funcionamento}
+\end{table}
+
+\section{Requisitos Técnicos}
+
+\subsection{O que é Necessário para o Sistema Funcionar}
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \textbf{Item} & \textbf{Necessário} \\
+        \hline
+        Servidor & Computador com 16GB de memória \\
+        Espaço em Disco & 50GB livres \\
+        Internet & Conexão estável para APIs \\
+        Banco Progress & Versão atual do sistema corporativo \\
+        Certificado Digital & A3 ou A1 para documentos oficiais \\
+        \hline
+    \end{tabularx}
+    \caption{Requisitos para funcionamento do sistema}
+\end{table}
+
+\subsection{Como Acessar o Sistema}
+\begin{itemize}
+    \item \textbf{Demonstração:} Sistema funcionando para mostrar as telas
+    \item \textbf{Produção:} Sistema final instalado no servidor da empresa
+    \item \textbf{Acesso:} Qualquer computador, tablet ou celular com internet
+    \item \textbf{Segurança:} Conexões protegidas e dados criptografados
+    \item \textbf{Login de Teste:} admin@ndd.com / 123456
+\end{itemize}
+
+\section{Próximos Passos}
+
+\subsection{O que Fazer Após a Primeira Etapa}
+\begin{enumerate}
+    \item Testar tudo com os usuários reais
+    \item Ver se está funcionando bem no dia a dia
+    \item Coletar sugestões de melhorias
+    \item Documentar o que precisa ser ajustado
+\end{enumerate}
+
+\subsection{Preparação da Segunda Etapa}
+\begin{enumerate}
+    \item Planejar implementação das APIs NDD
+    \item Definir prazos para cada funcionalidade
+    \item Calcular recursos necessários
+    \item Montar equipe para desenvolvimento completo
+\end{enumerate}
+
+\vfill
+
+\section*{Resumo Final}
+
+O Sistema NDD Transport já possui uma base sólida e demonstrável que conecta com o sistema corporativo e oferece uma interface moderna. Esta primeira etapa serve para mostrar como ficará o produto final e validar a direção do projeto.
+
+Na segunda etapa, todas as funcionalidades das APIs NDD e do SemParar serão implementadas, transformando o sistema em uma ferramenta completa para o dia a dia das operações de transporte.
+
+\textbf{Status Atual:} \textcolor{green}{\textbf{Primeira Etapa Concluída}} \\
+\textbf{Próximo:} Implementação completa das funcionalidades
+
+\end{document}

@@ -137,10 +137,10 @@ const onSubmit = () => {
       >
         <VCardText>
           <h4 class="text-h4 mb-1">
-            Welcome to <span class="text-capitalize"> {{ themeConfig.app.title }} </span>! 👋🏻
+            Bem-vindo ao <span class="text-capitalize"> {{ themeConfig.app.title }} </span>! 👋🏻
           </h4>
           <p class="mb-0">
-            Please sign-in to your account and start the adventure
+            Entre na sua conta e comece a usar o sistema
           </p>
         </VCardText>
         <VCardText>
@@ -149,10 +149,10 @@ const onSubmit = () => {
             variant="tonal"
           >
             <p class="text-sm mb-2">
-              Admin Email: <strong>admin@demo.com</strong> / Pass: <strong>admin</strong>
+              Email Admin: <strong>admin@ndd.com</strong> / Senha: <strong>123456</strong>
             </p>
             <p class="text-sm mb-0">
-              Client Email: <strong>client@demo.com</strong> / Pass: <strong>client</strong>
+              Email Cliente: <strong>test@ndd.com</strong> / Senha: <strong>123456</strong>
             </p>
           </VAlert>
         </VCardText>
@@ -166,8 +166,8 @@ const onSubmit = () => {
               <VCol cols="12">
                 <AppTextField
                   v-model="credentials.email"
-                  label="Email"
-                  placeholder="johndoe@email.com"
+                  label="E-mail"
+                  placeholder="usuario@email.com"
                   type="email"
                   autofocus
                   :rules="[requiredValidator, emailValidator]"
@@ -179,7 +179,7 @@ const onSubmit = () => {
               <VCol cols="12">
                 <AppTextField
                   v-model="credentials.password"
-                  label="Password"
+                  label="Senha"
                   placeholder="············"
                   :rules="[requiredValidator]"
                   :type="isPasswordVisible ? 'text' : 'password'"
@@ -192,13 +192,13 @@ const onSubmit = () => {
                 <div class="d-flex align-center flex-wrap justify-space-between my-6">
                   <VCheckbox
                     v-model="rememberMe"
-                    label="Remember me"
+                    label="Lembrar de mim"
                   />
                   <RouterLink
                     class="text-primary ms-2 mb-1"
                     :to="{ name: 'forgot-password' }"
                   >
-                    Forgot Password?
+                    Esqueceu a senha?
                   </RouterLink>
                 </div>
 
@@ -206,7 +206,7 @@ const onSubmit = () => {
                   block
                   type="submit"
                 >
-                  Login
+                  Entrar
                 </VBtn>
               </VCol>
 
@@ -215,12 +215,12 @@ const onSubmit = () => {
                 cols="12"
                 class="text-center"
               >
-                <span>New on our platform?</span>
+                <span>Novo na plataforma?</span>
                 <RouterLink
                   class="text-primary ms-1"
                   :to="{ name: 'register' }"
                 >
-                  Create an account
+                  Criar conta
                 </RouterLink>
               </VCol>
               <VCol
@@ -228,7 +228,7 @@ const onSubmit = () => {
                 class="d-flex align-center"
               >
                 <VDivider />
-                <span class="mx-4">or</span>
+                <span class="mx-4">ou</span>
                 <VDivider />
               </VCol>
 
