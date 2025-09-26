@@ -28,16 +28,20 @@
   </div>
   
   <script>
-    const loaderColor = localStorage.getItem('vuexy-initial-loader-bg') || '#FFFFFF'
-    const primaryColor = localStorage.getItem('vuexy-initial-loader-color') || '#003595'
+    // Detectar tema do Vuexy no localStorage
+    const vuetifyTheme = localStorage.getItem('vuexy-vuetify-theme') || 'light'
+    const isDark = vuetifyTheme === 'dark'
 
-    if (loaderColor)
-      document.documentElement.style.setProperty('--initial-loader-bg', loaderColor)
-    if (loaderColor)
-      document.documentElement.style.setProperty('--initial-loader-bg', loaderColor)
+    // Definir cores baseadas no tema
+    const loaderBgColor = isDark ? '#1a1a1a' : '#FFFFFF'
+    const primaryColor = '#003595' // Cor azul Tambasa sempre
 
-    if (primaryColor)
-      document.documentElement.style.setProperty('--initial-loader-color', primaryColor)
+    // Aplicar cores do loader
+    document.documentElement.style.setProperty('--initial-loader-bg', loaderBgColor)
+    document.documentElement.style.setProperty('--initial-loader-color', primaryColor)
+
+    // Definir cor de fundo do body para evitar flash
+    document.body.style.backgroundColor = loaderBgColor
     </script>
   </body>
 </html>
