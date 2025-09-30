@@ -92,6 +92,7 @@ export interface NavGroup extends Partial<AclProperties> {
   badgeClass?: string
   children: (NavLink | NavGroup)[]
   disable?: boolean
+  open?: boolean
 }
 
 export declare type VerticalNavItems = (NavLink | NavGroup | NavSectionTitle)[]

@@ -2,6 +2,7 @@ export default [
   {
     title: 'Sistema NDD',
     icon: { icon: 'tabler-truck' },
+    open: true,
     children: [
       {
         title: 'Dashboard NDD',
@@ -22,6 +23,11 @@ export default [
         title: 'Vale Pedágio',
         to: 'vale-pedagio',
         icon: { icon: 'tabler-route-2' },
+      },
+      {
+        title: 'Rotas SemParar',
+        to: 'rotas-semparar',
+        icon: { icon: 'tabler-map-route' },
       },
     ],
   },
