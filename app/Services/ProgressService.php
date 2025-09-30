@@ -924,4 +924,614 @@ class ProgressService
         
         return null;
     }
+
+    // ================================
+    // MÉTODOS PARA ROTAS SEM PARAR
+    // ================================
+
+    /**
+     * Lista todas as rotas SemParar com paginação
+     */
+    public function getSemPararRotas(array $filters = []): array
+    {
+        try {
+            Log::info('Buscando rotas SemParar via JDBC', ['filters' => $filters]);
+
+            $page = $filters['page'] ?? 1;
+            $perPage = $filters['per_page'] ?? 10;
+            $search = $filters['search'] ?? '';
+            $codigo = $filters['codigo'] ?? '';
+            $descricao = $filters['descricao'] ?? '';
+            $flgCD = $filters['flg_cd'] ?? null;
+            $flgRetorno = $filters['flg_retorno'] ?? null;
+            $tempoMinimo = $filters['tempo_minimo'] ?? '';
+            $tempoMaximo = $filters['tempo_maximo'] ?? '';
+
+            $offset = ($page - 1) * $perPage;
+
+            // Query simples para buscar dados
+            $sql = "SELECT * FROM PUB.semPararRot WHERE 1=1";
+
+            // Aplicar filtros
+            if (!empty($search)) {
+                $searchUpper = strtoupper($search);
+                $sql .= " AND (UPPER(desSPararRot) LIKE '%" . $searchUpper . "%' OR sPararRotID = " . intval($search) . ")";
+            }
+
+            if (!empty($codigo)) {
+                $sql .= " AND sPararRotID = " . intval($codigo);
+            }
+
+            if (!empty($descricao)) {
+                $descricaoUpper = strtoupper($descricao);
+                $sql .= " AND UPPER(desSPararRot) LIKE '%" . $descricaoUpper . "%'";
+            }
+
+            // Filtro flgCD - suporta true (apenas CD) e false (apenas não-CD)
+            if ($flgCD === 'true' || $flgCD === true || $flgCD === '1') {
+                $sql .= " AND flgCD = 1";
+            } elseif ($flgCD === 'false' || $flgCD === false || $flgCD === '0') {
+                $sql .= " AND flgCD = 0";
+            }
+
+            // Filtro retorno
+            if ($flgRetorno === 'true') {
+                $sql .= " AND flgRetorno = 1";
+            } elseif ($flgRetorno === 'false') {
+                $sql .= " AND flgRetorno = 0";
+            }
+
+            // Filtros de tempo
+            if (!empty($tempoMinimo)) {
+                $sql .= " AND tempoViagem >= " . intval($tempoMinimo);
+            }
+
+            if (!empty($tempoMaximo)) {
+                $sql .= " AND tempoViagem <= " . intval($tempoMaximo);
+            }
+
+            // Contar total antes da paginação
+            $countSql = str_replace("*", "COUNT(*) as total", $sql);
+            $countResult = $this->executeCustomQuery($countSql);
+            $total = $countResult['success'] ? ($countResult['data']['results'][0]['total'] ?? 0) : 0;
+
+            // Aplicar ordenação
+            $sql .= " ORDER BY sPararRotID DESC";
+
+            Log::info('Query SemPararRot:', ['sql' => $sql]);
+
+            $result = $this->executeCustomQuery($sql);
+
+            if ($result['success']) {
+                // Simular paginação no lado PHP se necessário
+                $allResults = $result['data']['results'] ?? [];
+                $results = array_slice($allResults, $offset, $perPage);
+
+                Log::info('Resultados SemPararRot:', [
+                    'total_results' => count($allResults),
+                    'paginated_results' => count($results)
+                ]);
+
+                // Adicionar contagem de municípios para cada rota (simplificado)
+                foreach ($results as &$rota) {
+                    $municipiosSql = "SELECT COUNT(*) as total FROM PUB.semPararRotMu WHERE sPararRotID = " . $rota['spararrotid'];
+                    $munResult = $this->executeCustomQuery($municipiosSql);
+                    $rota['totalmunicipios'] = $munResult['success'] ? ($munResult['data']['results'][0]['total'] ?? 0) : 0;
+                }
+
+                return [
+                    'success' => true,
+                    'data' => [
+                        'results' => $results,
+                        'pagination' => [
+                            'current_page' => $page,
+                            'per_page' => $perPage,
+                            'total' => $total,
+                            'last_page' => ceil($total / $perPage),
+                            'from' => $offset + 1,
+                            'to' => min($offset + $perPage, $total),
+                            'has_more_pages' => $page < ceil($total / $perPage)
+                        ]
+                    ]
+                ];
+            }
+
+            return $result;
+
+        } catch (Exception $e) {
+            Log::error('Erro ao buscar rotas SemParar', [
+                'filters' => $filters,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao buscar rotas SemParar: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Busca uma rota SemParar específica com seus municípios
+     */
+    public function getSemPararRota($rotaId): array
+    {
+        try {
+            Log::info('Buscando rota SemParar específica', ['rota_id' => $rotaId]);
+
+            // Buscar dados da rota principal
+            $rotaSql = "SELECT * FROM PUB.semPararRot WHERE sPararRotID = " . intval($rotaId);
+            $rotaResult = $this->executeCustomQuery($rotaSql);
+
+            if (!$rotaResult['success'] || empty($rotaResult['data']['results'])) {
+                return [
+                    'success' => false,
+                    'error' => 'Rota não encontrada'
+                ];
+            }
+
+            $rota = $rotaResult['data']['results'][0];
+
+            // Buscar municípios da rota
+            $municipiosSql = "SELECT
+                                srm.*,
+                                e.nomest as nomeEstado,
+                                m.lat,
+                                m.lon
+                            FROM PUB.semPararRotMu srm
+                            LEFT JOIN PUB.estado e ON srm.codest = e.codest
+                            LEFT JOIN PUB.municipio m ON srm.codmun = m.codmun AND srm.codest = m.codest
+                            WHERE srm.sPararRotID = " . intval($rotaId) . "
+                            ORDER BY srm.sPararMuSeq";
+
+            $municipiosResult = $this->executeCustomQuery($municipiosSql);
+
+            $rota['municipios'] = $municipiosResult['success'] ? ($municipiosResult['data']['results'] ?? []) : [];
+
+            return [
+                'success' => true,
+                'data' => $rota
+            ];
+
+        } catch (Exception $e) {
+            Log::error('Erro ao buscar rota SemParar específica', [
+                'rota_id' => $rotaId,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao buscar rota: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Cria uma nova rota SemParar
+     */
+    public function createSemPararRota(array $data): array
+    {
+        try {
+            Log::info('Criando nova rota SemParar', ['data' => $data]);
+
+            DB::connection('progress')->beginTransaction();
+
+            // Obter próximo ID usando MAX + 1 (compatível com Progress)
+            $nextIdSql = "SELECT MAX(sPararRotID) + 1 as nextId FROM PUB.semPararRot";
+            $nextIdResult = $this->executeCustomQuery($nextIdSql);
+
+            if (!$nextIdResult['success'] || empty($nextIdResult['data']['results'])) {
+                throw new Exception('Erro ao obter próximo ID da rota');
+            }
+
+            $nextId = $nextIdResult['data']['results'][0]['nextid'] ?? 1;
+
+            // Inserir rota principal
+            $insertRotaSql = "INSERT INTO PUB.semPararRot
+                (sPararRotID, desSPararRot, tempoViagem, flgCD, flgRetorno, datAtu, resAtu)
+                VALUES
+                (" . $nextId . ",
+                 '" . addslashes($data['nome']) . "',
+                 " . intval($data['tempo_viagem'] ?? 5) . ",
+                 " . ($data['flg_cd'] ? '1' : '0') . ",
+                 " . ($data['flg_retorno'] ? '1' : '0') . ",
+                 '" . date('Y-m-d') . "',
+                 '" . (auth()->user()->name ?? 'system') . "')";
+
+            $insertResult = $this->executeCustomQuery($insertRotaSql);
+
+            if (!$insertResult['success']) {
+                throw new Exception('Erro ao inserir rota principal');
+            }
+
+            // Inserir municípios se fornecidos
+            if (!empty($data['municipios'])) {
+                foreach ($data['municipios'] as $index => $municipio) {
+                    $insertMunSql = "INSERT INTO PUB.semPararRotMu
+                        (sPararRotID, sPararMuSeq, codEst, codMun, desEst, desMun, cdibge)
+                        VALUES
+                        (" . $nextId . ",
+                         " . ($index + 1) . ",
+                         " . intval($municipio['cod_est']) . ",
+                         " . intval($municipio['cod_mun']) . ",
+                         '" . addslashes($municipio['des_est']) . "',
+                         '" . addslashes($municipio['des_mun']) . "',
+                         " . intval($municipio['cdibge']) . ")";
+
+                    $munResult = $this->executeCustomQuery($insertMunSql);
+                    if (!$munResult['success']) {
+                        throw new Exception('Erro ao inserir município: ' . $municipio['des_mun']);
+                    }
+                }
+            }
+
+            DB::connection('progress')->commit();
+
+            return [
+                'success' => true,
+                'data' => ['id' => $nextId],
+                'message' => 'Rota SemParar criada com sucesso'
+            ];
+
+        } catch (Exception $e) {
+            DB::connection('progress')->rollBack();
+
+            Log::error('Erro ao criar rota SemParar', [
+                'data' => $data,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao criar rota: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Atualiza uma rota SemParar existente
+     */
+    public function updateSemPararRota($rotaId, array $data): array
+    {
+        try {
+            Log::info('Atualizando rota SemParar', ['rota_id' => $rotaId, 'data' => $data]);
+
+            DB::connection('progress')->beginTransaction();
+
+            // Atualizar rota principal
+            $updateRotaSql = "UPDATE PUB.semPararRot SET
+                desSPararRot = '" . addslashes($data['nome']) . "',
+                tempoViagem = " . intval($data['tempo_viagem'] ?? 5) . ",
+                flgCD = " . ($data['flg_cd'] ? '1' : '0') . ",
+                flgRetorno = " . ($data['flg_retorno'] ? '1' : '0') . ",
+                datAtu = '" . date('Y-m-d') . "',
+                resAtu = '" . (auth()->user()->name ?? 'system') . "'
+                WHERE sPararRotID = " . intval($rotaId);
+
+            $updateResult = $this->executeCustomQuery($updateRotaSql);
+
+            if (!$updateResult['success']) {
+                throw new Exception('Erro ao atualizar rota principal');
+            }
+
+            // Remover municípios existentes
+            $deleteMunSql = "DELETE FROM PUB.semPararRotMu WHERE sPararRotID = " . intval($rotaId);
+            $this->executeCustomQuery($deleteMunSql);
+
+            // Inserir novos municípios
+            if (!empty($data['municipios'])) {
+                foreach ($data['municipios'] as $index => $municipio) {
+                    $insertMunSql = "INSERT INTO PUB.semPararRotMu
+                        (sPararRotID, sPararMuSeq, codEst, codMun, desEst, desMun, cdibge)
+                        VALUES
+                        (" . intval($rotaId) . ",
+                         " . ($index + 1) . ",
+                         " . intval($municipio['cod_est']) . ",
+                         " . intval($municipio['cod_mun']) . ",
+                         '" . addslashes($municipio['des_est']) . "',
+                         '" . addslashes($municipio['des_mun']) . "',
+                         " . intval($municipio['cdibge']) . ")";
+
+                    $munResult = $this->executeCustomQuery($insertMunSql);
+                    if (!$munResult['success']) {
+                        throw new Exception('Erro ao inserir município: ' . $municipio['des_mun']);
+                    }
+                }
+            }
+
+            DB::connection('progress')->commit();
+
+            return [
+                'success' => true,
+                'message' => 'Rota SemParar atualizada com sucesso'
+            ];
+
+        } catch (Exception $e) {
+            DB::connection('progress')->rollBack();
+
+            Log::error('Erro ao atualizar rota SemParar', [
+                'rota_id' => $rotaId,
+                'data' => $data,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao atualizar rota: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Remove uma rota SemParar
+     */
+    public function deleteSemPararRota($rotaId): array
+    {
+        try {
+            Log::info('Removendo rota SemParar', ['rota_id' => $rotaId]);
+
+            DB::connection('progress')->beginTransaction();
+
+            // Remover municípios da rota
+            $deleteMunSql = "DELETE FROM PUB.semPararRotMu WHERE sPararRotID = " . intval($rotaId);
+            $this->executeCustomQuery($deleteMunSql);
+
+            // Remover rota principal
+            $deleteRotaSql = "DELETE FROM PUB.semPararRot WHERE sPararRotID = " . intval($rotaId);
+            $deleteResult = $this->executeCustomQuery($deleteRotaSql);
+
+            if (!$deleteResult['success']) {
+                throw new Exception('Erro ao remover rota principal');
+            }
+
+            DB::connection('progress')->commit();
+
+            return [
+                'success' => true,
+                'message' => 'Rota SemParar removida com sucesso'
+            ];
+
+        } catch (Exception $e) {
+            DB::connection('progress')->rollBack();
+
+            Log::error('Erro ao remover rota SemParar', [
+                'rota_id' => $rotaId,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao remover rota: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Busca municípios para autocomplete
+     */
+    public function getMunicipiosForAutocomplete($search = '', $estadoId = null): array
+    {
+        try {
+            Log::info('Buscando municípios para autocomplete', ['search' => $search, 'estado_id' => $estadoId]);
+
+            $sql = "SELECT TOP 20
+                        m.codmun,
+                        m.codest,
+                        m.desmun,
+                        m.cdibge,
+                        e.nomest as nomeestado,
+                        m.lat,
+                        m.lon
+                    FROM PUB.municipio m
+                    INNER JOIN PUB.estado e ON m.codest = e.codest
+                    WHERE 1=1";
+
+            if (!empty($search)) {
+                $searchUpper = strtoupper($search);
+                $sql .= " AND UPPER(m.desmun) LIKE '%" . $searchUpper . "%'";
+            }
+
+            if ($estadoId !== null) {
+                $sql .= " AND m.codest = " . intval($estadoId);
+            }
+
+            $sql .= " ORDER BY m.desmun";
+
+            $result = $this->executeCustomQuery($sql);
+
+            if ($result['success']) {
+                return [
+                    'success' => true,
+                    'data' => $result['data']['results'] ?? []
+                ];
+            }
+
+            return $result;
+
+        } catch (Exception $e) {
+            Log::error('Erro ao buscar municípios para autocomplete', [
+                'search' => $search,
+                'estado_id' => $estadoId,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao buscar municípios: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Busca estados para autocomplete
+     */
+    public function getEstadosForAutocomplete(): array
+    {
+        try {
+            Log::info('Buscando estados para autocomplete');
+
+            $sql = "SELECT
+                        codest,
+                        nomest,
+                        siglaest
+                    FROM PUB.estado
+                    ORDER BY nomest";
+
+            $result = $this->executeCustomQuery($sql);
+
+            if ($result['success']) {
+                return [
+                    'success' => true,
+                    'data' => $result['data']['results'] ?? []
+                ];
+            }
+
+            return $result;
+
+        } catch (Exception $e) {
+            Log::error('Erro ao buscar estados para autocomplete', [
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao buscar estados: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Busca uma rota SemParar com seus municípios
+     */
+    public function getSemPararRotaWithMunicipios($id): array
+    {
+        try {
+            Log::info('Buscando rota SemParar com municípios', ['id' => $id]);
+
+            // Buscar dados da rota
+            $sqlRota = "SELECT sPararRotID, desSPararRot, tempoViagem, flgCD, flgRetorno, datAtu, resAtu " .
+                       "FROM PUB.semPararRot WHERE sPararRotID = " . intval($id);
+
+            $resultRota = $this->executeCustomQuery($sqlRota);
+
+            Log::info('Resultado da query de rota', ['result' => $resultRota]);
+
+            if (!$resultRota['success'] || empty($resultRota['data']['results'])) {
+                Log::error('Rota não encontrada ou erro na query', [
+                    'id' => $id,
+                    'success' => $resultRota['success'] ?? false,
+                    'data' => $resultRota['data'] ?? null
+                ]);
+                return [
+                    'success' => false,
+                    'error' => 'Rota não encontrada'
+                ];
+            }
+
+            $rota = $resultRota['data']['results'][0];
+
+            // Buscar municípios da rota (sem JOIN por limitação do Progress JDBC)
+            $sqlMunicipios = "SELECT sPararMuSeq, CodMun, CodEst, DesMun, DesEst, cdibge " .
+                             "FROM PUB.semPararRotMu " .
+                             "WHERE sPararRotID = " . intval($id) . " " .
+                             "ORDER BY sPararMuSeq";
+
+            $resultMunicipios = $this->executeCustomQuery($sqlMunicipios);
+
+            $municipios = [];
+            if ($resultMunicipios['success'] && !empty($resultMunicipios['data']['results'])) {
+                $municipios = $resultMunicipios['data']['results'];
+            }
+
+            return [
+                'success' => true,
+                'data' => [
+                    'rota' => $rota,
+                    'municipios' => $municipios
+                ]
+            ];
+
+        } catch (Exception $e) {
+            Log::error('Erro ao buscar rota SemParar com municípios', [
+                'id' => $id,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao buscar rota: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Atualiza os municípios de uma rota SemParar
+     */
+    public function updateSemPararRotaMunicipios($rotaId, $municipios): array
+    {
+        try {
+            Log::info('Atualizando municípios da rota SemParar', [
+                'rota_id' => $rotaId,
+                'total_municipios' => count($municipios)
+            ]);
+
+            // Primeiro, deletar todos os municípios existentes
+            $sqlDelete = "DELETE FROM PUB.semPararRotMu WHERE sPararRotID = " . intval($rotaId);
+            $this->executeCustomQuery($sqlDelete);
+
+            // Inserir novos municípios com a sequência correta
+            foreach ($municipios as $municipio) {
+                $sqlInsert = "INSERT INTO PUB.semPararRotMu (
+                                sPararRotID,
+                                sPararMuSeq,
+                                CodEst,
+                                CodMun,
+                                DesEst,
+                                DesMun,
+                                cdibge
+                            ) VALUES (
+                                " . intval($rotaId) . ",
+                                " . intval($municipio['sequencia']) . ",
+                                " . intval($municipio['cod_est']) . ",
+                                " . intval($municipio['cod_mun']) . ",
+                                '" . $municipio['des_est'] . "',
+                                '" . $municipio['des_mun'] . "',
+                                " . intval($municipio['cdibge']) . "
+                            )";
+
+                $result = $this->executeCustomQuery($sqlInsert);
+
+                if (!$result['success']) {
+                    Log::error('Erro ao inserir município na rota', [
+                        'municipio' => $municipio,
+                        'error' => $result['error']
+                    ]);
+                }
+            }
+
+            // Atualizar data de modificação da rota
+            $sqlUpdate = "UPDATE PUB.semPararRot SET
+                            datAtu = CURDATE(),
+                            resAtu = 'web'
+                          WHERE sPararRotID = " . intval($rotaId);
+
+            $this->executeCustomQuery($sqlUpdate);
+
+            return [
+                'success' => true,
+                'message' => 'Municípios atualizados com sucesso'
+            ];
+
+        } catch (Exception $e) {
+            Log::error('Erro ao atualizar municípios da rota', [
+                'rota_id' => $rotaId,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao atualizar municípios: ' . $e->getMessage()
+            ];
+        }
+    }
 }
