@@ -75,16 +75,16 @@ const situacaoOptions = [
 
 // Headers da tabela
 const headers = [
-  { title: 'CÓDIGO', key: 'codpac', sortable: true },
-  { title: 'DATA FORMAÇÃO', key: 'datforpac', sortable: true },
-  { title: 'TRANSPORTADOR', key: 'nomtrn', sortable: false },
-  { title: 'PLACA', key: 'numpla', sortable: false },
-  { title: 'ROTA', key: 'codrot', sortable: false },
-  { title: 'TCD', key: 'flg_tcd', sortable: false },
-  { title: 'VALOR', key: 'valpac', sortable: true },
-  { title: 'PEDIDOS', key: 'nroped', sortable: true },
-  { title: 'SITUAÇÃO', key: 'sitpac', sortable: false },
-  { title: 'AÇÕES', key: 'actions', sortable: false }
+  { title: 'CÓDIGO', key: 'codpac', sortable: true, width: '120px' },
+  { title: 'DATA', key: 'datforpac', sortable: true, width: '100px' },
+  { title: 'TRANSPORTADOR', key: 'nomtrn', sortable: false, width: '250px' },
+  { title: 'PLACA', key: 'numpla', sortable: false, width: '90px', class: 'd-none d-md-table-cell' },
+  { title: 'ROTA', key: 'codrot', sortable: false, width: '80px', class: 'd-none d-lg-table-cell' },
+  { title: 'TCD', key: 'flg_tcd', sortable: false, width: '60px', class: 'd-none d-lg-table-cell' },
+  { title: 'VALOR', key: 'valpac', sortable: true, width: '120px' },
+  { title: 'PED', key: 'nroped', sortable: true, width: '60px', class: 'd-none d-sm-table-cell' },
+  { title: 'SITUAÇÃO', key: 'sitpac', sortable: false, width: '100px', class: 'd-none d-md-table-cell' },
+  { title: 'AÇÕES', key: 'actions', sortable: false, width: '100px' }
 ]
 
 // Buscar transportadores para o autocomplete
@@ -422,20 +422,20 @@ onMounted(() => {
     <!-- Tabela -->
     <VCard>
       <VCardText class="pa-0">
-        <VDataTableServer
-          v-model:items-per-page="pagination.per_page"
-          :headers="headers"
-          :items="pacotes"
-          :items-length="pagination.total"
-          :loading="loading"
-          :page="pagination.current_page"
-          @update:page="handlePageChange"
-          @update:items-per-page="(value) => { pagination.per_page = value; fetchPacotes() }"
-          class="text-no-wrap"
-          hover
-          loading-text="Carregando pacotes..."
-          no-data-text="Nenhum pacote encontrado"
-        >
+        <div class="table-responsive">
+          <VDataTableServer
+            v-model:items-per-page="pagination.per_page"
+            :headers="headers"
+            :items="pacotes"
+            :items-length="pagination.total"
+            :loading="loading"
+            :page="pagination.current_page"
+            @update:page="handlePageChange"
+            @update:items-per-page="(value) => { pagination.per_page = value; fetchPacotes() }"
+            hover
+            loading-text="Carregando pacotes..."
+            no-data-text="Nenhum pacote encontrado"
+          >
           <!-- Código do Pacote -->
           <template #item.codpac="{ item }">
             <div class="d-flex align-center">
@@ -463,24 +463,24 @@ onMounted(() => {
 
           <!-- Transportador -->
           <template #item.nomtrn="{ item }">
-            <div class="d-flex align-center">
+            <div class="d-flex align-start">
               <VAvatar
-                size="32"
+                size="24"
                 :color="item.codmot > 0 ? 'primary' : 'success'"
                 variant="tonal"
-                class="me-3"
+                class="me-2 flex-shrink-0"
               >
-                <VIcon 
-                  :icon="item.codmot > 0 ? 'tabler-users' : 'tabler-user'" 
-                  size="18" 
+                <VIcon
+                  :icon="item.codmot > 0 ? 'tabler-users' : 'tabler-user'"
+                  size="14"
                 />
               </VAvatar>
-              <div>
-                <p class="text-body-2 font-weight-medium mb-0">
+              <div class="text-truncate" style="min-width: 0;">
+                <p class="text-body-2 font-weight-medium mb-0 text-truncate" :title="item.nomtrn.toUpperCase()">
                   {{ item.nomtrn.toUpperCase() }}
                 </p>
                 <small class="text-disabled">
-                  Cód: {{ item.codtrn }}{{ item.codmot > 0 ? ` | Mot: ${item.codmot}` : '' }}
+                  {{ item.codtrn }}{{ item.codmot > 0 ? ` | ${item.codmot}` : '' }}
                 </small>
               </div>
             </div>
@@ -623,8 +623,62 @@ onMounted(() => {
               </div>
             </div>
           </template>
-        </VDataTableServer>
+          </VDataTableServer>
+        </div>
       </VCardText>
     </VCard>
   </div>
 </template>
+
+<style scoped>
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-responsive .v-data-table {
+  min-width: 800px;
+}
+
+/* Responsividade para colunas */
+@media (max-width: 960px) {
+  .d-lg-table-cell {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .d-md-table-cell {
+    display: none !important;
+  }
+
+  .table-responsive .v-data-table {
+    min-width: 600px;
+  }
+}
+
+@media (max-width: 600px) {
+  .d-sm-table-cell {
+    display: none !important;
+  }
+
+  .table-responsive .v-data-table {
+    min-width: 500px;
+  }
+}
+
+/* Melhor controle de largura das colunas */
+.v-data-table :deep(.v-data-table__td) {
+  padding: 8px 12px !important;
+}
+
+.v-data-table :deep(.v-data-table__th) {
+  padding: 8px 12px !important;
+  white-space: nowrap;
+}
+
+/* Otimização da coluna de transportador */
+.v-data-table :deep(td[data-key="nomtrn"]) {
+  max-width: 250px;
+}
+</style>
