@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\MotoristaController;
 use App\Http\Controllers\Api\PacoteController;
 use App\Http\Controllers\Api\ProgressController;
 use App\Http\Controllers\Api\RotaController;
+use App\Http\Controllers\Api\SemPararRotaController;
 use App\Http\Controllers\Api\TransporteController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -63,5 +64,21 @@ Route::middleware('api')->group(function () {
         Route::post('save', [\App\Http\Controllers\Api\RouteCacheController::class, 'saveRoute']);
         Route::get('stats', [\App\Http\Controllers\Api\RouteCacheController::class, 'getStats']);
         Route::delete('clear-expired', [\App\Http\Controllers\Api\RouteCacheController::class, 'clearExpired']);
+    });
+
+    // Rotas para gestão de rotas SemParar
+    Route::prefix('semparar-rotas')->group(function () {
+        // Rotas específicas primeiro para evitar conflitos
+        Route::get('municipios', [SemPararRotaController::class, 'municipios']);
+        Route::get('estados', [SemPararRotaController::class, 'estados']);
+
+        // Rotas CRUD
+        Route::get('/', [SemPararRotaController::class, 'index']);
+        Route::post('/', [SemPararRotaController::class, 'store']);
+        Route::get('/{id}', [SemPararRotaController::class, 'show']);
+        Route::get('/{id}/municipios', [SemPararRotaController::class, 'showWithMunicipios']);
+        Route::put('/{id}', [SemPararRotaController::class, 'update']);
+        Route::put('/{id}/municipios', [SemPararRotaController::class, 'updateMunicipios']);
+        Route::delete('/{id}', [SemPararRotaController::class, 'destroy']);
     });
 });
