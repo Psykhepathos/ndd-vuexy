@@ -25,12 +25,10 @@ const search = ref('')
 const totalItems = ref(0)
 const serverItems = ref<Transporte[]>([])
 
-// Filtros avançados
-const filtroTipo = ref('todos')
-const filtroNatureza = ref('')
-const filtroStatus = ref('ativo') // Padrão: mostrar apenas ativos
-const mostrarInativos = ref(false)
-const showFilters = ref(false)
+// Filtros - valores padrão sem filtrar nada
+const filtroTipo = ref()
+const filtroNatureza = ref()
+const filtroStatus = ref()
 
 // Opções de paginação (padrão Vuexy)
 const options = ref({ 
@@ -133,16 +131,16 @@ const fetchTransportes = async () => {
       params.append('search', search.value.trim())
     }
     
-    // Filtros avançados
-    if (filtroTipo.value !== 'todos') {
+    // Filtros
+    if (filtroTipo.value) {
       params.append('tipo', filtroTipo.value)
     }
-    
-    if (filtroNatureza.value !== '') {
+
+    if (filtroNatureza.value) {
       params.append('natureza', filtroNatureza.value)
     }
-    
-    if (filtroStatus.value !== 'todos') {
+
+    if (filtroStatus.value) {
       params.append('status_ativo', filtroStatus.value === 'ativo' ? 'true' : 'false')
     }
     
@@ -269,18 +267,11 @@ const formatTelefone = (ddd: number, telefone: number) => {
 }
 
 const clearFilters = () => {
-  filtroTipo.value = 'todos'
-  filtroNatureza.value = ''
-  filtroStatus.value = 'ativo'
-  mostrarInativos.value = false
+  filtroTipo.value = undefined
+  filtroNatureza.value = undefined
+  filtroStatus.value = undefined
   search.value = ''
 }
-
-// Watcher para mostrar inativos
-watch(mostrarInativos, (mostrar) => {
-  filtroStatus.value = mostrar ? 'todos' : 'ativo'
-  console.log(`👁️ Mostrar inativos: ${mostrar}`, { filtroStatus: filtroStatus.value })
-})
 
 // Carregar dados ao montar o componente
 onMounted(() => {
@@ -306,150 +297,101 @@ onMounted(() => {
         </div>
         
         <div class="d-flex align-center gap-4">
-          <VChip color="primary" size="small">
+          <VChip color="primary" size="small" variant="tonal">
             {{ statistics.total.toLocaleString() }} Total
           </VChip>
-          <VChip color="success" size="small">
+          <VChip color="success" size="small" variant="tonal">
             {{ statistics.autonomos }} Autônomos
           </VChip>
-          <VChip color="info" size="small">
+          <VChip color="primary" size="small" variant="tonal">
             {{ statistics.empresas }} Empresas
-          </VChip>
-          <VChip color="secondary" size="small">
-            {{ statistics.ativos }} Ativos
-          </VChip>
-          <VChip v-if="mostrarInativos" color="error" size="small">
-            {{ statistics.inativos }} Inativos
           </VChip>
         </div>
       </div>
     </VCol>
 
-    <!-- Filtros Avançados -->
+    <!-- Card Único com Filtros e Tabela -->
     <VCol cols="12">
       <VCard>
-        <VCardText>
-          <!-- Linha superior: Controles básicos -->
-          <div class="d-flex align-center flex-wrap gap-4 mb-4">
-            <div class="d-flex gap-3">
-              <AppSelect
-                :model-value="options.itemsPerPage"
-                :items="[
-                  { value: 10, title: '10' },
-                  { value: 25, title: '25' },
-                  { value: 50, title: '50' },
-                  { value: 100, title: '100' }
-                ]"
-                style="inline-size: 6.25rem;"
-                @update:model-value="options.itemsPerPage = parseInt($event, 10)"
-              />
-              
-              <VBtn
-                :prepend-icon="showFilters ? 'tabler-filter-off' : 'tabler-filter'"
-                variant="tonal"
-                @click="showFilters = !showFilters"
-              >
-                {{ showFilters ? 'Ocultar' : 'Filtros' }}
-              </VBtn>
-            </div>
-            
-            <VSpacer />
-            
-            <div class="d-flex align-center flex-wrap gap-4">
-              <div style="inline-size: 15.625rem;">
-                <AppTextField
-                  v-model="search"
-                  placeholder="Buscar por nome ou código"
-                  prepend-inner-icon="tabler-search"
-                />
-              </div>
-              
-              <!-- Toggle para mostrar inativos -->
-              <VTooltip text="Incluir transportadores inativos">
-                <template #activator="{ props }">
-                  <VBtn
-                    v-bind="props"
-                    :variant="mostrarInativos ? 'flat' : 'tonal'"
-                    :color="mostrarInativos ? 'warning' : 'default'"
-                    :prepend-icon="mostrarInativos ? 'tabler-eye' : 'tabler-eye-off'"
-                    @click="mostrarInativos = !mostrarInativos"
-                  >
-                    {{ mostrarInativos ? 'Todos' : 'Apenas Ativos' }}
-                  </VBtn>
-                </template>
-              </VTooltip>
-              
-              <VBtn
-                prepend-icon="tabler-reload"
-                @click="fetchTransportes"
-                :loading="loading"
-              >
-                Atualizar
-              </VBtn>
-              
-              <VBtn
-                variant="tonal"
-                color="secondary"
-                prepend-icon="tabler-upload"
-              >
-                Exportar
-              </VBtn>
-            </div>
+        <VCardText class="d-flex flex-wrap gap-4">
+          <!-- Items per page -->
+          <AppSelect
+            :model-value="options.itemsPerPage"
+            :items="[
+              { value: 10, title: '10' },
+              { value: 25, title: '25' },
+              { value: 50, title: '50' },
+              { value: 100, title: '100' }
+            ]"
+            style="inline-size: 5rem;"
+            @update:model-value="options.itemsPerPage = parseInt($event, 10)"
+          />
+
+          <!-- Filtro Tipo -->
+          <AppSelect
+            v-model="filtroTipo"
+            placeholder="Tipo"
+            :items="[
+              { value: 'autonomo', title: 'Autônomo' },
+              { value: 'empresa', title: 'Empresa' }
+            ]"
+            clearable
+            clear-icon="tabler-x"
+            style="inline-size: 10rem;"
+          />
+
+          <!-- Filtro Natureza -->
+          <AppSelect
+            v-model="filtroNatureza"
+            placeholder="Natureza"
+            :items="[
+              { value: 'T', title: 'Transporte' },
+              { value: 'A', title: 'Agregado' }
+            ]"
+            clearable
+            clear-icon="tabler-x"
+            style="inline-size: 10rem;"
+          />
+
+          <VSpacer />
+
+          <div class="d-flex align-center flex-wrap gap-4">
+            <!-- Busca -->
+            <AppTextField
+              v-model="search"
+              placeholder="Buscar transportador"
+              prepend-inner-icon="tabler-search"
+              style="inline-size: 15rem;"
+            />
+
+            <!-- Toggle Apenas Ativos -->
+            <VBtn
+              :variant="filtroStatus === 'ativo' ? 'flat' : 'tonal'"
+              :color="filtroStatus === 'ativo' ? 'success' : 'default'"
+              :prepend-icon="filtroStatus === 'ativo' ? 'tabler-check' : 'tabler-users'"
+              @click="filtroStatus = filtroStatus === 'ativo' ? undefined : 'ativo'"
+            >
+              {{ filtroStatus === 'ativo' ? 'Apenas Ativos' : 'Todos' }}
+            </VBtn>
+
+            <!-- Botão Atualizar -->
+            <VBtn
+              prepend-icon="tabler-refresh"
+              @click="fetchTransportes"
+              :loading="loading"
+            >
+              Atualizar
+            </VBtn>
+
+            <!-- Botão Exportar -->
+            <VBtn
+              variant="tonal"
+              color="secondary"
+              prepend-icon="tabler-download"
+            >
+              Exportar
+            </VBtn>
           </div>
-          
-          <!-- Filtros Avançados (Expansível) -->
-          <VExpandTransition>
-            <div v-show="showFilters" class="border rounded p-4">
-              <VRow>
-                <VCol cols="12" md="3">
-                  <AppSelect
-                    v-model="filtroTipo"
-                    label="Tipo de Transportador"
-                    :items="[
-                      { value: 'todos', title: 'Todos' },
-                      { value: 'autonomo', title: 'Autônomo' },
-                      { value: 'empresa', title: 'Empresa' }
-                    ]"
-                  />
-                </VCol>
-                
-                <VCol cols="12" md="3">
-                  <AppSelect
-                    v-model="filtroNatureza"
-                    label="Natureza do Transporte"
-                    :items="[
-                      { value: '', title: 'Todas' },
-                      { value: 'T', title: 'Transporte (T)' },
-                      { value: 'A', title: 'Agregado (A)' }
-                    ]"
-                  />
-                </VCol>
-                
-                <VCol cols="12" md="3">
-                  <div class="d-flex flex-column gap-2">
-                    <label class="text-body-2 text-medium-emphasis">Visualização</label>
-                    <VCheckbox
-                      v-model="mostrarInativos"
-                      label="Incluir transportadores inativos"
-                      color="warning"
-                      density="comfortable"
-                    />
-                  </div>
-                </VCol>
-                
-                <VCol cols="12" md="3" class="d-flex align-center">
-                  <VBtn
-                    variant="outlined"
-                    color="secondary"
-                    @click="clearFilters"
-                    prepend-icon="tabler-x"
-                  >
-                    Limpar Filtros
-                  </VBtn>
-                </VCol>
-              </VRow>
-            </div>
-          </VExpandTransition>
         </VCardText>
 
         <VDivider />
@@ -470,20 +412,16 @@ onMounted(() => {
         >
           <!-- Código -->
           <template #item.codtrn="{ item }">
-            <VChip
-              color="primary"
-              class="font-weight-medium"
-              size="small"
-            >
-              {{ item.codtrn }}
-            </VChip>
+            <div class="text-body-1 font-weight-medium">
+              <span class="text-primary">{{ item.codtrn }}</span>
+            </div>
           </template>
-          
+
           <!-- Tipo de Transportador -->
           <template #item.tipo="{ item }">
             <VChip
-              :color="item.flgautonomo ? 'success' : 'info'"
-              :variant="'tonal'"
+              :color="item.flgautonomo ? 'success' : 'primary'"
+              variant="tonal"
               size="small"
             >
               <VIcon
@@ -500,10 +438,10 @@ onMounted(() => {
             <div class="d-flex align-center">
               <VAvatar
                 size="32"
-                :color="item.flgautonomo ? 'success' : 'info'"
-                :variant="'tonal'"
+                :color="item.flgautonomo ? 'success' : 'primary'"
+                variant="tonal"
               >
-                <VIcon 
+                <VIcon
                   :icon="item.flgautonomo ? 'tabler-user' : 'tabler-building'"
                   size="18"
                 />
@@ -516,44 +454,44 @@ onMounted(() => {
               </div>
             </div>
           </template>
-          
+
           <!-- Natureza do Transporte -->
           <template #item.natcam="{ item }">
             <VChip
-              :color="item.natcam === 'T' ? 'primary' : 'warning'"
+              :color="item.natcam === 'T' ? 'info' : 'secondary'"
               size="small"
-              :variant="'tonal'"
+              variant="tonal"
             >
               {{ getNaturezaLabel(item.natcam) }}
             </VChip>
           </template>
-          
+
           <!-- Placa do Veículo -->
           <template #item.numpla="{ item }">
             <div v-if="item.numpla" class="d-flex align-center">
               <VChip
-                color="primary"
+                color="info"
                 size="small"
-                variant="elevated"
-                class="font-mono font-weight-bold"
-                style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); color: white; letter-spacing: 1px; min-width: 70px; justify-content: center;"
+                variant="flat"
+                class="font-mono font-weight-medium"
               >
                 {{ formatPlacaBrasileira(item.numpla) }}
               </VChip>
             </div>
             <span v-else class="text-disabled">N/D</span>
           </template>
-          
+
           <!-- Telefone -->
           <template #item.telefone="{ item }">
             <span class="font-mono">{{ formatTelefone(item.dddtel, item.numtel) }}</span>
           </template>
-          
+
           <!-- Status -->
           <template #item.status="{ item }">
             <VChip
               :color="item.flgati ? 'success' : 'error'"
               size="small"
+              variant="tonal"
             >
               {{ item.flgati ? 'ATIVO' : 'INATIVO' }}
             </VChip>

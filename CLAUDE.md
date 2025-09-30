@@ -2,868 +2,295 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Quick Start Summary
+## Quick Start
 
-This is a Laravel + Vue.js unified transport management system using the Vuexy template, connected to Progress OpenEdge database via ODBC.
+**Laravel + Vue.js unified transport management system using Vuexy template, connected to Progress OpenEdge via ODBC.**
 
-**Key Commands:**
 ```bash
-php artisan serve --port=8002  # Laravel API
-pnpm run dev                   # Vue frontend at :5174
+# Start development servers
+php artisan serve --port=8002  # Laravel API (Backend)
+pnpm run dev                   # Vue frontend (Vite)
+
+# Testing & validation
 pnpm run typecheck            # TypeScript validation
 pnpm run lint                 # ESLint with auto-fix
 php artisan test              # Backend tests
+composer test                 # Clear cache + run tests
+
+# Build for production
+pnpm run build                # Frontend production build
 ```
 
-**Architecture:** Vue/Vuexy ← REST API → Laravel ← ODBC → Progress Database
+**IMPORTANTE - URLs de Acesso:**
+- **Sistema completo (Frontend + API):** http://localhost:8002
+- **Vite Dev Server (desenvolvimento apenas):** http://localhost:5173/5174/5176 (NÃO usar para visualização)
+- **Login:** admin@ndd.com / 123456
 
-**Login:** admin@ndd.com / 123456
+**⚠️ ATENÇÃO:** SEMPRE use http://localhost:8002 para acessar o sistema! O Vite (porta 517x) é apenas para desenvolvimento/hot-reload.
 
-## Workflow de Desenvolvimento
+## Architecture Overview
 
-### Versionamento e Git
-- **IMPORTANTE**: Toda modificação testada e funcionando deve ser commitada no GitHub
-- **NUNCA** mencionar Claude, AI ou ferramentas de IA nos commits
-- **NUNCA** usar emojis nos commits
-- Commits devem ser descritivos e técnicos
-- Exemplo: `Add Vue dashboard with Laravel API integration`
-- Exemplo: `Fix CORS configuration for Vuexy frontend`
-- Exemplo: `Migrate Motorista CRUD from ndd-app to ndd-vuexy`
-
-## Projeto NDD - Migração Flutter → Laravel + Vue (Vuexy)
-
-Este é o **novo sistema unificado** Laravel + Vue usando o template **Vuexy TypeScript** para substituir a arquitetura anterior Flutter + Laravel separados.
-
-**Repositórios do Projeto:**
-- ❌ Backend Laravel (ANTIGO): https://github.com/Psykhepathos/ndd-laravel.git
-- ❌ Frontend Flutter (ANTIGO): https://github.com/Psykhepathos/ndd-flutter.git  
-- ✅ Sistema Unificado (NOVO): https://github.com/Psykhepathos/ndd-vuexy.git
-
-## Current System Status
-
-### Implemented Features
-- Laravel + Vue.js unified system with Vuexy template
-- Progress OpenEdge direct ODBC connection (Kafka removed)
-- Laravel Sanctum authentication
-- Vale Pedágio route calculator with Google Maps integration
-- Real-time route caching system
-- Drag & drop interface with vuedraggable
-- Responsive design with dark/light theme support
-- Progress database integration with 6,913+ transporter records
-
-## Instruções Importantes de Desenvolvimento
-
-### Paths dos Projetos
-- **Sistema Atual (Laravel + Vue)**: `C:\Users\15857\Desktop\NDD\ndd-vuexy`
-- **Sistemas Antigos (DEPRECADOS)**:
-  - Laravel Backend: `C:\Users\15857\Desktop\NDD\ndd-app`
-  - Flutter Frontend: `C:\Users\15857\Desktop\NDD\ndd-flutter`
-
-### Credenciais e Configurações
-```env
-# Progress Database (Sistema Corporativo)
-PROGRESS_HOST=192.168.80.113
-PROGRESS_DATABASE=tambasa
-PROGRESS_USERNAME=sysprogress  
-PROGRESS_PASSWORD=sysprogress
-
-# Certificado Digital NDD
-NDD_CERT_PASSWORD=AP300480
-
-# URLs do Sistema
-LARAVEL_API=http://localhost:8002
-VUE_FRONTEND=http://localhost:5174
-```
-
-### Usuários de Teste Criados
-```
-Email: admin@ndd.com
-Senha: 123456
-
-Email: test@ndd.com  
-Senha: 123456
-```
-
-## Development Commands
-
-### Starting the Application
-```bash
-# Terminal 1: Laravel API
-php artisan serve --port=8002
-
-# Terminal 2: Vue frontend
-pnpm run dev
-
-# Access points:
-# Frontend: http://localhost:5174
-# API: http://localhost:8002
-# Login: admin@ndd.com / 123456
-```
-
-### Technology Stack
-- **Laravel 12.15.0** - API backend
-- **Vue 3.5.14 + TypeScript 5.8.3** - Frontend with Vuexy template
-- **Vuetify 3.8.5** - Material Design components
-- **Progress OpenEdge** - Corporate database via ODBC
-- **Laravel Sanctum** - API authentication
-- **Vite 6.3.5** - Build tool
-- **PNPM** - Package manager
-
-### Architecture
 ```
 Vue/Vuexy ← REST API → Laravel ← ODBC → Progress Database
 ```
 
-#### Estrutura de Diretórios
+- **Frontend**: Vue 3.5.14 + TypeScript + Vuexy template + Vuetify 3.8.5
+- **Backend**: Laravel 12.15.0 + Laravel Sanctum authentication
+- **Database**: Progress OpenEdge via ODBC (direct connection, no Kafka)
+- **Build**: Vite 6.3.5 + PNPM package manager
+
+## Critical Development Rules
+
+### 1. Vuexy Template Usage (MANDATORY)
+**NEVER create UI from scratch. ALWAYS copy from existing Vuexy templates:**
+- Lists: `resources/ts/pages/apps/user/list/index.vue`
+- Forms: `resources/ts/pages/apps/user/view/UserBioPanel.vue`
+- Dashboards: `resources/ts/pages/apps/logistics/dashboard.vue`
+
+**Use Vuexy components:**
+- `AppTextField` instead of `VTextField`
+- `AppSelect` instead of `VSelect`
+- `VDataTableServer` for paginated tables
+- Theme classes: `text-high-emphasis`, `text-medium-emphasis`
+
+### 2. Progress Database Access
+**ALWAYS use JDBC direct connection, NOT Eloquent:**
+```php
+// CORRECT - Direct JDBC
+DB::connection('progress')->select('SELECT * FROM PUB.pacote WHERE codpac = ?', [$id]);
+$this->progressService->executeCustomQuery($sql);
+
+// WRONG - Never use Eloquent models
+Pacote::find(123);  // ❌
+```
+
+### 3. Git Commits
+- **NEVER** mention Claude, AI, or use emojis in commits
+- Use technical, descriptive messages
+- Configure: `git config --global user.name "Psykhepathos"`
+
+## Key Services & APIs
+
+### ProgressService Methods
+**Core Connection:**
+- `testConnection()` - Test JDBC connection
+- `executeCustomQuery($sql)` - Run custom SQL (SELECT only)
+- `executeJavaConnector($action, ...$params)` - Execute JDBC Java connector
+
+**Transportes:**
+- `getTransportesPaginated($filters)` - Get transporters with pagination
+- `getTransporteById($id)` - Get specific transporter
+- `getMotoristasPorTransportador($id)` - Get drivers by transporter
+- `getVeiculosPorTransportador($id)` - Get vehicles by transporter
+
+**Pacotes:**
+- `getPacotesPaginated($filters)` - Get packages with pagination
+- `getPacoteById($id)` - Get specific package
+- `getItinerarioPacote($codPac)` - Get full package itinerary with deliveries
+
+**Rotas & Autocomplete:**
+- `getRotas($search)` - Autocomplete for routes
+- `getMunicipiosForAutocomplete($search, $estadoId)` - City search
+- `getEstadosForAutocomplete()` - State list
+
+**SemParar Routes:**
+- `getSemPararRotas($filters)` - List SemParar routes with pagination
+- `getSemPararRota($id)` - Get specific route with municipalities
+- `createSemPararRota($data)` - Create new route
+- `updateSemPararRota($id, $data)` - Update route
+- `deleteSemPararRota($id)` - Delete route
+- `updateSemPararRotaMunicipios($id, $municipios)` - Update municipalities
+
+### API Endpoints
+**Progress Database:**
+- `GET /api/progress/test-connection` - Test database connection
+- `POST /api/progress/query` - Execute custom SQL queries
+- `GET /api/progress/transportes` - List transporters
+- `GET /api/progress/transportes/{id}` - Get specific transporter
+
+**Transportes:**
+- `GET /api/transportes` - List transporters (paginated)
+- `GET /api/transportes/{id}` - Get transporter details
+- `GET /api/transportes/statistics` - Get statistics
+- `GET /api/transportes/schema` - Get table schema
+
+**Pacotes:**
+- `GET /api/pacotes` - List packages (paginated with filters)
+- `GET /api/pacotes/{id}` - Get package details
+- `POST /api/pacotes/itinerario` - Get package itinerary with deliveries
+- `GET /api/pacotes/statistics` - Get statistics
+
+**Rotas:**
+- `GET /api/rotas?search={term}` - Autocomplete for routes
+
+**SemParar Rotas:**
+- `GET /api/semparar-rotas` - List routes (paginated with filters)
+- `GET /api/semparar-rotas/{id}` - Get specific route
+- `GET /api/semparar-rotas/{id}/municipios` - Get route with municipalities
+- `POST /api/semparar-rotas` - Create new route
+- `PUT /api/semparar-rotas/{id}` - Update route
+- `PUT /api/semparar-rotas/{id}/municipios` - Update municipalities
+- `DELETE /api/semparar-rotas/{id}` - Delete route
+- `GET /api/semparar-rotas/municipios?search={term}` - City autocomplete
+- `GET /api/semparar-rotas/estados` - List states
+
+**Routing & Maps:**
+- `GET /api/routing/test` - Test routing service
+- `POST /api/routing/route` - Calculate route
+- `POST /api/route-cache/find` - Find cached route
+- `POST /api/route-cache/save` - Save route to cache
+- `GET /api/route-cache/stats` - Cache statistics
+
+### Progress SQL Conventions
+- **Schema:** Always use `PUB.tablename` (e.g., `PUB.transporte`, `PUB.pacote`)
+- **Limit:** Use `SELECT TOP 10` (not LIMIT)
+- **Offset:** Progress lacks native OFFSET - simulate with subqueries or fetch all + array_slice in PHP
+- **Case:** Progress is case-sensitive for table/column names
+- **Strings:** Use single quotes `'value'`
+- **Joins:** Use `LEFT JOIN` syntax, not nested subqueries
+- **Transactions:** Wrap INSERTs/UPDATEs in `DB::connection('progress')->beginTransaction()`
+
+**Common Tables:**
+- `PUB.transporte` - Transporters (codtrn, nomtrn, flgautonomo, codcnpjcpf)
+- `PUB.pacote` - Packages (codpac, codtrn, codmot, sitpac, datforpac)
+- `PUB.carga` - Loads (codcar, codpac)
+- `PUB.pedido` - Orders/Deliveries (numseqped, codcar, codcli)
+- `PUB.introt` - Routes (codrot, desrot)
+- `PUB.semPararRot` - SemParar Routes (sPararRotID, desSPararRot, flgCD)
+- `PUB.semPararRotMu` - SemParar Municipalities (sPararRotID, codMun, codEst)
+- `PUB.municipio` - Cities (codmun, desmun, cdibge)
+- `PUB.estado` - States (codest, nomest, siglaest)
+
+## Project Structure
+
 ```
 ndd-vuexy/
-├── app/Models/                  # Models Laravel (User, Motorista, etc.)
-├── app/Http/Controllers/Api/    # Controllers API (Auth, Motorista)
-├── app/Services/                # Lógica negócio (sem Kafka)
-├── database/migrations/         # Migrações banco
-├── routes/api.php              # Rotas API Laravel
-├── resources/ts/               # Frontend Vue/TypeScript
-├── resources/ts/pages/         # Páginas Vue (login.vue, ndd-dashboard.vue)
-├── resources/ts/plugins/       # Plugins Vue (MSW desabilitado)
-└── CLAUDE.md                   # Este arquivo
-```
+├── app/
+│   ├── Http/Controllers/Api/
+│   │   ├── AuthController.php           # Authentication
+│   │   ├── TransporteController.php     # Transporters
+│   │   ├── PacoteController.php         # Packages
+│   │   ├── RotaController.php           # Routes autocomplete
+│   │   ├── SemPararRotaController.php   # SemParar routes CRUD
+│   │   ├── RoutingController.php        # Route calculation proxy
+│   │   └── ProgressController.php       # Raw Progress queries
+│   └── Services/
+│       └── ProgressService.php          # Main Progress DB service (1500+ lines)
+├── resources/ts/
+│   ├── pages/
+│   │   ├── transportes/                 # Transporters module
+│   │   ├── pacotes/                     # Packages module
+│   │   ├── vale-pedagio/                # Toll pass calculator
+│   │   ├── rotas-semparar/              # SemParar routes with map
+│   │   └── apps/                        # Vuexy example pages (reference templates)
+│   ├── @layouts/                        # Layout components
+│   ├── navigation/vertical/ndd.ts       # Left sidebar menu
+│   └── plugins/                         # Vue plugins (router, vuetify, etc)
+├── routes/api.php                       # API routes
+├── storage/app/java/
+│   ├── ProgressJDBCConnector.java       # JDBC connector for Progress
+│   └── gson-2.8.9.jar                   # JSON library for Java
+└── database/migrations/                 # SQLite migrations (NOT Progress)
 
-### URLs Importantes
-- **Laravel API**: http://localhost:8002
-- **Vue Frontend**: http://localhost:5174 (ou 5173)
-- **Login Page**: http://localhost:5174/login
-- **Dashboard NDD**: http://localhost:5174/ndd-dashboard
-- **API Motoristas**: http://localhost:8002/api/motoristas
-- **Itinerário**: http://localhost:8002/itinerario/3043368
-- **Vale Pedágio**: http://localhost:5174/vale-pedagio ⭐ **PRINCIPAL**
-- **API Cache Rotas**: http://localhost:8002/api/route-cache/find
-- **API Progress Query**: http://localhost:8002/api/progress/query
+## Development Workflow
 
-## PRÓXIMOS TESTES OBRIGATÓRIOS
+### Creating New Features
+1. Check Progress table structure via `/api/progress/query`
+2. Add method to `ProgressService.php`
+3. Create controller in `app/Http/Controllers/Api/`
+4. Register route in `routes/api.php`
+5. Copy similar Vuexy template for frontend
+6. Test with curl before frontend integration
 
-### 1. Teste ODBC Progress Database
+### Testing Checklist
+- [ ] ODBC connection: `curl http://localhost:8002/api/progress/test-connection`
+- [ ] TypeScript: `pnpm run typecheck`
+- [ ] Linting: `pnpm run lint`
+- [ ] Backend tests: `php artisan test`
+- [ ] Manual testing in browser
+
+## Common Issues & Solutions
+
+### Port conflicts
 ```bash
-# Teste conexão ODBC Progress
-php artisan tinker
-# No tinker:
-DB::connection('progress')->select('SELECT COUNT(*) FROM motoristas');
+netstat -ano | findstr :8002  # Check port usage
+taskkill /PID [PID] /F        # Kill process
 ```
 
-### 2. Teste APIs Migradas
+### Vue compilation errors
 ```bash
-# Testar CRUD Motorista
-curl -X GET http://localhost:8002/api/motoristas
-
-# Criar motorista teste
-curl -X POST http://localhost:8002/api/motoristas \
-  -H "Content-Type: application/json" \
-  -d '{"codigo_progress":"TEST001","nome":"Teste ODBC","cpf":"11111111111","cnh":"CNH111"}'
+rm -rf node_modules/.vite     # Clear Vite cache
+pnpm run dev                  # Restart
 ```
 
-### 3. Teste Frontend Vuexy
-- Login: http://localhost:5174/login (admin@ndd.com / 123456)
-- Dashboard: http://localhost:5174/ndd-dashboard
-- Verificar se dados carregam do Laravel
-- Console deve mostrar: "MSW/Fake API disabled - using real Laravel backend"
-
-### 4. Validação Progress Integration
-- Verificar se consultas SQL funcionam no banco corporativo
-- Testar CRUD real com dados Progress
-- Validar se certificado digital está sendo usado corretamente
-
-## Regras de Desenvolvimento (ATUALIZADAS)
-
-- **SEMPRE** testar Vue + Laravel integration após mudanças
-- **NUNCA** usar Kafka (foi removido da arquitetura)  
-- **SEMPRE** usar ODBC direto para Progress
-- **USAR** Vuexy components nativos quando possível
-- **TESTAR** responsividade do Vuexy template
-- **EVITAR** muitos testes para economizar tokens
-- **SEMPRE** testar funcionalidade antes de commit
-
-### 🎨 REGRA FUNDAMENTAL - TEMPLATES VUEXY OBRIGATÓRIOS
-
-**NUNCA criar interface do zero - SEMPRE copiar templates existentes:**
-
-#### Templates de Referência Obrigatórios:
-- **Lista com paginação**: `resources/ts/pages/apps/user/list/index.vue`
-- **Cards de estatística**: `resources/ts/views/apps/logistics/LogisticsCardStatistics.vue` 
-- **Formulários**: `resources/ts/pages/apps/user/view/UserBioPanel.vue`
-- **Dashboards**: `resources/ts/pages/apps/logistics/dashboard.vue`
-
-#### Padrões Vuexy OBRIGATÓRIOS:
-- **Headers de página**: `text-h4 font-weight-medium mb-1` + `text-body-1 mb-0`
-- **Cards**: Sempre usar `VCard` com `VCardText` 
-- **Botões**: `VBtn` com `prepend-icon` quando apropriado
-- **Textfields**: `AppTextField` ao invés de `VTextField`  
-- **Selects**: `AppSelect` ao invés de `VSelect`
-- **Paginação**: `TablePagination` component
-- **DataTables**: `VDataTableServer` com `v-model:items-per-page` e `v-model:page`
-- **Cores**: Classes `text-high-emphasis`, `text-medium-emphasis` para temas
-- **Espaçamentos**: `gap-4`, `mb-6`, `me-3` seguindo padrão Vuetify
-
-#### ❌ PROIBIDO:
-- Criar layouts customizados sem verificar templates existentes
-- Usar `VTextField` ou `VSelect` diretamente
-- Ignorar classes de tema (`text-high-emphasis`, etc.)
-- Criar paginação customizada
-- Usar cores hardcoded ao invés de theme colors
-
-### 🔄 COMMITS E GITHUB
-
-**SEMPRE fazer commits como o próprio usuário (não Claude):**
-
-#### Configuração Git Obrigatória:
+### Progress connection issues
 ```bash
-# Commits devem ser sempre como Psykhepathos
-git config --global user.name "Psykhepathos"
-git config --global user.email "[email protegido]"
-
-# Verificar configuração
-git config --global user.name
-git config --global user.email
-```
-
-#### Fluxo de Commits:
-1. **SEMPRE** commitar mudanças funcionais testadas
-2. **NUNCA** mencionar Claude/AI nos commits
-3. **USAR** mensagens técnicas descritivas
-4. **PUSH** para: https://github.com/Psykhepathos/ndd-vuexy.git
-
-#### Exemplos de Commits Corretos:
-- ✅ `Add transporter search with Progress JDBC integration`
-- ✅ `Fix pagination issues in data table components`
-- ✅ `Update Vuexy template styling for consistency`
-- ❌ `Claude helped implement search functionality`
-- ❌ `AI-generated transporter page improvements`
-
-## Estado Atual - Sistema Vuexy Funcionando ✅
-
-- ✅ Laravel API rodando na porta 8002
-- ✅ Vue Vuexy rodando na porta 5174  
-- ✅ Login/Auth funcionando com Sanctum
-- ✅ CORS configurado corretamente
-- ✅ Dashboard NDD carregando dados via API
-- ✅ MSW desabilitado (console limpo)
-- ✅ MotoristaController migrado e funcional
-- 🔄 **PRÓXIMO**: Testar conectividade ODBC Progress
-
-## Comandos de Desenvolvimento
-
-### Frontend (Vue/Vuexy)
-```bash
-# Desenvolvimento
-pnpm run dev                    # Servidor desenvolvimento (porta 5174)
-pnpm run build                  # Build produção
-pnpm run typecheck              # Verificação TypeScript
-pnpm run lint                   # Linter/formatter ESLint
-
-# Dependências
-pnpm install                    # Instalar dependências
-pnpm run build:icons            # Build ícones Iconify
-```
-
-### Backend (Laravel)
-```bash
-# Servidor
-php artisan serve --port=8002   # API Laravel (porta 8002)
-
-# Cache e configuração
-php artisan cache:clear
-php artisan config:clear
-php artisan route:clear
-
-# Database
-php artisan migrate
-php artisan db:seed
-php artisan tinker              # Console interativo
-
-# Testes
-php artisan test                # Executar testes PHPUnit
-```
-
-### Desenvolvimento Integrado
-```bash
-# Composer script personalizado (inicia tudo)
-composer dev                    # Laravel + Queue + Logs + Vite concorrente
-
-# Verificação manual
-curl http://localhost:8002/api/motoristas    # Teste API
-curl http://localhost:8002/api/transportes   # Teste API transportes
-# Abrir: http://localhost:5174               # Frontend Vue
-
-# Build e verificação de tipos
-pnpm run build                  # Build produção
-pnpm run typecheck              # Verificação TypeScript
-pnpm run lint                   # ESLint + formatação automática
-
-# Testes Laravel
-php artisan test                # Executar testes PHPUnit
-composer test                   # Alias para testes (limpa cache primeiro)
-```
-
-## 🗄️ ACESSO AO SCHEMA DO BANCO PROGRESS
-
-### Conexão JDBC Progress OpenEdge
-O sistema utiliza **JDBC direto** com Progress OpenEdge via Laravel:
-
-```php
-// Configuração no config/database.php
-'progress' => [
-    'driver' => 'odbc',
-    'dsn' => 'odbc:Driver={DataDirect 32-BIT OpenEdge Wire Protocol};Host=192.168.80.113;Port=13361;Database=tambasa',
-    'username' => 'sysprogress',
-    'password' => 'sysprogress',
-]
-```
-
-### 🔍 COMANDOS PARA EXPLORAR O SCHEMA
-
-#### 1. Teste de Conexão
-```bash
-# Via API (método mais confiável)
+# Test via API
 curl "http://localhost:8002/api/progress/test-connection"
-
-# Via PHP Artisan Tinker
-php artisan tinker
-DB::connection('progress')->select('SELECT COUNT(*) as total FROM PUB.pacote')
 ```
 
-#### 2. Listar Todas as Tabelas
+## Environment Configuration
+
+```env
+# Progress Database
+PROGRESS_HOST=192.168.80.113
+PROGRESS_DATABASE=tambasa
+PROGRESS_USERNAME=sysprogress
+PROGRESS_PASSWORD=sysprogress
+
+# API URLs
+LARAVEL_API=http://localhost:8002
+VUE_FRONTEND=http://localhost:5174
+```
+
+## Important Notes
+
+- **Repository:** https://github.com/Psykhepathos/ndd-vuexy.git
+- **Old systems (deprecated):** ndd-laravel, ndd-flutter repos
+- **Key features:**
+  - Vale Pedágio: http://localhost:8002/vale-pedagio
+  - Rotas SemParar: http://localhost:8002/rotas-semparar (CRUD + interactive map)
+  - Pacotes: http://localhost:8002/pacotes (package tracking)
+  - Transportes: http://localhost:8002/transportes (transporter management)
+- **Progress JDBC:** Located in `c:/Progress/OpenEdge/java/openedge.jar`
+- **Java Connector:** Auto-compiled on first use in `storage/app/java/`
+- **Pagination:** Progress lacks OFFSET - use subquery pattern in ProgressService
+- **Always test functionality before committing**
+- **Use Progress API endpoints for schema exploration, not tinker**
+
+## Debugging Tips
+
+**Progress connection issues:**
 ```bash
-# Query para listar tabelas do schema PUB
-curl -X POST "http://localhost:8002/api/progress/query" \
+# Test connection
+curl http://localhost:8002/api/progress/test-connection
+
+# Check Java is installed
+java -version
+
+# Check Progress driver exists
+dir "c:\Progress\OpenEdge\java\openedge.jar"
+
+# View Laravel logs
+php artisan pail
+```
+
+**Frontend issues:**
+```bash
+# Check TypeScript errors
+pnpm run typecheck
+
+# Check for linting issues
+pnpm run lint
+
+# Clear Vite cache
+rm -rf node_modules/.vite && pnpm run dev
+```
+
+**Database queries:**
+```bash
+# Test custom SQL via API
+curl -X POST http://localhost:8002/api/progress/query \
   -H "Content-Type: application/json" \
-  -d '{"sql":"SELECT TBL FROM SYSPROGRESS.SYSTABLES WHERE OWNER = '\''PUB'\'' ORDER BY TBL"}'
-```
-
-#### 3. Ver Estrutura de uma Tabela
-```bash
-# Schema da tabela pacote
-curl -X POST "http://localhost:8002/api/progress/query" \
-  -H "Content-Type: application/json" \
-  -d '{"sql":"SELECT COL, COLTYPE, WIDTH, SCALE FROM SYSPROGRESS.SYSCOLUMNS WHERE TBL = '\''pacote'\'' AND OWNER = '\''PUB'\'' ORDER BY COL"}'
-
-# Schema da tabela transporte
-curl -X POST "http://localhost:8002/api/progress/query" \
-  -H "Content-Type: application/json" \
-  -d '{"sql":"SELECT COL, COLTYPE, WIDTH, SCALE FROM SYSPROGRESS.SYSCOLUMNS WHERE TBL = '\''transporte'\'' AND OWNER = '\''PUB'\'' ORDER BY COL"}'
-```
-
-#### 4. Explorar Relacionamentos (Chaves Estrangeiras)
-```bash
-# Ver índices e relacionamentos
-curl -X POST "http://localhost:8002/api/progress/query" \
-  -H "Content-Type: application/json" \
-  -d '{"sql":"SELECT IDXNAME, COL, ASCENDING FROM SYSPROGRESS.SYSINDEXES WHERE TBL = '\''pacote'\'' AND OWNER = '\''PUB'\'' ORDER BY IDXNAME, IDXSEQ"}'
-```
-
-#### 5. Amostras de Dados
-```bash
-# Ver primeiros registros de uma tabela
-curl -X POST "http://localhost:8002/api/progress/query" \
-  -H "Content-Type: application/json" \
-  -d '{"sql":"SELECT TOP 5 * FROM PUB.pacote ORDER BY codpac DESC"}'
-
-# Contar registros
-curl -X POST "http://localhost:8002/api/progress/query" \
-  -H "Content-Type: application/json" \
-  -d '{"sql":"SELECT COUNT(*) as total FROM PUB.pacote"}'
-```
-
-### 📋 TABELAS PRINCIPAIS IDENTIFICADAS
-
-#### Sistema de Transporte:
-- **`PUB.transporte`** - Transportadores (empresas e autônomos)
-- **`PUB.motorista`** - Motoristas associados aos transportadores  
-- **`PUB.veiculos`** - Veículos dos transportadores
-- **`PUB.trnmot`** - Relacionamento transporte-motorista
-
-#### Sistema de Pacotes:
-- **`PUB.pacote`** - Pacotes de entrega
-- **`PUB.carga`** - Cargas dentro dos pacotes
-- **`PUB.pedido`** - Pedidos individuais nas cargas
-- **`PUB.cliente`** - Dados dos clientes destinatários
-- **`PUB.notafiscal`** - Notas fiscais dos pedidos
-
-#### Dados Geográficos:
-- **`PUB.arqrdnt`** - Coordenadas GPS (lat/long) dos pedidos
-- **`PUB.estado`** - Estados (UF)
-- **`PUB.municipio`** - Municípios
-- **`PUB.bairro`** - Bairros
-- **`PUB.basecliente`** - Base de dados dos clientes
-- **`PUB.razao`** - Razão social das empresas
-
-### 🔗 RELACIONAMENTOS PRINCIPAIS
-
-#### Estrutura de Pacotes:
-```
-PACOTE (codpac) 
-  ↓ 1:N
-CARGA (codpac, codcar)
-  ↓ 1:N  
-PEDIDO (codcar, numseqped)
-  ↓ 1:1
-CLIENTE (codcli)
-  ↓ 1:1
-ARQRDNT (asdped) -- GPS coordinates
-```
-
-#### Query de Exemplo - Itinerário Completo:
-```sql
-SELECT 
-  p.codpac,
-  ped.numseqped as seqent,
-  cli.codcli,
-  cli.desend,
-  ard.lat as gps_lat,
-  ard.long as gps_lon
-FROM PUB.pacote p
-  INNER JOIN PUB.carga car ON car.codpac = p.codpac
-  INNER JOIN PUB.pedido ped ON ped.codcar = car.codcar  
-  INNER JOIN PUB.cliente cli ON cli.codcli = ped.codcli
-  LEFT JOIN PUB.arqrdnt ard ON ard.asdped = ped.asdped
-WHERE p.codpac = 3000001
-  AND ped.valtotateped > 0
-ORDER BY ped.numseqped
-```
-
-### 🛠️ FERRAMENTAS DE DESENVOLVIMENTO
-
-#### ProgressService.php - Métodos Úteis:
-```php
-// Classe: App\Services\ProgressService
-$service = new ProgressService();
-
-// Testar conexão
-$service->testConnection()
-
-// Query customizada  
-$service->executeCustomQuery($sql)
-
-// Métodos específicos
-$service->getPacotesPaginated($filters)
-$service->getItinerarioPacote($codPac)
-$service->getTransportesPaginated($filters)
-```
-
-#### Controllers API Disponíveis:
-- **`/api/progress/test-connection`** - Teste de conexão
-- **`/api/progress/query`** - Query SQL customizada
-- **`/api/pacotes`** - CRUD pacotes
-- **`/api/pacotes/itinerario`** - Itinerário de entregas
-- **`/api/transportes`** - CRUD transportadores
-- **`/api/rotas`** - Autocomplete de rotas Progress
-
-## 🔄 IMPLEMENTAÇÃO DE AUTOCOMPLETES - GUIA COMPLETO
-
-### Como Implementar Novos Autocompletes Progress
-
-**Exemplo implementado**: Sistema de autocomplete de rotas na página /pacotes
-
-#### 1. **Investigar Estrutura da Tabela Progress**
-
-```bash
-# Encontrar tabelas relacionadas
-curl -X POST "http://localhost:8002/api/progress/query" \
-  -H "Content-Type: application/json" \
-  -d '{"sql":"SELECT TBL FROM SYSPROGRESS.SYSTABLES WHERE OWNER = '\''PUB'\'' AND TBL LIKE '\''%rota%'\'' ORDER BY TBL"}'
-
-# Ver estrutura da tabela
-curl -X POST "http://localhost:8002/api/progress/query" \
-  -H "Content-Type: application/json" \
-  -d '{"sql":"SELECT COL, COLTYPE, WIDTH, SCALE FROM SYSPROGRESS.SYSCOLUMNS WHERE TBL = '\''introt'\'' AND OWNER = '\''PUB'\'' ORDER BY COL"}'
-
-# Verificar dados de exemplo
-curl -X POST "http://localhost:8002/api/progress/query" \
-  -H "Content-Type: application/json" \
-  -d '{"sql":"SELECT TOP 10 codrot, desrot FROM PUB.introt ORDER BY codrot"}'
-```
-
-#### 2. **Criar Método no ProgressService**
-
-```php
-// Em app/Services/ProgressService.php - adicionar no final da classe
-public function getRotas($search = ''): array
-{
-    try {
-        Log::info('Buscando rotas via JDBC', ['search' => $search]);
-        
-        $sql = "SELECT codrot, desrot FROM PUB.introt";
-        
-        if (!empty($search)) {
-            $searchUpper = strtoupper($search);
-            $sql .= " WHERE UPPER(codrot) LIKE '%" . $searchUpper . "%' OR UPPER(desrot) LIKE '%" . $searchUpper . "%'";
-        }
-        
-        $sql .= " ORDER BY codrot";
-        
-        $result = $this->executeCustomQuery($sql);
-        
-        if ($result['success']) {
-            return [
-                'success' => true,
-                'data' => $result['data']['results'] ?? []
-            ];
-        }
-        
-        return $result;
-        
-    } catch (Exception $e) {
-        Log::error('Erro ao buscar rotas', [
-            'search' => $search,
-            'error' => $e->getMessage()
-        ]);
-        
-        return [
-            'success' => false,
-            'error' => 'Erro ao buscar rotas: ' . $e->getMessage()
-        ];
-    }
-}
-```
-
-#### 3. **Criar Controller API**
-
-```php
-// Criar app/Http/Controllers/Api/RotaController.php
-<?php
-namespace App\Http\Controllers\Api;
-
-use App\Http\Controllers\Controller;
-use App\Services\ProgressService;
-use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
-
-class RotaController extends Controller
-{
-    protected ProgressService $progressService;
-
-    public function __construct(ProgressService $progressService)
-    {
-        $this->progressService = $progressService;
-    }
-
-    public function index(Request $request): JsonResponse
-    {
-        $request->validate([
-            'search' => 'string|max:255'
-        ]);
-
-        $search = $request->get('search', '');
-        $result = $this->progressService->getRotas($search);
-
-        if (!$result['success']) {
-            return response()->json([
-                'success' => false,
-                'message' => $result['error'],
-                'data' => []
-            ], 500);
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Rotas obtidas com sucesso',
-            'data' => $result['data']
-        ]);
-    }
-}
-```
-
-#### 4. **Adicionar Rota da API**
-
-```php
-// Em routes/api.php - adicionar:
-use App\Http\Controllers\Api\RotaController;
-
-// Dentro do middleware 'api' group:
-Route::get('rotas', [RotaController::class, 'index']);
-```
-
-#### 5. **Implementar Frontend Vue**
-
-```typescript
-// Em resources/ts/pages/[pagina]/index.vue
-
-// 5.1. Adicionar variáveis reativas
-const loadingRotas = ref(false)
-const rotasOptions = ref<Array<{title: string, value: string}>>([])
-const selectedRota = ref<string | null>(null)
-
-// 5.2. Criar função de busca
-const fetchRotas = async (searchTerm: string = '') => {
-  if (searchTerm.length < 2 && searchTerm !== '') return
-  
-  loadingRotas.value = true
-  
-  try {
-    const params = new URLSearchParams({
-      search: searchTerm
-    })
-    const response = await fetch(`http://localhost:8002/api/rotas?${params}`, {
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      }
-    })
-    
-    const data = await response.json()
-    if (data.success && data.data) {
-      rotasOptions.value = data.data.map((r: any) => ({
-        title: `${r.codrot} - ${r.desrot.toUpperCase()}`,
-        value: r.codrot
-      }))
-    }
-  } catch (error) {
-    console.error('Erro ao buscar rotas:', error)
-    rotasOptions.value = []
-  } finally {
-    loadingRotas.value = false
-  }
-}
-
-// 5.3. Adicionar no onMounted
-onMounted(() => {
-  fetchRotas() // Carregar algumas rotas inicialmente
-})
-
-// 5.4. Incluir na função clearFilters
-const clearFilters = () => {
-  selectedRota.value = null
-  // ... outros campos
-}
-
-// 5.5. Template VAutocomplete
-<VAutocomplete
-  v-model="selectedRota"
-  :items="rotasOptions"
-  :loading="loadingRotas"
-  label="Rota"
-  placeholder="Ex: AC, BAR, CBE"
-  clearable
-  item-title="title"
-  item-value="value"
-  @update:search="fetchRotas"
-  @update:model-value="applyFilters"
-  no-data-text="Nenhuma rota encontrada"
-  loading-text="Buscando rotas..."
-/>
-```
-
-#### 6. **Padrões e Convenções**
-
-**Padrão de nomenclatura:**
-- Service: `get[Entidade]s($search = '')` 
-- Controller: `[Entidade]Controller` com método `index()`
-- Frontend: `fetch[Entidade]s()`, `[entidade]Options`, `selected[Entidade]`
-
-**Estrutura do retorno da API:**
-```json
-{
-  "success": true,
-  "message": "Entidades obtidas com sucesso",
-  "data": [
-    {"campo_codigo": "valor", "campo_descricao": "descrição"}
-  ]
-}
-```
-
-**Formatação no Frontend:**
-```typescript
-// Sempre formato: "CODIGO - DESCRIÇÃO"
-title: `${item.codigo} - ${item.descricao.toUpperCase()}`
-value: item.codigo
-```
-
-#### 7. **Testes Essenciais**
-
-```bash
-# Testar API diretamente
-curl "http://localhost:8002/api/rotas"
-curl "http://localhost:8002/api/rotas?search=acre"
-
-# Verificar no frontend:
-# - Digitar para ativar busca
-# - Selecionar item aplica filtros
-# - Limpar filtros funciona
-# - Loading states aparecem
-```
-
-**Exemplo de uso prático realizado:**
-- **Tabela**: `PUB.introt` (código: `codrot`, descrição: `desrot`)
-- **API**: `GET /api/rotas?search=termo` 
-- **Página**: `/pacotes` - campo "Rota" convertido para autocomplete
-- **Funcionalidade**: Busca por código (AC, BAR) ou descrição (ACRE, BAHIA)
-
-### 🚨 IMPORTANTE - JDBC vs ELOQUENT
-
-**O sistema usa JDBC DIRETO, NÃO Eloquent ORM:**
-
-❌ **NUNCA fazer:**
-```php
-// ERRADO - Eloquent models não funcionam
-$pacote = Pacote::find(123);
-$transporte = Transporte::where('nome', 'like', '%test%')->get();
-```
-
-✅ **SEMPRE fazer:**
-```php
-// CORRETO - JDBC direto via DB::connection
-$pacotes = DB::connection('progress')->select(
-    'SELECT * FROM PUB.pacote WHERE codpac = ?', [$id]
-);
-
-// Ou via ProgressService
-$result = $this->progressService->executeCustomQuery($sql);
-```
-
-### 📝 NOTAS DE DESENVOLVIMENTO
-
-#### Convenções Progress:
-- **Schema**: Sempre usar `PUB.tabela`
-- **Campos**: Progress é case-sensitive
-- **TOP N**: Usar `SELECT TOP 10` (não LIMIT)
-- **Strings**: Usar aspas simples `'valor'`
-- **Booleans**: 0/1 (não true/false)
-
-#### Performance:
-- **Sempre** usar índices nas consultas
-- **Evitar** SELECT * em tabelas grandes
-- **Usar** paginação com TOP/SKIP
-- **Testar** queries grandes via `/api/progress/query` primeiro
-
-### Notas Importantes
-- **Não criar arquivos desnecessários de teste** - usar terminal para sequências
-- **Economia de tokens**: resposta mínima, sem emojis
-- **Não modificar CLAUDE.md** no comando /init
-- **Usar APIs para explorar schema** - mais confiável que tinker direto
-
-## 🚨 TROUBLESHOOTING E SOLUÇÕES COMUNS
-
-### Problemas Frequentes
-
-#### 1. **Servers não iniciam**
-```bash
-# Verificar se portas estão ocupadas
-netstat -ano | findstr :8002
-netstat -ano | findstr :5173
-netstat -ano | findstr :5174
-
-# Matar processos se necessário
-taskkill /PID [PID_NUMBER] /F
-
-# Reiniciar servers
-php artisan serve --port=8002
-pnpm run dev
-```
-
-#### 2. **Vue compilation errors**
-```bash
-# Limpar cache do Vite
-rm -rf node_modules/.vite
-pnpm run dev
-
-# Se persistir, verificar syntax errors no console
-```
-
-#### 3. **Drag and drop não funciona**
-- ✅ Verificar se `vuedraggable` está importado
-- ✅ Confirmar que `v-model` aponta para um `ref()` mutável, não `computed()`
-- ✅ Handle deve ter classe `.drag-handle`
-- ✅ Função `onDragEnd` deve estar definida
-
-#### 4. **Rotas não carregam no mapa**
-```bash
-# Verificar se API Laravel está rodando
-curl http://localhost:8002/api/pacotes/itinerario -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"Pacote":{"codPac":3043368}}'
-
-# Verificar se Google Maps API key está configurada
-# No arquivo .env: VITE_GOOGLE_MAPS_API_KEY=your_key_here
-```
-
-#### 5. **Loading screen no modo errado**
-- ✅ Verificar localStorage: `vuexy-vuetify-theme`
-- ✅ Script em `application.blade.php` deve detectar tema correto
-- ✅ Limpar cache do navegador se necessário
-
-#### 6. **Paginação com números errados**
-- ✅ Usar `getGlobalIndex(localIndex)` para numeração
-- ✅ Verificar se `currentPage` e `itemsPerPage` estão corretos
-- ✅ Função deve calcular: `(página - 1) * itens + índice`
-
-### Comandos de Emergência
-
-```bash
-# Reset completo do projeto
-git status
-git stash  # salva mudanças locais
-git pull origin master
-pnpm install
-php artisan cache:clear
-php artisan config:clear
-
-# Verificar se tudo funciona
-php artisan serve --port=8002 &
-pnpm run dev &
-```
-
-### Arquivos Críticos
-- **vale-pedagio**: `resources/ts/pages/vale-pedagio/index.vue`
-- **loading**: `resources/views/application.blade.php`
-- **favicon**: `public/favicon.ico` + `public/iconetambasa.png`
-- **api rotas**: `routes/api.php` + controllers em `app/Http/Controllers/Api/`
-
-### Estado Atual Funcionando ✅
-- ✅ Laravel API: porta 8002
-- ✅ Vue dev server: porta 5173 ou 5174
-- ✅ Vale Pedágio: interface drag & drop funcional
-- ✅ Rotas reais: Google Maps + cache integrado
-- ✅ Temas: loading adaptativo dark/light
-- ✅ Favicon: Tambasa no lugar do Vuexy
-
-## Testing Strategy
-
-### Running Tests
-```bash
-# Frontend tests
-pnpm run typecheck              # TypeScript validation
-pnpm run lint                   # ESLint checks with auto-fix
-
-# Backend tests
-php artisan test                # PHPUnit test suite
-composer test                   # Clears cache then runs tests
-
-# API endpoint testing
-curl http://localhost:8002/api/progress/test-connection  # JDBC connection test
-```
-
-### Key Testing Points
-- **ODBC Progress connection** via `/api/progress/test-connection`
-- **Vue/Laravel integration** by accessing frontend with real APIs
-- **Vuexy component consistency** following template patterns
-- **TypeScript compliance** before committing changes
-
-## Common Development Tasks
-
-### Creating New API Endpoints
-1. Add method to `ProgressService.php` for database queries
-2. Create controller in `app/Http/Controllers/Api/`
-3. Register route in `routes/api.php`
-4. Test with curl before frontend integration
-
-### Adding Vue Pages
-1. Copy similar existing Vuexy template from `resources/ts/pages/apps/`
-2. Follow naming conventions: kebab-case for files
-3. Use `VDataTableServer` for pagination, `AppTextField` for inputs
-4. Implement proper error handling and loading states
-
-### Database Schema Exploration
-```bash
-# Always use Progress API endpoints instead of direct queries
-curl -X POST "http://localhost:8002/api/progress/query" \
-  -H "Content-Type: application/json" \
-  -d '{"sql":"DESCRIBE TABLE PUB.tablename"}'
+  -d '{"sql":"SELECT TOP 5 * FROM PUB.transporte"}'
 ```
