@@ -166,13 +166,25 @@ const updateMapMarkers = async () => {
   const path: google.maps.LatLngLiteral[] = []
   const bounds = new google.maps.LatLngBounds()
 
+  // Verificar se há municípios
+  if (municipios.value.length === 0) {
+    console.warn('Nenhum município encontrado na rota')
+    return
+  }
+
+  console.log('Processando municípios:', municipios.value.length)
+
   // Processar municípios sem coordenadas
   for (const municipio of municipios.value) {
     if (!municipio.lat || !municipio.lon) {
+      console.log(`Buscando coordenadas para: ${municipio.desmun}, ${municipio.desest}`)
       const coords = await geocodeByIBGE(municipio)
       if (coords) {
         municipio.lat = coords.lat
         municipio.lon = coords.lon
+        console.log(`✓ Coordenadas encontradas: ${coords.lat}, ${coords.lon}`)
+      } else {
+        console.error(`✗ Coordenadas não encontradas para: ${municipio.desmun}`)
       }
     }
   }
@@ -258,29 +270,28 @@ const calcularDistanciaTotal = (path: google.maps.LatLngLiteral[]) => {
 // Função para geocoding usando código IBGE via Google Maps
 const geocodeByIBGE = async (municipio: RotaMunicipio): Promise<{lat: number, lon: number} | null> => {
   try {
-    // Usar o nome do município + estado + Brasil para busca
-    const searchQuery = `${municipio.desmun}, ${municipio.desest}, Brasil`
+    // Limpar nome do município (remover espaços extras do Progress)
+    const nomeMunicipio = municipio.desmun.trim()
+    const nomeEstado = municipio.desest.trim()
 
-    // Alternativa: buscar usando código IBGE diretamente
-    // Algumas APIs aceitam queries como "IBGE:3106200 Brasil"
-    const alternativeQuery = `IBGE:${municipio.cdibge} Brasil`
+    // Usar o nome do município + estado + Brasil para busca
+    const searchQuery = `${nomeMunicipio}, ${nomeEstado}, Brasil`
+
+    console.log(`Tentando geocode: "${searchQuery}"`)
 
     const geocoder = new google.maps.Geocoder()
 
-    // Tentar primeiro com nome da cidade
+    // Tentar com nome da cidade
     const result = await new Promise<google.maps.GeocoderResult[]>((resolve, reject) => {
       geocoder.geocode({ address: searchQuery }, (results, status) => {
-        if (status === 'OK' && results) {
+        console.log(`Geocode status para "${searchQuery}":`, status)
+
+        if (status === 'OK' && results && results.length > 0) {
+          console.log(`✓ Geocode sucesso:`, results[0].geometry.location.toJSON())
           resolve(results)
         } else {
-          // Se falhar, tentar com código IBGE
-          geocoder.geocode({ address: alternativeQuery }, (results2, status2) => {
-            if (status2 === 'OK' && results2) {
-              resolve(results2)
-            } else {
-              reject(new Error(`Geocoding falhou: ${status}`))
-            }
-          })
+          console.log(`✗ Geocode falhou com status: ${status}`)
+          reject(new Error(`Geocoding falhou: ${status}`))
         }
       })
     })
@@ -293,7 +304,7 @@ const geocodeByIBGE = async (municipio: RotaMunicipio): Promise<{lat: number, lo
       }
     }
   } catch (error) {
-    console.error('Erro ao fazer geocoding:', error)
+    console.error(`❌ Erro ao fazer geocoding de ${municipio.desmun}:`, error)
   }
 
   return null
@@ -493,6 +504,26 @@ onMounted(() => {
         </VBtn>
       </div>
     </div>
+
+    <!-- Alerta de Geocoding -->
+    <VAlert
+      v-if="!loading && municipios.length > 0 && municipios.some(m => !m.lat || !m.lon)"
+      type="warning"
+      variant="tonal"
+      class="mb-4"
+      closable
+    >
+      <VAlertTitle class="d-flex align-center">
+        <VIcon icon="tabler-map-pin-off" class="me-2" />
+        Coordenadas GPS Ausentes
+      </VAlertTitle>
+      <div class="text-body-2 mt-2">
+        Alguns municípios não possuem coordenadas GPS. O sistema tentará buscar automaticamente usando Google Maps Geocoding.
+        <br>
+        <strong>Municípios sem GPS:</strong>
+        {{ municipios.filter(m => !m.lat || !m.lon).map(m => m.desmun.trim()).join(', ') }}
+      </div>
+    </VAlert>
 
     <VRow v-if="!loading && rota">
       <!-- Coluna Esquerda: Informações e Lista -->
