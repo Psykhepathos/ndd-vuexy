@@ -270,34 +270,51 @@ const calcularDistanciaTotal = (path: google.maps.LatLngLiteral[]) => {
 // Função para geocoding usando código IBGE via Google Maps
 const geocodeByIBGE = async (municipio: RotaMunicipio): Promise<{lat: number, lon: number} | null> => {
   try {
-    // Limpar nome do município (remover espaços extras do Progress)
     const nomeMunicipio = municipio.desmun.trim()
     const nomeEstado = municipio.desest.trim()
+    const codigoIBGE = municipio.cdibge
 
-    // Usar o nome do município + estado + Brasil para busca
-    const searchQuery = `${nomeMunicipio}, ${nomeEstado}, Brasil`
+    console.log(`Buscando coordenadas para IBGE ${codigoIBGE}: ${nomeMunicipio}, ${nomeEstado}`)
 
-    console.log(`Tentando geocode: "${searchQuery}"`)
+    // Usar a API do Google Maps com Text Search (Places API)
+    // O Google Maps aceita código IBGE no formato de busca
+    const service = new google.maps.places.PlacesService(map.value!)
 
-    const geocoder = new google.maps.Geocoder()
+    const request = {
+      query: `${nomeMunicipio} ${nomeEstado} Brasil`,
+      fields: ['geometry', 'name', 'formatted_address']
+    }
 
-    // Tentar com nome da cidade
-    const result = await new Promise<google.maps.GeocoderResult[]>((resolve, reject) => {
-      geocoder.geocode({ address: searchQuery }, (results, status) => {
-        console.log(`Geocode status para "${searchQuery}":`, status)
+    const result = await new Promise<google.maps.places.PlaceResult | null>((resolve) => {
+      service.textSearch(request, (results, status) => {
+        console.log(`Places API status para "${nomeMunicipio}":`, status)
 
-        if (status === 'OK' && results && results.length > 0) {
-          console.log(`✓ Geocode sucesso:`, results[0].geometry.location.toJSON())
-          resolve(results)
+        if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
+          console.log(`✓ Places API sucesso:`, results[0].geometry?.location?.toJSON())
+          resolve(results[0])
         } else {
-          console.log(`✗ Geocode falhou com status: ${status}`)
-          reject(new Error(`Geocoding falhou: ${status}`))
+          console.log(`✗ Places API falhou, tentando Geocoder...`)
+          // Fallback para Geocoder tradicional
+          const geocoder = new google.maps.Geocoder()
+          geocoder.geocode({ address: `${nomeMunicipio}, ${nomeEstado}, Brasil` }, (geoResults, geoStatus) => {
+            if (geoStatus === 'OK' && geoResults && geoResults.length > 0) {
+              console.log(`✓ Geocoder sucesso:`, geoResults[0].geometry.location.toJSON())
+              resolve({
+                geometry: geoResults[0].geometry,
+                name: nomeMunicipio,
+                formatted_address: geoResults[0].formatted_address
+              })
+            } else {
+              console.log(`✗ Geocoder também falhou`)
+              resolve(null)
+            }
+          })
         }
       })
     })
 
-    if (result.length > 0) {
-      const location = result[0].geometry.location
+    if (result && result.geometry && result.geometry.location) {
+      const location = result.geometry.location
       return {
         lat: location.lat(),
         lon: location.lng()
