@@ -133,6 +133,8 @@ declare module 'vue-router/auto-routes' {
     'pages-typography': RouteRecordInfo<'pages-typography', '/pages/typography', Record<never, never>, Record<never, never>>,
     'pages-user-profile-tab': RouteRecordInfo<'pages-user-profile-tab', '/pages/user-profile/:tab', { tab: ParamValue<true> }, { tab: ParamValue<false> }>,
     'register': RouteRecordInfo<'register', '/register', Record<never, never>, Record<never, never>>,
+    'rotas-semparar': RouteRecordInfo<'rotas-semparar', '/rotas-semparar', Record<never, never>, Record<never, never>>,
+    'rotas-semparar-mapa-id': RouteRecordInfo<'rotas-semparar-mapa-id', '/rotas-semparar/mapa/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
     'tables-data-table': RouteRecordInfo<'tables-data-table', '/tables/data-table', Record<never, never>, Record<never, never>>,
     'tables-simple-table': RouteRecordInfo<'tables-simple-table', '/tables/simple-table', Record<never, never>, Record<never, never>>,
     'transportes': RouteRecordInfo<'transportes', '/transportes', Record<never, never>, Record<never, never>>,

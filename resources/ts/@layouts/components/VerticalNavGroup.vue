@@ -28,7 +28,7 @@ const hideTitleAndBadge = configStore.isVerticalNavMini()
 const isVerticalNavHovered = inject(injectionKeyIsVerticalNavHovered, ref(false))
 
 const isGroupActive = ref(false)
-const isGroupOpen = ref(false)
+const isGroupOpen = ref(props.item.open || false)
 
 /**
  * Checks if any of children group is open or not.
@@ -67,8 +67,13 @@ watch(
   () => {
     const isActive = isNavGroupActive(props.item.children, router)
 
-    // Don't open group if vertical nav is collapsed and window size is more than overlay nav breakpoint
-    isGroupOpen.value = isActive && !configStore.isVerticalNavMini(isVerticalNavHovered).value
+    // Force open if item has open property set to true, otherwise follow normal logic
+    if (props.item.open) {
+      isGroupOpen.value = !configStore.isVerticalNavMini(isVerticalNavHovered).value
+    } else {
+      // Don't open group if vertical nav is collapsed and window size is more than overlay nav breakpoint
+      isGroupOpen.value = isActive && !configStore.isVerticalNavMini(isVerticalNavHovered).value
+    }
     isGroupActive.value = isActive
   },
   { immediate: true },
@@ -113,6 +118,10 @@ watch(isGroupOpen, (val: boolean) => {
       For this we will fetch recently added group in openGroups array and won't perform closing operation if recently added group is current group
 */
 watch(openGroups, val => {
+  // Don't close groups that are forced to be open
+  if (props.item.open)
+    return
+
   // Prevent closing recently opened inactive group.
   const lastOpenedGroup = val.at(-1)
   if (lastOpenedGroup === props.item.title)
@@ -136,7 +145,12 @@ watch(openGroups, val => {
 watch(
   configStore.isVerticalNavMini(isVerticalNavHovered),
   val => {
-    isGroupOpen.value = val ? false : isGroupActive.value
+    // Force open if item has open property, otherwise follow normal logic
+    if (props.item.open) {
+      isGroupOpen.value = !val
+    } else {
+      isGroupOpen.value = val ? false : isGroupActive.value
+    }
   },
 )
 </script>
@@ -155,7 +169,7 @@ watch(
   >
     <div
       class="nav-group-label"
-      @click="isGroupOpen = !isGroupOpen"
+      @click="!item.open && (isGroupOpen = !isGroupOpen)"
     >
       <Component
         :is="layoutConfig.app.iconRenderer || 'div'"
