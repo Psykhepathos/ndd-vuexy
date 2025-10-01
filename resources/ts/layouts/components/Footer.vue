@@ -23,19 +23,19 @@
       <a
         href="https://themeforest.net/licenses/standard"
         target="noopener noreferrer"
-      >License</a>
+      >Licença</a>
       <a
         href="https://1.envato.market/pixinvent_portfolio"
         target="noopener noreferrer"
-      >More Themes</a>
+      >Mais Temas</a>
       <a
         href="https://demos.pixinvent.com/vuexy-vuejs-admin-template/documentation/guide/laravel-integration/folder-structure.html"
         target="noopener noreferrer"
-      >Documentation</a>
+      >Documentação</a>
       <a
         href="https://pixinvent.ticksy.com/"
         target="noopener noreferrer"
-      >Support</a>
+      >Suporte</a>
     </span>
   </div>
 </template>

@@ -268,8 +268,8 @@ class SemPararRotaController extends Controller
     {
         try {
             $request->validate([
-                'search' => 'string|max:255',
-                'estado_id' => 'integer'
+                'search' => 'nullable|string|max:255',
+                'estado_id' => 'nullable|integer'
             ]);
 
             $search = $request->get('search', '');
