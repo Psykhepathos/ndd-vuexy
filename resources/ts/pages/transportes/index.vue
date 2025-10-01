@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { watchDebounced } from '@vueuse/core'
 
 const router = useRouter()
 
@@ -31,11 +32,19 @@ const filtroNatureza = ref()
 const filtroStatus = ref()
 
 // Opções de paginação (padrão Vuexy)
-const options = ref({ 
-  page: 1, 
-  itemsPerPage: 10, 
-  sortBy: ['codtrn'], 
-  sortDesc: [false] 
+const options = ref({
+  page: 1,
+  itemsPerPage: 10,
+  sortBy: ['codtrn'],
+  sortDesc: [false]
+})
+
+// Keyset pagination cursors
+const cursors = ref({
+  next: null as number | null,
+  prev: null as number | null,
+  hasNext: false,
+  hasPrev: false
 })
 
 // Headers da tabela expandidos
@@ -89,48 +98,71 @@ const headers = [
   },
 ]
 
-// Computed para estatísticas
-const statistics = computed(() => {
-  const stats = {
-    total: totalItems.value,
-    autonomos: 0,
-    empresas: 0,
-    ativos: 0,
-    inativos: 0,
-    naturezaT: 0,
-    naturezaA: 0
-  }
-  
-  serverItems.value.forEach(item => {
-    if (item.flgautonomo) stats.autonomos++
-    else stats.empresas++
-    
-    if (item.flgati) stats.ativos++
-    else stats.inativos++
-    
-    if (item.natcam === 'T') stats.naturezaT++
-    else if (item.natcam === 'A') stats.naturezaA++
-  })
-  
-  return stats
+// Statistics state (fetched from backend API)
+const statistics = ref({
+  total: 0,
+  autonomos: 0,
+  empresas: 0,
+  ativos: 0,
+  inativos: 0,
+  natureza_T: 0,
+  natureza_A: 0
 })
+const loadingStats = ref(false)
+
+// Fetch statistics from backend (global counts, not filtered)
+const fetchStatistics = async () => {
+  try {
+    loadingStats.value = true
+
+    const response = await fetch('http://localhost:8002/api/transportes/statistics', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+
+    const result = await response.json()
+
+    if (result.success && result.data) {
+      statistics.value = result.data
+      console.log('✅ Estatísticas globais carregadas:', result.data)
+    }
+  } catch (error) {
+    console.error('Erro ao buscar estatísticas:', error)
+  } finally {
+    loadingStats.value = false
+  }
+}
 
 // Função para buscar transportes com paginação real (padrão Vuexy)
-const fetchTransportes = async () => {
+// Suporta KEYSET PAGINATION (cursor-based) para melhor performance
+const fetchTransportes = async (direction: 'next' | 'prev' | null = null) => {
   try {
     loading.value = true
-    
-    // Construir parâmetros da query usando options object
+
+    // Construir parâmetros da query
     const params = new URLSearchParams({
-      page: options.value.page.toString(),
       per_page: options.value.itemsPerPage.toString()
     })
-    
+
+    // KEYSET PAGINATION: Use cursor se disponível
+    if (direction === 'next' && cursors.value.next) {
+      params.append('last_id', cursors.value.next.toString())
+      params.append('direction', 'next')
+    } else if (direction === 'prev' && cursors.value.prev) {
+      params.append('last_id', cursors.value.prev.toString())
+      params.append('direction', 'prev')
+    } else if (options.value.page > 1) {
+      // LEGACY MODE: Use page-based pagination (less efficient)
+      params.append('page', options.value.page.toString())
+    }
+
     // Adicionar filtro de busca se houver
     if (search.value && search.value.trim() !== '') {
       params.append('search', search.value.trim())
     }
-    
+
     // Filtros
     if (filtroTipo.value) {
       params.append('tipo', filtroTipo.value)
@@ -143,30 +175,39 @@ const fetchTransportes = async () => {
     if (filtroStatus.value) {
       params.append('status_ativo', filtroStatus.value === 'ativo' ? 'true' : 'false')
     }
-    
+
     const response = await fetch(`http://localhost:8002/api/transportes?${params}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
       }
     })
-    
+
     const result = await response.json()
-    
+
     if (result.success) {
       const transportesList = result.data.results || []
       const pagination = result.pagination || {}
-      
+
       // Atualizar dados com resposta do servidor
       serverItems.value = transportesList
       totalItems.value = pagination.total || 0
-      
-      console.log(`✅ Dados carregados - Página ${pagination.current_page} de ${pagination.last_page}`, {
+
+      // Atualizar cursors para keyset pagination
+      cursors.value = {
+        next: pagination.next_cursor || null,
+        prev: pagination.prev_cursor || null,
+        hasNext: pagination.has_next || false,
+        hasPrev: pagination.has_prev || false
+      }
+
+      console.log(`✅ Dados carregados - Página ${pagination.current_page}`, {
         total: pagination.total,
-        from: pagination.from,
-        to: pagination.to,
+        count: pagination.count,
         items: transportesList.length,
-        search: search.value
+        hasNext: cursors.value.hasNext,
+        hasPrev: cursors.value.hasPrev,
+        mode: direction ? 'keyset' : (options.value.page > 1 ? 'legacy' : 'first')
       })
     } else {
       console.error('Erro ao buscar transportes:', result.message)
@@ -185,13 +226,30 @@ const fetchTransportes = async () => {
 // Update data table options
 const updateOptions = (newOptions: any) => {
   console.log('🔄 updateOptions chamado:', newOptions)
-  options.value.page = newOptions.page
+
+  const oldPage = options.value.page
+  const newPage = newOptions.page
+
+  options.value.page = newPage
   options.value.itemsPerPage = newOptions.itemsPerPage
   options.value.sortBy = newOptions.sortBy || ['codtrn']
   options.value.sortDesc = newOptions.sortDesc || [false]
-  
-  // Chamar fetchTransportes quando as options mudarem
-  fetchTransportes()
+
+  // Detect navigation direction and use keyset pagination
+  if (newPage > oldPage && cursors.value.hasNext) {
+    // Navigate to NEXT page using keyset
+    fetchTransportes('next')
+  } else if (newPage < oldPage && cursors.value.hasPrev) {
+    // Navigate to PREV page using keyset
+    fetchTransportes('prev')
+  } else if (newPage === 1) {
+    // Reset to first page
+    cursors.value = { next: null, prev: null, hasNext: false, hasPrev: false }
+    fetchTransportes(null)
+  } else {
+    // Fallback to legacy pagination (inefficient, for edge cases)
+    fetchTransportes(null)
+  }
 }
 
 // Watchers removido - agora a paginação é controlada pelo updateOptions
@@ -202,30 +260,37 @@ watch(search, (newSearch, oldSearch) => {
   if (searchTimeout) {
     clearTimeout(searchTimeout)
   }
-  
+
   // Só executar se o valor realmente mudou
   if (newSearch !== oldSearch) {
     console.log(`🔍 Busca mudou: "${oldSearch}" → "${newSearch}"`)
     searchTimeout = setTimeout(() => {
       // Reset para primeira página ao buscar
       options.value.page = 1
-      fetchTransportes()
+      cursors.value = { next: null, prev: null, hasNext: false, hasPrev: false }
+      fetchTransportes(null)
     }, 500)
   }
 })
 
-// Watchers para filtros avançados
-watch([filtroTipo, filtroNatureza, filtroStatus], ([novoTipo, novaNatureza, novoStatus], [tipoAnt, naturezaAnt, statusAnt]) => {
-  if (novoTipo !== tipoAnt || novaNatureza !== naturezaAnt || novoStatus !== statusAnt) {
-    console.log(`🔧 Filtros mudaram:`, {
-      tipo: `${tipoAnt} → ${novoTipo}`,
-      natureza: `${naturezaAnt} → ${novaNatureza}`,
-      status: `${statusAnt} → ${novoStatus}`
-    })
-    options.value.page = 1
-    fetchTransportes()
-  }
-})
+// Watchers para filtros avançados com debounce (300ms)
+watchDebounced(
+  [filtroTipo, filtroNatureza, filtroStatus],
+  ([novoTipo, novaNatureza, novoStatus], [tipoAnt, naturezaAnt, statusAnt]) => {
+    if (novoTipo !== tipoAnt || novaNatureza !== naturezaAnt || novoStatus !== statusAnt) {
+      console.log(`🔧 Filtros mudaram:`, {
+        tipo: `${tipoAnt} → ${novoTipo}`,
+        natureza: `${naturezaAnt} → ${novaNatureza}`,
+        status: `${statusAnt} → ${novoStatus}`
+      })
+      options.value.page = 1
+      cursors.value = { next: null, prev: null, hasNext: false, hasPrev: false }
+      fetchTransportes(null)
+      fetchStatistics()
+    }
+  },
+  { debounce: 300 }
+)
 
 // Funções de interação
 const viewDetails = (item: Transporte) => {
@@ -276,6 +341,7 @@ const clearFilters = () => {
 // Carregar dados ao montar o componente
 onMounted(() => {
   fetchTransportes()
+  fetchStatistics()
 })
 </script>
 

@@ -33,11 +33,26 @@ Route::middleware('api')->group(function () {
     });
     
     // Rotas para TransporteController (JDBC Progress) - específicas primeiro
-    Route::get('transportes/test-connection', [TransporteController::class, 'testConnection']);
-    Route::get('transportes/statistics', [TransporteController::class, 'statistics']);
-    Route::get('transportes/schema', [TransporteController::class, 'schema']);
-    Route::post('transportes/query', [TransporteController::class, 'query']);
-    Route::apiResource('transportes', TransporteController::class)->only(['index', 'show']);
+    // SECURITY: test-connection é público para monitoramento, mas com rate limit
+    Route::get('transportes/test-connection', [TransporteController::class, 'testConnection'])
+        ->middleware('throttle:10,1');  // 10 requests per minute
+
+    // Expensive operations - strict rate limiting (públicas por ora)
+    Route::get('transportes/statistics', [TransporteController::class, 'statistics'])
+        ->middleware('throttle:10,1');  // 10 requests per minute
+    Route::get('transportes/schema', [TransporteController::class, 'schema'])
+        ->middleware('throttle:10,1');  // 10 requests per minute
+
+    // Standard CRUD operations - moderate rate limiting (públicas por ora)
+    Route::apiResource('transportes', TransporteController::class)
+        ->only(['index', 'show'])
+        ->middleware('throttle:60,1');  // 60 requests per minute
+
+    // SECURITY: Custom query endpoint - admin-only with auth
+    Route::middleware(['auth:sanctum'])->group(function () {
+        Route::post('transportes/query', [TransporteController::class, 'query'])
+            ->middleware('throttle:5,1');   // 5 requests per minute (admin-only custom queries)
+    });
 
     // Rotas para PacoteController (JDBC Progress)
     Route::get('pacotes/statistics', [PacoteController::class, 'statistics']);

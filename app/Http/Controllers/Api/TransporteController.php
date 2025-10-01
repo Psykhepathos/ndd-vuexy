@@ -21,32 +21,43 @@ class TransporteController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        // Validação dos parâmetros de paginação
-        $request->validate([
-            'page' => 'integer|min:1',
-            'per_page' => 'integer|min:5|max:100',
-            'search' => 'string|max:255',
-            'codigo' => 'string|max:50',
-            'nome' => 'string|max:255',
-            'tipo' => 'string|in:autonomo,empresa,todos',
-            'natureza' => 'string|in:T,A'
+        // Validação RIGOROSA dos parâmetros com proteção contra ataques
+        $validated = $request->validate([
+            'page' => 'integer|min:1|max:1000',  // Limit max page to prevent memory exhaustion
+            'per_page' => 'integer|min:5|max:50',  // Reduced from 100 to 50 for security
+            'search' => [
+                'nullable',
+                'string',
+                'max:100',  // Reduced from 255
+                'regex:/^[a-zA-Z0-9\s\-._@]+$/'  // Only alphanumeric, spaces, and safe chars
+            ],
+            'codigo' => 'nullable|integer|min:1|max:999999999',  // Changed to integer with bounds
+            'nome' => [
+                'nullable',
+                'string',
+                'max:100',
+                'regex:/^[a-zA-ZÀ-ÿ\s\-\.]+$/'  // Only letters, spaces, hyphens, dots (no special chars)
+            ],
+            'tipo' => 'nullable|string|in:autonomo,empresa,todos',
+            'natureza' => 'nullable|string|in:T,A',
+            'status_ativo' => 'nullable|boolean'  // Added missing validation
         ]);
 
-        $page = (int) $request->get('page', 1);
-        $perPage = (int) $request->get('per_page', 10);
-        $search = $request->get('search', '');
-        $codigo = $request->get('codigo', '');
-        $nome = $request->get('nome', '');
-        $tipo = $request->get('tipo', 'todos');
-        $natureza = $request->get('natureza', '');
-        $ativo = $request->get('status_ativo');
+        $page = isset($validated['page']) ? (int) $validated['page'] : 1;
+        $perPage = isset($validated['per_page']) ? (int) $validated['per_page'] : 10;
+        $search = $validated['search'] ?? '';
+        $codigo = isset($validated['codigo']) ? (int) $validated['codigo'] : null;
+        $nome = $validated['nome'] ?? '';
+        $tipo = $validated['tipo'] ?? 'todos';
+        $natureza = $validated['natureza'] ?? '';
+        $ativo = isset($validated['status_ativo']) ? (bool) $validated['status_ativo'] : null;
 
-        // Preparar filtros para o service
+        // Preparar filtros para o service (já validados)
         $filters = [
             'page' => $page,
             'per_page' => $perPage,
             'search' => $search,
-            'codigo' => $codigo,
+            'codigo' => $codigo,  // Now guaranteed to be integer or null
             'nome' => $nome,
             'tipo' => $tipo,
             'natureza' => $natureza,
@@ -76,6 +87,17 @@ class TransporteController extends Controller
      */
     public function show($id): JsonResponse
     {
+        // CRITICAL: Validate and sanitize ID to prevent SQL injection
+        if (!is_numeric($id) || $id < 1 || $id > 999999999) {
+            return response()->json([
+                'success' => false,
+                'message' => 'ID inválido',
+                'data' => null
+            ], 422);
+        }
+
+        $id = (int) $id;  // Force integer casting
+
         $result = $this->progressService->getTransporteById($id);
 
         if (!$result['success']) {
@@ -114,53 +136,39 @@ class TransporteController extends Controller
 
     /**
      * Obtém estatísticas dos transportadores
+     * Otimizado para usar uma única query agregada
      */
     public function statistics(): JsonResponse
     {
         try {
-            $stats = [
-                'total' => 0,
-                'autonomos' => 0,
-                'empresas' => 0,
-                'ativos' => 0,
-                'inativos' => 0,
-                'natureza_T' => 0,
-                'natureza_A' => 0,
-                'natureza_F' => 0,
-                'com_placa' => 0,
-                'com_telefone' => 0
-            ];
-            
-            // Query simplificada para Progress
-            $sql = "SELECT COUNT(*) as total FROM PUB.transporte";
-            
+            // Single aggregated query using CASE statements (Progress SQL syntax - single line)
+            $sql = "SELECT COUNT(*) as total, SUM(CASE WHEN flgautonomo = 1 THEN 1 ELSE 0 END) as autonomos, SUM(CASE WHEN flgautonomo = 0 THEN 1 ELSE 0 END) as empresas, SUM(CASE WHEN flgati = 1 THEN 1 ELSE 0 END) as ativos, SUM(CASE WHEN flgati = 0 THEN 1 ELSE 0 END) as inativos, SUM(CASE WHEN numpla IS NOT NULL AND numpla <> '' THEN 1 ELSE 0 END) as com_placa, SUM(CASE WHEN numtel IS NOT NULL AND numtel <> '' THEN 1 ELSE 0 END) as com_telefone FROM PUB.transporte";
+
             $result = $this->progressService->executeCustomQuery($sql);
-            
-            if ($result['success'] && !empty($result['data']['results'])) {
-                $stats['total'] = (int)$result['data']['results'][0]['total'];
-                
-                // Queries adicionais para obter estatísticas específicas  
-                $queries = [
-                    'autonomos' => "SELECT COUNT(*) as total FROM PUB.transporte WHERE flgautonomo = 1",
-                    'empresas' => "SELECT COUNT(*) as total FROM PUB.transporte WHERE flgautonomo = 0", 
-                    'ativos' => "SELECT COUNT(*) as total FROM PUB.transporte WHERE flgati = 1",
-                    'inativos' => "SELECT COUNT(*) as total FROM PUB.transporte WHERE flgati = 0"
-                ];
-                
-                foreach ($queries as $key => $query) {
-                    $result = $this->progressService->executeCustomQuery($query);
-                    if ($result['success'] && !empty($result['data']['results'])) {
-                        $stats[$key] = (int)$result['data']['results'][0]['total'];
-                    }
-                }
+
+            if (!$result['success'] || empty($result['data']['results'])) {
+                throw new \Exception($result['error'] ?? 'Nenhum dado retornado');
             }
-            
+
+            $row = $result['data']['results'][0];
+
+            // Convert to integers, handling NULL values
+            $stats = [
+                'total' => (int)($row['total'] ?? 0),
+                'autonomos' => (int)($row['autonomos'] ?? 0),
+                'empresas' => (int)($row['empresas'] ?? 0),
+                'ativos' => (int)($row['ativos'] ?? 0),
+                'inativos' => (int)($row['inativos'] ?? 0),
+                'com_placa' => (int)($row['com_placa'] ?? 0),
+                'com_telefone' => (int)($row['com_telefone'] ?? 0)
+            ];
+
             return response()->json([
                 'success' => true,
                 'message' => 'Estatísticas obtidas com sucesso',
                 'data' => $stats
             ]);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -194,14 +202,49 @@ class TransporteController extends Controller
 
     /**
      * Executa consulta SQL customizada (apenas SELECT)
+     * IMPORTANTE: Apenas administradores podem usar este endpoint
      */
     public function query(Request $request): JsonResponse
     {
-        $request->validate([
-            'sql' => 'required|string'
+        // Verificar se usuário é admin
+        $user = $request->user();
+        if (!$user || !$user->hasRole('admin')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Acesso negado. Apenas administradores podem executar consultas customizadas.',
+                'data' => null
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'sql' => [
+                'required',
+                'string',
+                'max:5000',
+                'regex:/^SELECT\s/i'  // Must start with SELECT (case-insensitive)
+            ]
         ]);
 
-        $result = $this->progressService->executeCustomQuery($request->input('sql'));
+        // Additional security: block dangerous keywords even in SELECT
+        $sql = $validated['sql'];
+        $sqlUpper = strtoupper($sql);
+        $dangerousPatterns = [
+            'DROP', 'DELETE', 'TRUNCATE', 'ALTER', 'CREATE',
+            'INSERT', 'UPDATE', 'EXEC', 'EXECUTE', '--', '/*', '*/',
+            'UNION', 'INTO OUTFILE', 'INTO DUMPFILE', 'LOAD_FILE'
+        ];
+
+        foreach ($dangerousPatterns as $pattern) {
+            if (strpos($sqlUpper, $pattern) !== false) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Palavra-chave proibida detectada: {$pattern}",
+                    'data' => null
+                ], 422);
+            }
+        }
+
+        $result = $this->progressService->executeCustomQuery($sql);
 
         if (!$result['success']) {
             return response()->json([
