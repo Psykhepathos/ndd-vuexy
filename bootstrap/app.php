@@ -20,8 +20,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api([
             \App\Http\Middleware\CorsMiddleware::class,
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+            \App\Http\Middleware\SecurityHeaders::class,  // SECURITY: Add security headers to all API responses
         ]);
-        
+
         // Middleware de proteção para Google Maps (apenas em rotas específicas)
         $middleware->alias([
             'google.quota' => \App\Http\Middleware\GoogleMapsQuotaProtection::class,

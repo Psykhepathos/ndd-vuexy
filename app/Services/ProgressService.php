@@ -99,73 +99,30 @@ class ProgressService
 
     /**
      * Lista transportes com paginação eficiente no servidor
+     * Suporta keyset pagination (cursor-based) e legacy page-based pagination
      */
     public function getTransportesPaginated(array $filters): array
     {
         try {
             Log::info('Buscando transportes paginados via JDBC', ['filters' => $filters]);
 
-            $page = $filters['page'] ?? 1;
             $perPage = $filters['per_page'] ?? 10;
             $search = $filters['search'] ?? '';
-            $codigo = $filters['codigo'] ?? '';
-            $nome = $filters['nome'] ?? '';
 
-            // Calcular offset para paginação
-            $offset = ($page - 1) * $perPage;
+            // KEYSET PAGINATION: Use cursor (last_id) instead of page number
+            $lastId = $filters['last_id'] ?? null;
+            $direction = $filters['direction'] ?? 'next';
 
-            // Construir condições WHERE
-            $whereConditions = [];
-            $params = [];
-
-            if (!empty($search)) {
-                $whereConditions[] = "(UPPER(nomtrn) LIKE UPPER(?) OR codtrn = ?)";
-                $params[] = "%{$search}%";
-                $params[] = is_numeric($search) ? (int)$search : 0;
-            }
-
-            if (!empty($codigo)) {
-                $whereConditions[] = "codtrn = ?";
-                $params[] = (int)$codigo;
-            }
-
-            if (!empty($nome)) {
-                $whereConditions[] = "UPPER(nomtrn) LIKE UPPER(?)";
-                $params[] = "%{$nome}%";
-            }
-
-            $whereClause = '';
-            if (!empty($whereConditions)) {
-                $whereClause = 'WHERE ' . implode(' AND ', $whereConditions);
-            }
-
-            // Construir SQL paginado usando TOP do Progress
-            $sql = "SELECT TOP {$perPage} codtrn, nomtrn FROM PUB.transporte";
-            
-            if (!empty($whereClause)) {
-                $sql .= " " . $whereClause;
-            }
-            
-            // Simular offset usando condição WHERE (já que Progress não tem OFFSET nativo)
-            if ($offset > 0) {
-                $offsetCondition = empty($whereClause) ? " WHERE " : " AND ";
-                $sql .= $offsetCondition . "codtrn > (SELECT MAX(codtrn) FROM (SELECT TOP {$offset} codtrn FROM PUB.transporte";
-                
-                if (!empty($whereClause)) {
-                    $sql .= " " . $whereClause;
-                }
-                
-                $sql .= " ORDER BY codtrn) sub)";
-            }
-            
-            $sql .= " ORDER BY codtrn";
+            // Legacy support: if 'page' is provided but no last_id, use old method
+            $page = $filters['page'] ?? 1;
+            $isLegacyMode = ($lastId === null && $page > 1);
 
             // Campos essenciais para diferenciar tipos de transportadores
             $campos = "codtrn, nomtrn, flgautonomo, natcam, tipcam, codcnpjcpf, numpla, numtel, dddtel, flgati, indcd";
-            
+
             // Construir condições WHERE baseadas nos filtros
             $whereConditions = [];
-            
+
             // Filtro de busca por código ou nome
             if (!empty($search)) {
                 $searchTerm = trim($search);
@@ -175,7 +132,7 @@ class ProgressService
                     $whereConditions[] = "UPPER(nomtrn) LIKE " . $this->escapeSqlString('%' . strtoupper($searchTerm) . '%');
                 }
             }
-            
+
             // Filtro por tipo (autônomo vs empresa)
             $tipo = $filters['tipo'] ?? 'todos';
             if ($tipo === 'autonomo') {
@@ -183,54 +140,87 @@ class ProgressService
             } elseif ($tipo === 'empresa') {
                 $whereConditions[] = "flgautonomo = 0";
             }
-            
+
             // Filtro por natureza do transporte
             $natureza = $filters['natureza'] ?? '';
             if (!empty($natureza)) {
                 $whereConditions[] = "natcam = '$natureza'";
             }
-            
+
             // Filtro por status ativo
             $ativo = $filters['ativo'] ?? null;
             if ($ativo !== null) {
                 $whereConditions[] = ($ativo === 'true' || $ativo === '1' || $ativo === 1) ? "flgati = 1" : "flgati = 0";
             }
-            
-            // Solução alternativa para paginação no Progress usando array de IDs
+
             $whereClause = !empty($whereConditions) ? " WHERE " . implode(' AND ', $whereConditions) : "";
-            
-            if ($page === 1 || $offset === 0) {
-                // Primeira página - SQL simples
-                $simpleSql = "SELECT TOP $perPage $campos FROM PUB.transporte$whereClause ORDER BY codtrn";
-            } else {
-                // Para páginas subsequentes, primeiro buscar todos os IDs, depois filtrar
-                // Busca só os IDs dos primeiros registros para pular
+
+            // BUILD SQL BASED ON PAGINATION MODE
+            if ($lastId !== null) {
+                // KEYSET PAGINATION: Use codtrn > $lastId for next, < for prev
+                $cursorCondition = $whereClause ? " AND " : " WHERE ";
+                if ($direction === 'prev') {
+                    $simpleSql = "SELECT TOP $perPage $campos FROM PUB.transporte$whereClause{$cursorCondition}codtrn < " . intval($lastId) . " ORDER BY codtrn DESC";
+                } else {
+                    $simpleSql = "SELECT TOP $perPage $campos FROM PUB.transporte$whereClause{$cursorCondition}codtrn > " . intval($lastId) . " ORDER BY codtrn";
+                }
+            } elseif ($isLegacyMode) {
+                // LEGACY MODE: Inefficient offset simulation (deprecated)
+                $offset = ($page - 1) * $perPage;
                 $skipSql = "SELECT TOP $offset codtrn FROM PUB.transporte$whereClause ORDER BY codtrn";
                 $skipResult = $this->executeCustomQuery($skipSql);
-                
                 if ($skipResult['success'] && !empty($skipResult['data']['results'])) {
-                    $lastId = end($skipResult['data']['results'])['codtrn'];
+                    $lastSkipId = (int) end($skipResult['data']['results'])['codtrn'];
                     $conditionPrefix = $whereClause ? " AND " : " WHERE ";
-                    $simpleSql = "SELECT TOP $perPage $campos FROM PUB.transporte$whereClause{$conditionPrefix}codtrn > $lastId ORDER BY codtrn";
+                    $simpleSql = "SELECT TOP $perPage $campos FROM PUB.transporte$whereClause{$conditionPrefix}codtrn > $lastSkipId ORDER BY codtrn";
                 } else {
-                    // Se não conseguiu pular, retorna vazio
                     $simpleSql = "SELECT TOP $perPage $campos FROM PUB.transporte WHERE 1=0";
                 }
+            } else {
+                // FIRST PAGE: No cursor needed
+                $simpleSql = "SELECT TOP $perPage $campos FROM PUB.transporte$whereClause ORDER BY codtrn";
             }
-            
-            Log::info('SQL simplificado para busca', ['sql' => $simpleSql]);
-            
+
+            Log::info('SQL paginação', ['sql' => $simpleSql, 'cursor_mode' => ($lastId !== null), 'direction' => $direction]);
+
             $result = $this->executeCustomQuery($simpleSql);
 
             if ($result['success']) {
-                // Contar total de registros para paginação (aplicando os mesmos filtros)
+                $results = $result['data']['results'] ?? [];
+
+                // If we fetched in reverse (prev), reverse the array back
+                if ($direction === 'prev' && !empty($results)) {
+                    $results = array_reverse($results);
+                    $result['data']['results'] = $results;
+                }
+
+                // Count total records for pagination (apply same filters)
                 $countSql = "SELECT COUNT(*) as total FROM PUB.transporte$whereClause";
-                
                 $totalResult = $this->executeCustomQuery($countSql);
 
                 $total = 0;
                 if ($totalResult['success'] && !empty($totalResult['data']['results'])) {
                     $total = $totalResult['data']['results'][0]['total'] ?? 0;
+                }
+
+                // Extract cursor information for next/prev navigation
+                $firstId = !empty($results) ? $results[0]['codtrn'] : null;
+                $currentLastId = !empty($results) ? end($results)['codtrn'] : null;
+
+                // Determine if there are more pages
+                $hasNext = false;
+                $hasPrev = false;
+
+                if ($currentLastId !== null) {
+                    $nextCheckSql = "SELECT TOP 1 codtrn FROM PUB.transporte$whereClause" . ($whereClause ? " AND " : " WHERE ") . "codtrn > " . intval($currentLastId) . " ORDER BY codtrn";
+                    $nextCheck = $this->executeCustomQuery($nextCheckSql);
+                    $hasNext = $nextCheck['success'] && !empty($nextCheck['data']['results']);
+                }
+
+                if ($firstId !== null) {
+                    $prevCheckSql = "SELECT TOP 1 codtrn FROM PUB.transporte$whereClause" . ($whereClause ? " AND " : " WHERE ") . "codtrn < " . intval($firstId) . " ORDER BY codtrn DESC";
+                    $prevCheck = $this->executeCustomQuery($prevCheckSql);
+                    $hasPrev = $prevCheck['success'] && !empty($prevCheck['data']['results']);
                 }
 
                 $lastPage = ceil($total / $perPage);
@@ -240,12 +230,13 @@ class ProgressService
                     'per_page' => $perPage,
                     'total' => $total,
                     'last_page' => $lastPage,
-                    'from' => $offset + 1,
-                    'to' => min($offset + $perPage, $total),
-                    'has_more_pages' => $page < $lastPage
+                    'has_next' => $hasNext,
+                    'has_prev' => $hasPrev,
+                    'next_cursor' => $currentLastId,
+                    'prev_cursor' => $firstId,
+                    'count' => count($results)
                 ];
 
-                // Adicionar informações de filtros aplicados
                 $result['data']['filters_applied'] = $filters;
             }
 
@@ -270,9 +261,19 @@ class ProgressService
     public function getTransporteById($id): array
     {
         try {
+            // CRITICAL SECURITY: Validate and sanitize ID
+            if (!is_numeric($id) || $id < 1) {
+                return [
+                    'success' => false,
+                    'error' => 'ID inválido fornecido'
+                ];
+            }
+
+            $id = (int) $id;  // Force integer casting to prevent SQL injection
+
             Log::info('Buscando transporte por ID', ['id' => $id]);
 
-            $sql = "SELECT codtrn, nomtrn, flgautonomo, natcam, tipcam, codcnpjcpf, numpla, numtel, dddtel, flgati, indcd FROM PUB.transporte WHERE codtrn = $id";
+            $sql = "SELECT codtrn, nomtrn, flgautonomo, natcam, tipcam, codcnpjcpf, numpla, numtel, dddtel, numcel, dddcel, flgati, indcd, desend, numend, cplend, numceptrn, \"e-mail\", numhab, venhab, cathab, datnas FROM PUB.transporte WHERE codtrn = $id";
 
             $result = $this->executeJavaConnector('query', $sql);
             

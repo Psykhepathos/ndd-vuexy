@@ -48,7 +48,8 @@
       "Bash(python:*)",
       "Bash(pnpm run:*)",
       "Bash(timeout 20 pnpm run typecheck)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(npx vue-tsc:*)"
     ],
     "deny": [],
     "ask": []
