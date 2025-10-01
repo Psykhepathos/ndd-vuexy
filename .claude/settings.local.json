@@ -38,7 +38,13 @@
       "Bash(start http://localhost:8002/vale-pedagio)",
       "Read(//c/Users/15857/Downloads/**)",
       "Read(//c/Users/15857/Desktop/NDD/**)",
-      "Bash(tasklist)"
+      "Bash(tasklist)",
+      "Bash(start http://localhost:5174/rotas-semparar)",
+      "Bash(start http://localhost:5176/rotas-semparar)",
+      "Read(//c/Users/15857/Desktop/corporativo/SemParar/**)",
+      "Bash(start http://localhost:8002/rotas-semparar)",
+      "Bash(git log:*)",
+      "Bash(start http://localhost:8002/rotas-semparar/mapa/204)"
     ],
     "deny": [],
     "ask": []

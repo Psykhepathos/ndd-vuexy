@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\RoutingService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Http;
@@ -10,6 +11,65 @@ use Illuminate\Support\Facades\Log;
 
 class RoutingController extends Controller
 {
+    protected RoutingService $routingService;
+
+    public function __construct(RoutingService $routingService)
+    {
+        $this->routingService = $routingService;
+    }
+
+    /**
+     * Calcular rota com múltiplos waypoints usando Google Directions + cache
+     */
+    public function calculateRoute(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'waypoints' => 'required|array|min:2',
+                'waypoints.*.lat' => 'required|numeric',
+                'waypoints.*.lng' => 'required|numeric'
+            ]);
+
+            Log::info('API: Calculando rota com cache', [
+                'waypoints' => count($validated['waypoints'])
+            ]);
+
+            $result = $this->routingService->calculateRoute($validated['waypoints']);
+
+            if (!$result['success']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $result['error'],
+                    'data' => null
+                ], 400);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Rota calculada com sucesso',
+                'data' => $result['data']
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Dados inválidos',
+                'errors' => $e->errors()
+            ], 422);
+
+        } catch (\Exception $e) {
+            Log::error('Erro na API ao calcular rota', [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro interno do servidor',
+                'data' => null
+            ], 500);
+        }
+    }
+
     /**
      * Buscar rota real usando APIs externas via proxy Laravel
      */

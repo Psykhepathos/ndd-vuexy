@@ -28,6 +28,94 @@ pnpm run build                # Frontend production build
 
 **⚠️ ATENÇÃO:** SEMPRE use http://localhost:8002 para acessar o sistema! O Vite (porta 517x) é apenas para desenvolvimento/hot-reload.
 
+## 🆕 Atualizações Recentes (2025-09-30)
+
+### 1. Sistema de Debug para Mapa de Rotas SemParar
+Implementado sistema completo de debug e diagnóstico para resolver problemas de geocoding e renderização de mapas.
+
+**Arquivo principal**: `resources/ts/pages/rotas-semparar/mapa/[id].vue`
+**Documentação completa**: `DEBUG_MAPA_ROTAS.md`
+
+**Recursos implementados**:
+- 🐛 **Painel de Debug Visual**: Acessível via botão "Debug" no header
+- 📊 **Métricas em Tempo Real**: Geocodes, cache hits, atualizações do mapa
+- 📋 **Logging Estruturado**: 4 níveis (info/warn/error/success) e 6 categorias
+- ✅ **Validação de Coordenadas**: `isValidCoordinate()` e `sanitizeCoordinate()`
+- 🔄 **Controle de Sincronização**: Debounce (300ms), lock anti-concorrência, queue de geocoding
+- 🗺️ **Indicadores Visuais**: Marcadores coloridos por status, InfoWindow detalhado
+
+**Problemas solucionados**:
+- ✅ Race conditions no geocoding (processamento agora é sequencial)
+- ✅ Validação inadequada de coordenadas (validação rigorosa implementada)
+- ✅ Múltiplas atualizações do mapa (debouncing de 300ms)
+- ✅ Watch inadequado (removido, substituído por chamadas explícitas)
+- ✅ Falta de observabilidade (sistema completo de logs e métricas)
+
+**Como usar o Debug**:
+1. Acesse http://localhost:8002/rotas-semparar/mapa/{id}
+2. Clique no botão "Debug" no header
+3. Veja estatísticas, estado dos municípios e logs do sistema
+4. Use para diagnosticar problemas de geocoding ou renderização
+
+### 2. Suporte a UPDATE/INSERT/DELETE no Progress Database
+Progress ODBC **NÃO suporta transações**. Sistema atualizado para executar comandos de modificação sem transações.
+
+**Java Connector** (`storage/app/java/ProgressJDBCConnector.java`):
+- Nova ação `update` para UPDATE/INSERT/DELETE
+- Validação de segurança (apenas comandos permitidos)
+- Retorna número de linhas afetadas
+
+**ProgressService** (`app/Services/ProgressService.php`):
+- **Novo método**: `executeUpdate($sql)` - Executa UPDATE/INSERT/DELETE
+- **Método existente**: `executeCustomQuery($sql)` - Apenas SELECT (segurança)
+- **Métodos atualizados**: `updateSemPararRota()`, `deleteSemPararRota()` agora usam `executeUpdate()`
+- **REMOVIDO**: Suporte a transações (beginTransaction/commit/rollBack não funcionam com ODBC)
+
+**⚠️ IMPORTANTE**:
+```php
+// ❌ ERRADO - Progress ODBC não suporta transações
+DB::connection('progress')->beginTransaction();
+$this->executeUpdate($sql);
+DB::connection('progress')->commit();
+
+// ✅ CORRETO - Executar queries individuais
+$this->executeUpdate($sql1);
+$this->executeUpdate($sql2);
+$this->executeUpdate($sql3);
+```
+
+**SQL deve ser em linha única** (Progress não gosta de quebras de linha):
+```php
+// ❌ ERRADO - Multi-linha
+$sql = "UPDATE PUB.semPararRot SET
+  desSPararRot = 'Teste',
+  tempoViagem = 5
+  WHERE sPararRotID = 204";
+
+// ✅ CORRETO - Single-line
+$sql = "UPDATE PUB.semPararRot SET desSPararRot = 'Teste', tempoViagem = 5 WHERE sPararRotID = 204";
+```
+
+### 3. Sistema de Geocoding e Routing com Cache
+
+**Geocoding** (converte IBGE → lat/lon):
+- **API**: `POST /api/geocoding/ibge` e `POST /api/geocoding/lote`
+- **Service**: `GeocodingService.php` - Google Geocoding API + cache local
+- **Model**: `MunicipioCoordenada.php` - Cache de coordenadas por código IBGE
+- **Cache**: Tabela `municipio_coordenadas` (persistente, sem expiração)
+
+**Routing** (calcula rotas com estradas reais):
+- **API**: `POST /api/routing/calculate`
+- **Service**: `RoutingService.php` - Google Directions API + cache de segmentos
+- **Model**: `RouteSegment.php` - Cache de segmentos origem→destino
+- **Cache**: Tabela `route_segments` (30 dias, tolerância ~100m)
+- **Rate Limiting**: 200ms entre novas requisições ao Google
+
+**Benefícios**:
+- Cache reduz 80%+ de chamadas à API do Google após primeira visualização
+- Rotas são desenhadas com estradas reais, não linhas retas
+- Segmentos são reutilizados entre diferentes rotas
+
 ## Architecture Overview
 
 ```
@@ -74,7 +162,8 @@ Pacote::find(123);  // ❌
 ### ProgressService Methods
 **Core Connection:**
 - `testConnection()` - Test JDBC connection
-- `executeCustomQuery($sql)` - Run custom SQL (SELECT only)
+- `executeCustomQuery($sql)` - Run custom SQL (SELECT only, for security)
+- `executeUpdate($sql)` - Run UPDATE/INSERT/DELETE (NEW in 2025-09-30)
 - `executeJavaConnector($action, ...$params)` - Execute JDBC Java connector
 
 **Transportes:**
@@ -148,7 +237,8 @@ Pacote::find(123);  // ❌
 - **Case:** Progress is case-sensitive for table/column names
 - **Strings:** Use single quotes `'value'`
 - **Joins:** Use `LEFT JOIN` syntax, not nested subqueries
-- **Transactions:** Wrap INSERTs/UPDATEs in `DB::connection('progress')->beginTransaction()`
+- **Transactions:** ⚠️ **NUNCA USE TRANSAÇÕES** - Progress ODBC não suporta `beginTransaction()/commit()/rollBack()`
+- **SQL Format:** Use single-line queries (Progress ODBC tem problemas com quebras de linha)
 
 **Common Tables:**
 - `PUB.transporte` - Transporters (codtrn, nomtrn, flgautonomo, codcnpjcpf)

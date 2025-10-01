@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\GeocodingController;
 use App\Http\Controllers\Api\MotoristaController;
 use App\Http\Controllers\Api\PacoteController;
 use App\Http\Controllers\Api\ProgressController;
@@ -50,6 +51,7 @@ Route::middleware('api')->group(function () {
     Route::prefix('routing')->group(function () {
         Route::get('test', [\App\Http\Controllers\Api\RoutingController::class, 'testConnection']);
         Route::post('route', [\App\Http\Controllers\Api\RoutingController::class, 'getRoute']);
+        Route::post('calculate', [\App\Http\Controllers\Api\RoutingController::class, 'calculateRoute']);
     });
     
     // Rotas para monitoramento Google Maps
@@ -80,5 +82,11 @@ Route::middleware('api')->group(function () {
         Route::put('/{id}', [SemPararRotaController::class, 'update']);
         Route::put('/{id}/municipios', [SemPararRotaController::class, 'updateMunicipios']);
         Route::delete('/{id}', [SemPararRotaController::class, 'destroy']);
+    });
+
+    // Rotas para geocoding (conversão IBGE → lat/lon com cache)
+    Route::prefix('geocoding')->group(function () {
+        Route::post('ibge', [GeocodingController::class, 'getCoordenadasByIbge']);
+        Route::post('lote', [GeocodingController::class, 'getCoordenadasLote']);
     });
 });

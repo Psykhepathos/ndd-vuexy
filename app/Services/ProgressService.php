@@ -616,6 +616,45 @@ class ProgressService
     }
 
     /**
+     * Executa UPDATE, INSERT ou DELETE no banco Progress
+     */
+    public function executeUpdate(string $sql): array
+    {
+        try {
+            Log::info('Executando comando UPDATE/INSERT/DELETE', ['sql' => $sql]);
+
+            // Validar que é um comando permitido
+            $sql_upper = strtoupper(trim($sql));
+            if (!str_starts_with($sql_upper, 'UPDATE') &&
+                !str_starts_with($sql_upper, 'INSERT') &&
+                !str_starts_with($sql_upper, 'DELETE')) {
+                throw new Exception('Apenas comandos UPDATE, INSERT e DELETE são permitidos');
+            }
+
+            $result = $this->executeJavaConnector('update', $sql);
+
+            if ($result['success']) {
+                Log::info('Comando executado com sucesso', [
+                    'affected_rows' => $result['data']['affected_rows'] ?? 0
+                ]);
+            }
+
+            return $result;
+
+        } catch (Exception $e) {
+            Log::error('Erro na execução do comando SQL', [
+                'sql' => $sql,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao executar comando: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
      * Executa o conector JDBC Java
      */
     public function executeJavaConnector(string $action, ...$params): array
@@ -652,8 +691,11 @@ class ProgressService
 
             // Adicionar parâmetros extras se fornecidos
             foreach ($params as $param) {
-                // Para SQL queries, não usar escapeshellarg que remove % e outros caracteres
-                if ($action === 'query' && str_contains(strtoupper($param), 'SELECT')) {
+                // Para SQL queries/updates, não usar escapeshellarg que remove % e outros caracteres
+                if (($action === 'query' && str_contains(strtoupper($param), 'SELECT')) ||
+                    ($action === 'update' && (str_contains(strtoupper($param), 'UPDATE') ||
+                                             str_contains(strtoupper($param), 'INSERT') ||
+                                             str_contains(strtoupper($param), 'DELETE')))) {
                     // Escapar aspas duplas mas preservar % e outros caracteres SQL
                     $escapedParam = '"' . str_replace('"', '\\"', (string)$param) . '"';
                     $cmdParts[] = $escapedParam;
@@ -1196,19 +1238,10 @@ class ProgressService
         try {
             Log::info('Atualizando rota SemParar', ['rota_id' => $rotaId, 'data' => $data]);
 
-            DB::connection('progress')->beginTransaction();
+            // Atualizar rota principal (single line for Progress DB)
+            $updateRotaSql = "UPDATE PUB.semPararRot SET desSPararRot = '" . addslashes($data['nome']) . "', tempoViagem = " . intval($data['tempo_viagem'] ?? 5) . ", flgCD = " . ($data['flg_cd'] ? '1' : '0') . ", flgRetorno = " . ($data['flg_retorno'] ? '1' : '0') . ", datAtu = '" . date('Y-m-d') . "', resAtu = '" . (auth()->user()->name ?? 'system') . "' WHERE sPararRotID = " . intval($rotaId);
 
-            // Atualizar rota principal
-            $updateRotaSql = "UPDATE PUB.semPararRot SET
-                desSPararRot = '" . addslashes($data['nome']) . "',
-                tempoViagem = " . intval($data['tempo_viagem'] ?? 5) . ",
-                flgCD = " . ($data['flg_cd'] ? '1' : '0') . ",
-                flgRetorno = " . ($data['flg_retorno'] ? '1' : '0') . ",
-                datAtu = '" . date('Y-m-d') . "',
-                resAtu = '" . (auth()->user()->name ?? 'system') . "'
-                WHERE sPararRotID = " . intval($rotaId);
-
-            $updateResult = $this->executeCustomQuery($updateRotaSql);
+            $updateResult = $this->executeUpdate($updateRotaSql);
 
             if (!$updateResult['success']) {
                 throw new Exception('Erro ao atualizar rota principal');
@@ -1216,30 +1249,19 @@ class ProgressService
 
             // Remover municípios existentes
             $deleteMunSql = "DELETE FROM PUB.semPararRotMu WHERE sPararRotID = " . intval($rotaId);
-            $this->executeCustomQuery($deleteMunSql);
+            $this->executeUpdate($deleteMunSql);
 
             // Inserir novos municípios
             if (!empty($data['municipios'])) {
                 foreach ($data['municipios'] as $index => $municipio) {
-                    $insertMunSql = "INSERT INTO PUB.semPararRotMu
-                        (sPararRotID, sPararMuSeq, codEst, codMun, desEst, desMun, cdibge)
-                        VALUES
-                        (" . intval($rotaId) . ",
-                         " . ($index + 1) . ",
-                         " . intval($municipio['cod_est']) . ",
-                         " . intval($municipio['cod_mun']) . ",
-                         '" . addslashes($municipio['des_est']) . "',
-                         '" . addslashes($municipio['des_mun']) . "',
-                         " . intval($municipio['cdibge']) . ")";
+                    $insertMunSql = "INSERT INTO PUB.semPararRotMu (sPararRotID, sPararMuSeq, codEst, codMun, desEst, desMun, cdibge) VALUES (" . intval($rotaId) . ", " . ($index + 1) . ", " . intval($municipio['cod_est']) . ", " . intval($municipio['cod_mun']) . ", '" . addslashes($municipio['des_est']) . "', '" . addslashes($municipio['des_mun']) . "', " . intval($municipio['cdibge']) . ")";
 
-                    $munResult = $this->executeCustomQuery($insertMunSql);
+                    $munResult = $this->executeUpdate($insertMunSql);
                     if (!$munResult['success']) {
                         throw new Exception('Erro ao inserir município: ' . $municipio['des_mun']);
                     }
                 }
             }
-
-            DB::connection('progress')->commit();
 
             return [
                 'success' => true,
@@ -1247,8 +1269,6 @@ class ProgressService
             ];
 
         } catch (Exception $e) {
-            DB::connection('progress')->rollBack();
-
             Log::error('Erro ao atualizar rota SemParar', [
                 'rota_id' => $rotaId,
                 'data' => $data,
@@ -1270,21 +1290,17 @@ class ProgressService
         try {
             Log::info('Removendo rota SemParar', ['rota_id' => $rotaId]);
 
-            DB::connection('progress')->beginTransaction();
-
             // Remover municípios da rota
             $deleteMunSql = "DELETE FROM PUB.semPararRotMu WHERE sPararRotID = " . intval($rotaId);
-            $this->executeCustomQuery($deleteMunSql);
+            $this->executeUpdate($deleteMunSql);
 
             // Remover rota principal
             $deleteRotaSql = "DELETE FROM PUB.semPararRot WHERE sPararRotID = " . intval($rotaId);
-            $deleteResult = $this->executeCustomQuery($deleteRotaSql);
+            $deleteResult = $this->executeUpdate($deleteRotaSql);
 
             if (!$deleteResult['success']) {
                 throw new Exception('Erro ao remover rota principal');
             }
-
-            DB::connection('progress')->commit();
 
             return [
                 'success' => true,
@@ -1292,8 +1308,6 @@ class ProgressService
             ];
 
         } catch (Exception $e) {
-            DB::connection('progress')->rollBack();
-
             Log::error('Erro ao remover rota SemParar', [
                 'rota_id' => $rotaId,
                 'error' => $e->getMessage()
@@ -1314,17 +1328,7 @@ class ProgressService
         try {
             Log::info('Buscando municípios para autocomplete', ['search' => $search, 'estado_id' => $estadoId]);
 
-            $sql = "SELECT TOP 20
-                        m.codmun,
-                        m.codest,
-                        m.desmun,
-                        m.cdibge,
-                        e.nomest as nomeestado,
-                        m.lat,
-                        m.lon
-                    FROM PUB.municipio m
-                    INNER JOIN PUB.estado e ON m.codest = e.codest
-                    WHERE 1=1";
+            $sql = "SELECT TOP 20 m.codmun, m.codest, m.desmun, m.cdibge, e.sigest as desest FROM PUB.municipio m INNER JOIN PUB.estado e ON m.codest = e.codest WHERE 1=1";
 
             if (!empty($search)) {
                 $searchUpper = strtoupper($search);
@@ -1430,11 +1434,12 @@ class ProgressService
 
             $rota = $resultRota['data']['results'][0];
 
-            // Buscar municípios da rota (sem JOIN por limitação do Progress JDBC)
-            $sqlMunicipios = "SELECT sPararMuSeq, CodMun, CodEst, DesMun, DesEst, cdibge " .
-                             "FROM PUB.semPararRotMu " .
-                             "WHERE sPararRotID = " . intval($id) . " " .
-                             "ORDER BY sPararMuSeq";
+            // Buscar municípios da rota com sigla do estado
+            $sqlMunicipios = "SELECT m.sPararMuSeq, m.CodMun, m.CodEst, m.DesMun, e.sigest as desest, m.cdibge " .
+                             "FROM PUB.semPararRotMu m " .
+                             "INNER JOIN PUB.estado e ON m.CodEst = e.codest " .
+                             "WHERE m.sPararRotID = " . intval($id) . " " .
+                             "ORDER BY m.sPararMuSeq";
 
             $resultMunicipios = $this->executeCustomQuery($sqlMunicipios);
 
