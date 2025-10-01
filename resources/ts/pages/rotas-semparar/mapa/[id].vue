@@ -2,6 +2,8 @@
 import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import draggable from 'vuedraggable'
+import { usePackageSimulation } from '@/composables/usePackageSimulation'
+import { API_ENDPOINTS, apiFetch } from '@/config/api'
 
 // Interfaces
 interface SemPararRota {
@@ -26,6 +28,7 @@ interface RotaMunicipio {
   geocodingStatus?: 'pending' | 'loading' | 'success' | 'error'
   geocodingError?: string
 }
+
 
 // Sistema de Debug e Logging
 interface DebugLog {
@@ -106,6 +109,25 @@ const isUpdatingMap = ref(false)
 const updateMapDebounceTimer = ref<number | null>(null)
 const geocodingQueue = ref<Set<number>>(new Set()) // Track municípios being geocoded
 
+// Sistema de Simulação de Entregas (Composable)
+const {
+  loadingPacotes,
+  pacotesOptions,
+  selectedPacote,
+  searchPacote,
+  entregas,
+  simulationActive,
+  loadingSimulation,
+  hasSimulation,
+  totalEntregas,
+  entregasComGps,
+  fetchPacotesAutocomplete,
+  startSimulation,
+  stopSimulation,
+  createCombinedMarkers,
+  createCombinedWaypoints,
+} = usePackageSimulation()
+
 // Validação de coordenadas
 const isValidCoordinate = (lat?: number, lon?: number): boolean => {
   if (lat === undefined || lon === undefined) return false
@@ -143,13 +165,7 @@ const fetchRota = async () => {
   loading.value = true
 
   try {
-    const response = await fetch(`http://localhost:8002/api/semparar-rotas/${rotaId.value}/municipios`, {
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      }
-    })
+    const response = await apiFetch(API_ENDPOINTS.semPararRotaMunicipios(rotaId.value))
 
     const data = await response.json()
 
@@ -191,13 +207,7 @@ const fetchMunicipios = async (search: string = '') => {
       search: search
     })
 
-    const response = await fetch(`http://localhost:8002/api/semparar-rotas/municipios?${params}`, {
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      }
-    })
+    const response = await apiFetch(`${API_ENDPOINTS.municipios}?${params}`)
 
     const data = await response.json()
 
@@ -459,23 +469,19 @@ const updateMapMarkersInternal = async () => {
 }
 
 // Calcular e desenhar rota usando Google Directions API com cache
-const calculateAndDrawRoute = async (waypoints: google.maps.LatLngLiteral[], bounds: google.maps.LatLngBounds) => {
+const calculateAndDrawRoute = async (waypoints: google.maps.LatLngLiteral[], bounds: google.maps.LatLngBounds, customColor?: string) => {
   const startTime = performance.now()
 
   try {
     addDebugLog('info', 'ROUTING', `Solicitando cálculo de rota`, {
       waypoints: waypoints.length,
       primeiroPonto: waypoints[0],
-      ultimoPonto: waypoints[waypoints.length - 1]
+      ultimoPonto: waypoints[waypoints.length - 1],
+      customColor: customColor || 'default'
     })
 
-    const response = await fetch('http://localhost:8002/api/routing/calculate', {
+    const response = await apiFetch(API_ENDPOINTS.routingCalculate, {
       method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      },
       body: JSON.stringify({
         waypoints: waypoints.map(w => ({ lat: w.lat, lng: w.lng }))
       })
@@ -512,10 +518,18 @@ const calculateAndDrawRoute = async (waypoints: google.maps.LatLngLiteral[], bou
       }
 
       // Desenhar polyline com a rota real
+      // Cor: customColor (simulação) > editMode (laranja) > padrão (azul)
+      let polylineColor = '#1976d2' // Azul padrão
+      if (customColor) {
+        polylineColor = customColor // Cor customizada (simulação)
+      } else if (editMode.value) {
+        polylineColor = '#ff9800' // Laranja (modo edição)
+      }
+
       polyline.value = new google.maps.Polyline({
         path: allCoords,
         geodesic: false,
-        strokeColor: editMode.value ? '#ff9800' : '#1976d2',
+        strokeColor: polylineColor,
         strokeOpacity: 0.8,
         strokeWeight: 4
       })
@@ -584,13 +598,8 @@ const geocodeByIBGE = async (municipio: RotaMunicipio): Promise<{lat: number, lo
       estado: nomeEstado
     })
 
-    const response = await fetch('http://localhost:8002/api/geocoding/lote', {
+    const response = await apiFetch(API_ENDPOINTS.geocodingLote, {
       method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      },
       body: JSON.stringify({
         municipios: [{
           cdibge: codigoIBGE,
@@ -758,13 +767,8 @@ const salvarAlteracoes = async () => {
       }))
     }
 
-    const response = await fetch(`http://localhost:8002/api/semparar-rotas/${rotaId.value}`, {
+    const response = await apiFetch(API_ENDPOINTS.semPararRota(rotaId.value), {
       method: 'PUT',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      },
       body: JSON.stringify(payload)
     })
 
@@ -835,6 +839,168 @@ const loadGoogleMaps = (): Promise<void> => {
     script.onerror = () => reject(new Error('Erro ao carregar Google Maps'))
     document.head.appendChild(script)
   })
+}
+
+// ===================================
+// FUNÇÕES DE SIMULAÇÃO
+// ===================================
+
+// Função para atualizar mapa com simulação ativa
+const updateMapWithSimulation = async () => {
+  if (!map.value) return
+
+  addDebugLog('info', 'SIMULATION', 'Atualizando mapa com simulação ativa', {
+    totalMunicipios: municipios.value.length,
+    totalEntregas: entregas.value.length
+  })
+
+  // Limpar marcadores e polyline existentes
+  markers.value.forEach(marker => marker.setMap(null))
+  markers.value = []
+  if (polyline.value) {
+    polyline.value.setMap(null)
+    polyline.value = null
+  }
+
+  const bounds = new google.maps.LatLngBounds()
+  const allWaypoints: google.maps.LatLngLiteral[] = []
+
+  // 1. Processar municípios da rota SemParar (azul)
+  const validMunicipios = municipios.value.filter(m => isValidCoordinate(m.lat, m.lon))
+
+  validMunicipios.forEach((municipio, index) => {
+    const position = { lat: Number(municipio.lat), lng: Number(municipio.lon) }
+    allWaypoints.push(position)
+    bounds.extend(position)
+
+    // Marcador azul para rota base
+    const marker = new google.maps.Marker({
+      position,
+      map: map.value!,
+      title: `Rota ${municipio.spararmuseq}: ${municipio.desmun}`,
+      label: {
+        text: String(municipio.spararmuseq),
+        color: 'white',
+        fontSize: '12px',
+        fontWeight: 'bold'
+      },
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 12,
+        fillColor: '#2196F3', // Azul para rota
+        fillOpacity: 1,
+        strokeColor: 'white',
+        strokeWeight: 2
+      },
+      zIndex: 1000 + index // Rota: z-index crescente (1000, 1001, 1002...)
+    })
+
+    const infoWindow = new google.maps.InfoWindow({
+      content: `
+        <div style="padding: 8px; font-family: sans-serif;">
+          <h6 style="margin: 0 0 8px 0; color: #2196F3;"><strong>🗺️ Rota SemParar ${municipio.spararmuseq}</strong></h6>
+          <p style="margin: 2px 0; font-size: 13px;"><strong>${municipio.desmun} - ${municipio.desest}</strong></p>
+          <p style="margin: 2px 0; font-size: 12px; color: #666;">IBGE: ${municipio.cdibge}</p>
+          <p style="margin: 2px 0; font-size: 12px; color: #666;">Lat: ${municipio.lat?.toFixed(6)}, Lon: ${municipio.lon?.toFixed(6)}</p>
+        </div>
+      `
+    })
+
+    marker.addListener('click', () => infoWindow.open(map.value!, marker))
+    markers.value.push(marker)
+  })
+
+  // 2. Processar entregas do pacote (laranja/verde/vermelho)
+  entregas.value.forEach((entrega, index) => {
+    const position = { lat: Number(entrega.lat), lng: Number(entrega.lon) }
+    allWaypoints.push(position)
+    bounds.extend(position)
+
+    // Cor baseada na posição
+    let fillColor = '#FF9800' // Laranja padrão
+    if (index === 0) fillColor = '#4CAF50' // Verde primeira
+    if (index === entregas.value.length - 1) fillColor = '#F44336' // Vermelho última
+
+    const markerLabel = validMunicipios.length + index + 1
+
+    const marker = new google.maps.Marker({
+      position,
+      map: map.value!,
+      title: `Entrega ${entrega.seqent}: ${entrega.razcli}`,
+      label: {
+        text: String(markerLabel),
+        color: 'white',
+        fontSize: '12px',
+        fontWeight: 'bold'
+      },
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 12,
+        fillColor,
+        fillOpacity: 1,
+        strokeColor: 'white',
+        strokeWeight: 2
+      },
+      zIndex: 2000 + index // Entregas: z-index alto e crescente (2000, 2001, 2002...)
+    })
+
+    const infoWindow = new google.maps.InfoWindow({
+      content: `
+        <div style="padding: 8px; font-family: sans-serif; min-width: 200px;">
+          <h6 style="margin: 0 0 8px 0; color: ${fillColor};"><strong>📦 Entrega ${entrega.seqent}</strong></h6>
+          <p style="margin: 2px 0; font-size: 13px;"><strong>${entrega.razcli}</strong></p>
+          <p style="margin: 2px 0; font-size: 12px; color: #666;">Cliente: ${entrega.codcli}</p>
+          <hr style="margin: 8px 0; border: none; border-top: 1px solid #ddd;">
+          <p style="margin: 2px 0; font-size: 12px;">📍 ${entrega.desend}</p>
+          <p style="margin: 2px 0; font-size: 12px;">${entrega.desbai}, ${entrega.desmun} - ${entrega.uf}</p>
+          <hr style="margin: 8px 0; border: none; border-top: 1px solid #ddd;">
+          <p style="margin: 2px 0; font-size: 12px;">💰 Valor: R$ ${entrega.valnot?.toFixed(2)}</p>
+          <p style="margin: 2px 0; font-size: 12px;">⚖️ Peso: ${entrega.peso?.toFixed(1)} kg</p>
+          <p style="margin: 2px 0; font-size: 12px;">📐 Volume: ${entrega.volume?.toFixed(2)} m³</p>
+        </div>
+      `
+    })
+
+    marker.addListener('click', () => infoWindow.open(map.value!, marker))
+    markers.value.push(marker)
+  })
+
+  addDebugLog('success', 'SIMULATION', 'Marcadores criados', {
+    rota: validMunicipios.length,
+    entregas: entregas.value.length,
+    total: markers.value.length
+  })
+
+  // 3. Calcular rota combinada (rota + entregas) com cor magenta/rosa vibrante
+  if (allWaypoints.length > 1) {
+    addDebugLog('info', 'SIMULATION', `Calculando rota combinada com ${allWaypoints.length} pontos`)
+    await calculateAndDrawRoute(allWaypoints, bounds, '#E91E63') // Magenta/Pink vibrante para simulação
+  } else {
+    map.value.fitBounds(bounds)
+  }
+}
+
+// Handler para iniciar simulação
+const handleSimulate = async () => {
+  if (!selectedPacote.value) return
+
+  addDebugLog('info', 'SIMULATION', 'Iniciando simulação', selectedPacote.value)
+
+  const success = await startSimulation()
+
+  if (success) {
+    addDebugLog('success', 'SIMULATION', `Simulação iniciada: ${totalEntregas.value} entregas carregadas`)
+    await updateMapWithSimulation()
+  } else {
+    addDebugLog('error', 'SIMULATION', 'Falha ao iniciar simulação')
+  }
+}
+
+// Handler para parar simulação
+const handleStopSimulation = async () => {
+  addDebugLog('info', 'SIMULATION', 'Parando simulação')
+  stopSimulation()
+  await updateMapMarkers(true) // Voltar para visualização normal
 }
 
 // Lifecycle
@@ -1273,17 +1439,78 @@ onMounted(async () => {
       <!-- Coluna Direita: Mapa -->
       <VCol cols="12" md="8">
         <VCard class="h-100">
-          <VCardTitle>
-            <VIcon icon="tabler-map-2" class="me-2" />
-            Visualização no Mapa
-            <VChip
-              v-if="editMode"
-              color="warning"
-              size="small"
-              class="ms-2"
-            >
-              Modo Edição
-            </VChip>
+          <VCardTitle class="d-flex align-center flex-wrap gap-3">
+            <div class="d-flex align-center">
+              <VIcon icon="tabler-map-2" class="me-2" />
+              Visualização no Mapa
+              <VChip
+                v-if="editMode"
+                color="warning"
+                size="small"
+                class="ms-2"
+              >
+                Modo Edição
+              </VChip>
+              <VChip
+                v-if="simulationActive"
+                color="success"
+                size="small"
+                class="ms-2"
+              >
+                <VIcon icon="tabler-route" size="16" class="me-1" />
+                Simulação Ativa
+              </VChip>
+            </div>
+
+            <VSpacer />
+
+            <!-- Autocomplete de Pacotes + Botão Simular -->
+            <div v-if="!editMode" class="d-flex align-center gap-2" style="min-width: 350px;">
+              <VAutocomplete
+                v-model="selectedPacote"
+                v-model:search="searchPacote"
+                :items="pacotesOptions"
+                :loading="loadingPacotes"
+                item-title="label"
+                item-value="codpac"
+                return-object
+                placeholder="Buscar pacote..."
+                density="compact"
+                variant="outlined"
+                clearable
+                hide-no-data
+                hide-details
+                :disabled="simulationActive"
+                @update:search="fetchPacotesAutocomplete"
+                style="flex: 1; min-width: 220px;"
+              >
+                <template #prepend-inner>
+                  <VIcon icon="tabler-package" size="20" />
+                </template>
+              </VAutocomplete>
+
+              <VBtn
+                v-if="!simulationActive"
+                color="success"
+                :disabled="!selectedPacote || loadingSimulation"
+                :loading="loadingSimulation"
+                @click="handleSimulate"
+                size="small"
+              >
+                <VIcon icon="tabler-route" class="me-1" />
+                Simular
+              </VBtn>
+
+              <VBtn
+                v-else
+                color="error"
+                @click="handleStopSimulation"
+                size="small"
+              >
+                <VIcon icon="tabler-square" class="me-1" />
+                Parar
+              </VBtn>
+            </div>
           </VCardTitle>
           <VCardText class="pa-0">
             <div
@@ -1305,6 +1532,7 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+
 
 <style scoped>
 .cursor-move {

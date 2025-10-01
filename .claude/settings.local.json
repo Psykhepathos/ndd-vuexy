@@ -44,7 +44,11 @@
       "Read(//c/Users/15857/Desktop/corporativo/SemParar/**)",
       "Bash(start http://localhost:8002/rotas-semparar)",
       "Bash(git log:*)",
-      "Bash(start http://localhost:8002/rotas-semparar/mapa/204)"
+      "Bash(start http://localhost:8002/rotas-semparar/mapa/204)",
+      "Bash(python:*)",
+      "Bash(pnpm run:*)",
+      "Bash(timeout 20 pnpm run typecheck)",
+      "Bash(powershell:*)"
     ],
     "deny": [],
     "ask": []

@@ -133,6 +133,79 @@ class PacoteController extends Controller
     }
 
     /**
+     * Autocomplete de pacotes para busca rápida
+     */
+    public function autocomplete(Request $request): JsonResponse
+    {
+        $request->validate([
+            'search' => 'nullable|string|max:50'
+        ]);
+
+        $search = $request->get('search', '');
+
+        try {
+            // Buscar pacotes que contenham o código digitado
+            $sql = "SELECT TOP 20 p.codpac, p.codrot, p.datforpac, p.sitpac, p.nroped, t.nomtrn FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn WHERE 1=1";
+
+            if (!empty($search)) {
+                // Se for número, buscar por código exato ou range
+                if (is_numeric($search)) {
+                    $searchInt = (int)$search;
+                    $nextInt = $searchInt + 1;
+
+                    // Usar range para simular LIKE em integer
+                    // Ex: search=304 -> codpac >= 304 AND codpac < 305
+                    $multiplier = pow(10, 7 - strlen($search)); // Ajustar para tamanho do código
+                    $rangeStart = $searchInt * $multiplier;
+                    $rangeEnd = $nextInt * $multiplier;
+
+                    $sql .= " AND p.codpac >= " . $rangeStart . " AND p.codpac < " . $rangeEnd;
+                }
+            }
+
+            $sql .= " ORDER BY p.datforpac DESC, p.codpac DESC";
+
+            $result = $this->progressService->executeCustomQuery($sql);
+
+            if (!$result['success']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Erro ao buscar pacotes: ' . ($result['error'] ?? 'Erro desconhecido'),
+                    'data' => []
+                ], 500);
+            }
+
+            $pacotes = $result['data']['results'] ?? [];
+
+            // Formatar para autocomplete
+            $formatted = array_map(function($pacote) {
+                return [
+                    'codpac' => (int)$pacote['codpac'],
+                    'codrot' => $pacote['codrot'] ?? 'N/D',
+                    'datforpac' => $pacote['datforpac'] ?? '',
+                    'sitpac' => $pacote['sitpac'] ?? '',
+                    'nroped' => (int)($pacote['nroped'] ?? 0),
+                    'nomtrn' => $pacote['nomtrn'] ?? 'N/D',
+                    'label' => '#' . $pacote['codpac'] . ' - ' . ($pacote['codrot'] ?? 'N/D') . ' - ' . ($pacote['nomtrn'] ?? 'N/D') . ' (' . ($pacote['nroped'] ?? 0) . ' entregas)'
+                ];
+            }, $pacotes);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Pacotes encontrados',
+                'data' => $formatted
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao buscar pacotes: ' . $e->getMessage(),
+                'data' => []
+            ], 500);
+        }
+    }
+
+    /**
      * Obtém estatísticas dos pacotes
      */
     public function statistics(): JsonResponse
@@ -146,12 +219,12 @@ class PacoteController extends Controller
                 'volume_total' => 0,
                 'pedidos_total' => 0
             ];
-            
+
             // Query para estatísticas básicas
             $sql = "SELECT COUNT(*) as total, SUM(valpac) as valor_total, SUM(pespac) as peso_total, SUM(volpac) as volume_total, SUM(nroped) as pedidos_total FROM PUB.pacote WHERE datforpac >= '2024-01-01'";
-            
+
             $result = $this->progressService->executeCustomQuery($sql);
-            
+
             if ($result['success'] && !empty($result['data']['results'])) {
                 $dados = $result['data']['results'][0];
                 $stats['total'] = (int)$dados['total'];
@@ -164,7 +237,7 @@ class PacoteController extends Controller
             // Query para situações
             $sqlSituacao = "SELECT sitpac, COUNT(*) as quantidade FROM PUB.pacote WHERE datforpac >= '2024-01-01' GROUP BY sitpac";
             $resultSituacao = $this->progressService->executeCustomQuery($sqlSituacao);
-            
+
             if ($resultSituacao['success'] && !empty($resultSituacao['data']['results'])) {
                 foreach ($resultSituacao['data']['results'] as $situacao) {
                     $stats['por_situacao'][] = [
@@ -173,13 +246,13 @@ class PacoteController extends Controller
                     ];
                 }
             }
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Estatísticas obtidas com sucesso',
                 'data' => $stats
             ]);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
