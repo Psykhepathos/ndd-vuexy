@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { API_ENDPOINTS, apiFetch } from '@/config/api'
 
 // Interface para tipagem
 interface RotaSemParar {
@@ -142,13 +143,7 @@ const fetchRotas = async () => {
       params.append('flg_retorno', 'false')
     }
 
-    const response = await fetch(`http://localhost:8002/api/semparar-rotas?${params}`, {
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      }
-    })
+    const response = await apiFetch(`${API_ENDPOINTS.semPararRotas}?${params}`)
 
     const data = await response.json()
 
@@ -185,8 +180,21 @@ const updateOptions = () => {
   fetchRotas()
 }
 
+// Debounce timer
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
 // Watchers
-watch([searchQuery, selectedTipo, selectedRetorno], () => {
+watch(searchQuery, () => {
+  // Debounce de 500ms para searchQuery para evitar chamadas excessivas à API
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => {
+    page.value = 1
+    fetchRotas()
+  }, 500)
+})
+
+// Filtros trigger direto (sem debounce)
+watch([selectedTipo, selectedRetorno], () => {
   page.value = 1
   fetchRotas()
 })
@@ -206,13 +214,8 @@ const deleteRoute = async (item: RotaSemParar) => {
   }
 
   try {
-    const response = await fetch(`http://localhost:8002/api/semparar-rotas/${item.spararrotid}`, {
-      method: 'DELETE',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      }
+    const response = await apiFetch(API_ENDPOINTS.semPararRota(item.spararrotid), {
+      method: 'DELETE'
     })
 
     const data = await response.json()

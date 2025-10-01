@@ -1,0 +1,47 @@
+IMPORTANTE: Adicionar essa seção após "NEVER USE ELOQUENT FOR PROGRESS JDBC"
+
+### **When to Use Eloquent**
+
+**✅ USE Eloquent for:**
+- SQLite cache tables (municipio_coordenadas, route_segments)
+- Laravel internal tables (users, sessions, jobs, etc)
+- MySQL/PostgreSQL if you add them
+
+```php
+// ✅ CORRECT - Eloquent for SQLite cache
+$coords = MunicipioCoordenada::where('cdibge', $codigoIBGE)->first();
+$cached = RouteSegment::where('origin_lat', $lat)
+                      ->where('origin_lng', $lng)
+                      ->first();
+$user = User::find($userId);
+
+// ✅ CORRECT - Eloquent for Laravel migrations
+Schema::create('municipio_coordenadas', function (Blueprint $table) {
+    $table->id();
+    $table->integer('cdibge')->unique();
+    $table->decimal('latitude', 10, 8);
+    $table->decimal('longitude', 11, 8);
+});
+```
+
+**❌ NEVER use Eloquent for:**
+- Progress JDBC tables (PUB.transporte, PUB.pacote, etc)
+- Any table in the 'progress' connection
+
+```php
+// ❌ WRONG - This won't work
+namespace App\Models;
+
+class Pacote extends Model {
+    protected $connection = 'progress';
+    protected $table = 'PUB.pacote';
+}
+
+$pacote = Pacote::find(123);  // Will fail!
+```
+
+**Why?** Progress uses JDBC (not standard SQL driver), Eloquent expects PDO/standard drivers.
+
+**Summary:**
+- **Progress tables** → Raw JDBC via ProgressService
+- **Laravel tables** → Eloquent ORM ✅

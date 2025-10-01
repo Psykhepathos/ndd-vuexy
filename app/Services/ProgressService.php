@@ -9,6 +9,24 @@ use Exception;
 class ProgressService
 {
     /**
+     * Escapa string para uso seguro em queries SQL
+     * Protege contra SQL injection
+     *
+     * @param string $value Valor a ser escapado
+     * @return string Valor escapado e entre aspas simples
+     */
+    protected function escapeSqlString(string $value): string
+    {
+        // Escapar aspas simples duplicando-as (padrão SQL)
+        $escaped = str_replace("'", "''", $value);
+
+        // Remover caracteres perigosos
+        $escaped = preg_replace('/[;\x00-\x08\x0B-\x0C\x0E-\x1F]/', '', $escaped);
+
+        return "'" . $escaped . "'";
+    }
+
+    /**
      * Testa a conexão com o banco Progress via JDBC
      */
     public function testConnection(): array
@@ -152,9 +170,9 @@ class ProgressService
             if (!empty($search)) {
                 $searchTerm = trim($search);
                 if (is_numeric($searchTerm)) {
-                    $whereConditions[] = "codtrn = $searchTerm";
+                    $whereConditions[] = "codtrn = " . intval($searchTerm);
                 } else {
-                    $whereConditions[] = "UPPER(nomtrn) LIKE '%" . strtoupper($searchTerm) . "%'";
+                    $whereConditions[] = "UPPER(nomtrn) LIKE " . $this->escapeSqlString('%' . strtoupper($searchTerm) . '%');
                 }
             }
             
@@ -326,12 +344,13 @@ class ProgressService
 
             // Filtro por busca geral (código do pacote ou nome do transportador)
             if (!empty($search)) {
-                $whereConditions[] = "(p.codpac LIKE '%$search%' OR UPPER(t.nomtrn) LIKE '%". strtoupper($search) ."%')";
+                $searchEscaped = $this->escapeSqlString('%' . strtoupper($search) . '%');
+                $whereConditions[] = "(p.codpac LIKE " . $this->escapeSqlString('%' . $search . '%') . " OR UPPER(t.nomtrn) LIKE " . $searchEscaped . ")";
             }
 
             // Filtro por transportador (nome)
             if (!empty($transportador)) {
-                $whereConditions[] = "UPPER(t.nomtrn) LIKE '%". strtoupper($transportador) ."%'";
+                $whereConditions[] = "UPPER(t.nomtrn) LIKE " . $this->escapeSqlString('%' . strtoupper($transportador) . '%');
             }
 
             // Filtro por código do transportador
@@ -341,7 +360,7 @@ class ProgressService
 
             // Filtro por rota
             if (!empty($rota)) {
-                $whereConditions[] = "p.codrot LIKE '%$rota%'";
+                $whereConditions[] = "p.codrot LIKE " . $this->escapeSqlString('%' . $rota . '%');
             }
 
             // Filtro por situação
@@ -819,19 +838,19 @@ class ProgressService
         $conditions = [];
 
         if (!empty($filters['codigo'])) {
-            $conditions[] = "codtrn LIKE '%" . addslashes($filters['codigo']) . "%'";
+            $conditions[] = "codtrn LIKE " . $this->escapeSqlString('%' . $filters['codigo'] . '%');
         }
 
         if (!empty($filters['nome'])) {
-            $conditions[] = "nomtrn LIKE '%" . addslashes($filters['nome']) . "%'";
+            $conditions[] = "nomtrn LIKE " . $this->escapeSqlString('%' . $filters['nome'] . '%');
         }
 
         if (!empty($filters['data_inicio'])) {
-            $conditions[] = "data_criacao >= '" . addslashes($filters['data_inicio']) . "'";
+            $conditions[] = "data_criacao >= " . $this->escapeSqlString($filters['data_inicio']);
         }
 
         if (!empty($filters['data_fim'])) {
-            $conditions[] = "data_criacao <= '" . addslashes($filters['data_fim']) . "'";
+            $conditions[] = "data_criacao <= " . $this->escapeSqlString($filters['data_fim']);
         }
 
         return implode(' AND ', $conditions);
@@ -911,12 +930,13 @@ class ProgressService
             Log::info('Buscando rotas via JDBC', ['search' => $search]);
             
             $sql = "SELECT codrot, desrot FROM PUB.introt";
-            
+
             if (!empty($search)) {
                 $searchUpper = strtoupper($search);
-                $sql .= " WHERE UPPER(codrot) LIKE '%" . $searchUpper . "%' OR UPPER(desrot) LIKE '%" . $searchUpper . "%'";
+                $searchEscaped = $this->escapeSqlString('%' . $searchUpper . '%');
+                $sql .= " WHERE UPPER(codrot) LIKE " . $searchEscaped . " OR UPPER(desrot) LIKE " . $searchEscaped;
             }
-            
+
             $sql .= " ORDER BY codrot";
             
             $result = $this->executeCustomQuery($sql);
@@ -992,53 +1012,55 @@ class ProgressService
             $offset = ($page - 1) * $perPage;
 
             // Query simples para buscar dados
-            $sql = "SELECT * FROM PUB.semPararRot WHERE 1=1";
+            // Query com subquery correlacionada para evitar N+1 - uma única query busca tudo
+            $sql = "SELECT r.*, (SELECT COUNT(*) FROM PUB.semPararRotMu m WHERE m.sPararRotID = r.sPararRotID) as totalmunicipios FROM PUB.semPararRot r WHERE 1=1";
 
             // Aplicar filtros
             if (!empty($search)) {
                 $searchUpper = strtoupper($search);
-                $sql .= " AND (UPPER(desSPararRot) LIKE '%" . $searchUpper . "%' OR sPararRotID = " . intval($search) . ")";
+                $searchEscaped = $this->escapeSqlString('%' . $searchUpper . '%');
+                $sql .= " AND (UPPER(r.desSPararRot) LIKE " . $searchEscaped . " OR r.sPararRotID = " . intval($search) . ")";
             }
 
             if (!empty($codigo)) {
-                $sql .= " AND sPararRotID = " . intval($codigo);
+                $sql .= " AND r.sPararRotID = " . intval($codigo);
             }
 
             if (!empty($descricao)) {
                 $descricaoUpper = strtoupper($descricao);
-                $sql .= " AND UPPER(desSPararRot) LIKE '%" . $descricaoUpper . "%'";
+                $sql .= " AND UPPER(r.desSPararRot) LIKE " . $this->escapeSqlString('%' . $descricaoUpper . '%');
             }
 
             // Filtro flgCD - suporta true (apenas CD) e false (apenas não-CD)
             if ($flgCD === 'true' || $flgCD === true || $flgCD === '1') {
-                $sql .= " AND flgCD = 1";
+                $sql .= " AND r.flgCD = 1";
             } elseif ($flgCD === 'false' || $flgCD === false || $flgCD === '0') {
-                $sql .= " AND flgCD = 0";
+                $sql .= " AND r.flgCD = 0";
             }
 
             // Filtro retorno
             if ($flgRetorno === 'true') {
-                $sql .= " AND flgRetorno = 1";
+                $sql .= " AND r.flgRetorno = 1";
             } elseif ($flgRetorno === 'false') {
-                $sql .= " AND flgRetorno = 0";
+                $sql .= " AND r.flgRetorno = 0";
             }
 
             // Filtros de tempo
             if (!empty($tempoMinimo)) {
-                $sql .= " AND tempoViagem >= " . intval($tempoMinimo);
+                $sql .= " AND r.tempoViagem >= " . intval($tempoMinimo);
             }
 
             if (!empty($tempoMaximo)) {
-                $sql .= " AND tempoViagem <= " . intval($tempoMaximo);
+                $sql .= " AND r.tempoViagem <= " . intval($tempoMaximo);
             }
 
-            // Contar total antes da paginação
-            $countSql = str_replace("*", "COUNT(*) as total", $sql);
+            // Contar total antes da paginação (substituir a subquery por COUNT)
+            $countSql = str_replace("r.*, (SELECT COUNT(*) FROM PUB.semPararRotMu m WHERE m.sPararRotID = r.sPararRotID) as totalmunicipios", "COUNT(*) as total", $sql);
             $countResult = $this->executeCustomQuery($countSql);
             $total = $countResult['success'] ? ($countResult['data']['results'][0]['total'] ?? 0) : 0;
 
             // Aplicar ordenação
-            $sql .= " ORDER BY sPararRotID DESC";
+            $sql .= " ORDER BY r.sPararRotID DESC";
 
             Log::info('Query SemPararRot:', ['sql' => $sql]);
 
@@ -1053,13 +1075,6 @@ class ProgressService
                     'total_results' => count($allResults),
                     'paginated_results' => count($results)
                 ]);
-
-                // Adicionar contagem de municípios para cada rota (simplificado)
-                foreach ($results as &$rota) {
-                    $municipiosSql = "SELECT COUNT(*) as total FROM PUB.semPararRotMu WHERE sPararRotID = " . $rota['spararrotid'];
-                    $munResult = $this->executeCustomQuery($municipiosSql);
-                    $rota['totalmunicipios'] = $munResult['success'] ? ($munResult['data']['results'][0]['total'] ?? 0) : 0;
-                }
 
                 return [
                     'success' => true,
@@ -1156,7 +1171,8 @@ class ProgressService
         try {
             Log::info('Criando nova rota SemParar', ['data' => $data]);
 
-            DB::connection('progress')->beginTransaction();
+            // NOTA: Progress ODBC não suporta transações via beginTransaction/commit
+            // Cada query é executada imediatamente (auto-commit)
 
             // Obter próximo ID usando MAX + 1 (compatível com Progress)
             $nextIdSql = "SELECT MAX(sPararRotID) + 1 as nextId FROM PUB.semPararRot";
@@ -1173,12 +1189,12 @@ class ProgressService
                 (sPararRotID, desSPararRot, tempoViagem, flgCD, flgRetorno, datAtu, resAtu)
                 VALUES
                 (" . $nextId . ",
-                 '" . addslashes($data['nome']) . "',
+                 " . $this->escapeSqlString($data['nome']) . ",
                  " . intval($data['tempo_viagem'] ?? 5) . ",
                  " . ($data['flg_cd'] ? '1' : '0') . ",
                  " . ($data['flg_retorno'] ? '1' : '0') . ",
                  '" . date('Y-m-d') . "',
-                 '" . (auth()->user()->name ?? 'system') . "')";
+                 " . $this->escapeSqlString(auth()->user()->name ?? 'system') . ")";
 
             $insertResult = $this->executeCustomQuery($insertRotaSql);
 
@@ -1196,8 +1212,8 @@ class ProgressService
                          " . ($index + 1) . ",
                          " . intval($municipio['cod_est']) . ",
                          " . intval($municipio['cod_mun']) . ",
-                         '" . addslashes($municipio['des_est']) . "',
-                         '" . addslashes($municipio['des_mun']) . "',
+                         " . $this->escapeSqlString($municipio['des_est']) . ",
+                         " . $this->escapeSqlString($municipio['des_mun']) . ",
                          " . intval($municipio['cdibge']) . ")";
 
                     $munResult = $this->executeCustomQuery($insertMunSql);
@@ -1207,8 +1223,6 @@ class ProgressService
                 }
             }
 
-            DB::connection('progress')->commit();
-
             return [
                 'success' => true,
                 'data' => ['id' => $nextId],
@@ -1216,7 +1230,8 @@ class ProgressService
             ];
 
         } catch (Exception $e) {
-            DB::connection('progress')->rollBack();
+            // NOTA: Sem rollBack pois Progress ODBC não suporta transações
+            // As queries já executadas permanecerão no banco
 
             Log::error('Erro ao criar rota SemParar', [
                 'data' => $data,
@@ -1239,7 +1254,7 @@ class ProgressService
             Log::info('Atualizando rota SemParar', ['rota_id' => $rotaId, 'data' => $data]);
 
             // Atualizar rota principal (single line for Progress DB)
-            $updateRotaSql = "UPDATE PUB.semPararRot SET desSPararRot = '" . addslashes($data['nome']) . "', tempoViagem = " . intval($data['tempo_viagem'] ?? 5) . ", flgCD = " . ($data['flg_cd'] ? '1' : '0') . ", flgRetorno = " . ($data['flg_retorno'] ? '1' : '0') . ", datAtu = '" . date('Y-m-d') . "', resAtu = '" . (auth()->user()->name ?? 'system') . "' WHERE sPararRotID = " . intval($rotaId);
+            $updateRotaSql = "UPDATE PUB.semPararRot SET desSPararRot = " . $this->escapeSqlString($data['nome']) . ", tempoViagem = " . intval($data['tempo_viagem'] ?? 5) . ", flgCD = " . ($data['flg_cd'] ? '1' : '0') . ", flgRetorno = " . ($data['flg_retorno'] ? '1' : '0') . ", datAtu = '" . date('Y-m-d') . "', resAtu = " . $this->escapeSqlString(auth()->user()->name ?? 'system') . " WHERE sPararRotID = " . intval($rotaId);
 
             $updateResult = $this->executeUpdate($updateRotaSql);
 
@@ -1254,7 +1269,7 @@ class ProgressService
             // Inserir novos municípios
             if (!empty($data['municipios'])) {
                 foreach ($data['municipios'] as $index => $municipio) {
-                    $insertMunSql = "INSERT INTO PUB.semPararRotMu (sPararRotID, sPararMuSeq, codEst, codMun, desEst, desMun, cdibge) VALUES (" . intval($rotaId) . ", " . ($index + 1) . ", " . intval($municipio['cod_est']) . ", " . intval($municipio['cod_mun']) . ", '" . addslashes($municipio['des_est']) . "', '" . addslashes($municipio['des_mun']) . "', " . intval($municipio['cdibge']) . ")";
+                    $insertMunSql = "INSERT INTO PUB.semPararRotMu (sPararRotID, sPararMuSeq, codEst, codMun, desEst, desMun, cdibge) VALUES (" . intval($rotaId) . ", " . ($index + 1) . ", " . intval($municipio['cod_est']) . ", " . intval($municipio['cod_mun']) . ", " . $this->escapeSqlString($municipio['des_est']) . ", " . $this->escapeSqlString($municipio['des_mun']) . ", " . intval($municipio['cdibge']) . ")";
 
                     $munResult = $this->executeUpdate($insertMunSql);
                     if (!$munResult['success']) {
@@ -1332,7 +1347,7 @@ class ProgressService
 
             if (!empty($search)) {
                 $searchUpper = strtoupper($search);
-                $sql .= " AND UPPER(m.desmun) LIKE '%" . $searchUpper . "%'";
+                $sql .= " AND UPPER(m.desmun) LIKE " . $this->escapeSqlString('%' . $searchUpper . '%');
             }
 
             if ($estadoId !== null) {

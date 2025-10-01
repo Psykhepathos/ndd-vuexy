@@ -58,7 +58,7 @@ Implementado sistema completo de debug e diagnóstico para resolver problemas de
 4. Use para diagnosticar problemas de geocoding ou renderização
 
 ### 2. Suporte a UPDATE/INSERT/DELETE no Progress Database
-Progress ODBC **NÃO suporta transações**. Sistema atualizado para executar comandos de modificação sem transações.
+Progress JDBC **NÃO suporta transações**. Sistema atualizado para executar comandos de modificação sem transações.
 
 **Java Connector** (`storage/app/java/ProgressJDBCConnector.java`):
 - Nova ação `update` para UPDATE/INSERT/DELETE
@@ -73,7 +73,7 @@ Progress ODBC **NÃO suporta transações**. Sistema atualizado para executar co
 
 **⚠️ IMPORTANTE**:
 ```php
-// ❌ ERRADO - Progress ODBC não suporta transações
+// ❌ ERRADO - Progress JDBC não suporta transações
 DB::connection('progress')->beginTransaction();
 $this->executeUpdate($sql);
 DB::connection('progress')->commit();
@@ -142,15 +142,24 @@ Vue/Vuexy ← REST API → Laravel ← ODBC → Progress Database
 - Theme classes: `text-high-emphasis`, `text-medium-emphasis`
 
 ### 2. Progress Database Access
-**ALWAYS use JDBC direct connection, NOT Eloquent:**
+**ALWAYS use JDBC direct connection, NOT Eloquent for Progress tables:**
 ```php
-// CORRECT - Direct JDBC
+// ✅ CORRECT - Direct JDBC for Progress tables
 DB::connection('progress')->select('SELECT * FROM PUB.pacote WHERE codpac = ?', [$id]);
 $this->progressService->executeCustomQuery($sql);
 
-// WRONG - Never use Eloquent models
-Pacote::find(123);  // ❌
+// ❌ WRONG - Never use Eloquent for Progress tables
+Pacote::find(123);  // Won't work with JDBC!
+
+// ✅ CORRECT - Eloquent CAN be used for Laravel internal tables (SQLite, MySQL)
+$coords = MunicipioCoordenada::where('cdibge', $codigoIBGE)->first();  // Cache table (SQLite)
+$user = User::find($userId);  // Laravel users table
+$segment = RouteSegment::where('origin_lat', $lat)->first();  // Cache table (SQLite)
 ```
+
+**Summary:**
+- **Progress tables (PUB.*)** → Raw JDBC via ProgressService ✅
+- **Laravel tables (users, cache, etc)** → Eloquent ORM ✅
 
 ### 3. Git Commits
 - **NEVER** mention Claude, AI, or use emojis in commits
@@ -237,8 +246,8 @@ Pacote::find(123);  // ❌
 - **Case:** Progress is case-sensitive for table/column names
 - **Strings:** Use single quotes `'value'`
 - **Joins:** Use `LEFT JOIN` syntax, not nested subqueries
-- **Transactions:** ⚠️ **NUNCA USE TRANSAÇÕES** - Progress ODBC não suporta `beginTransaction()/commit()/rollBack()`
-- **SQL Format:** Use single-line queries (Progress ODBC tem problemas com quebras de linha)
+- **Transactions:** ⚠️ **NUNCA USE TRANSAÇÕES** - Progress JDBC não suporta `beginTransaction()/commit()/rollBack()`
+- **SQL Format:** Use single-line queries (Progress JDBC tem problemas com quebras de linha)
 
 **Common Tables:**
 - `PUB.transporte` - Transporters (codtrn, nomtrn, flgautonomo, codcnpjcpf)

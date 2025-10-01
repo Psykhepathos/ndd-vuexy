@@ -41,6 +41,7 @@ Route::middleware('api')->group(function () {
 
     // Rotas para PacoteController (JDBC Progress)
     Route::get('pacotes/statistics', [PacoteController::class, 'statistics']);
+    Route::get('pacotes/autocomplete', [PacoteController::class, 'autocomplete']);
     Route::post('pacotes/itinerario', [PacoteController::class, 'itinerario']);
     Route::apiResource('pacotes', PacoteController::class)->only(['index', 'show']);
 
