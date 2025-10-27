@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\OSRMController;
 use App\Http\Controllers\Api\PacoteController;
 use App\Http\Controllers\Api\ProgressController;
 use App\Http\Controllers\Api\RotaController;
+use App\Http\Controllers\Api\SemPararController;
 use App\Http\Controllers\Api\SemPararRotaController;
 use App\Http\Controllers\Api\TransporteController;
 use Illuminate\Http\Request;
@@ -110,6 +111,27 @@ Route::middleware('api')->group(function () {
 
     // Proxy OSRM (roteamento gratuito)
     Route::post('osrm/route', [OSRMController::class, 'getRoute']);
+
+    // Rotas para SemParar SOAP API (FASE 1A + 1B)
+    Route::prefix('semparar')->group(function () {
+        // FASE 1A - Core
+        Route::get('test-connection', [SemPararController::class, 'testConnection'])
+            ->middleware('throttle:10,1');  // 10 requests per minute
+        Route::post('status-veiculo', [SemPararController::class, 'statusVeiculo'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        // FASE 1B - Routing
+        Route::post('roteirizar', [SemPararController::class, 'roteirizar'])
+            ->middleware('throttle:20,1');  // 20 requests per minute
+        Route::post('rota-temporaria', [SemPararController::class, 'cadastrarRotaTemporaria'])
+            ->middleware('throttle:20,1');  // 20 requests per minute
+        Route::post('custo-rota', [SemPararController::class, 'obterCustoRota'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        // Debug endpoints (only available in APP_DEBUG=true)
+        Route::get('debug/token', [SemPararController::class, 'debugToken']);
+        Route::post('debug/clear-cache', [SemPararController::class, 'clearCache']);
+    });
 
     // ⚠️ Compra de Viagem SemParar - MODO DE TESTE ATIVO ⚠️
     // IMPORTANTE: Todas as chamadas estão em modo simulação para evitar compras acidentais

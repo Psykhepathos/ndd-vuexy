@@ -30,6 +30,38 @@ pnpm run build                # Frontend production build
 
 ## 🆕 Atualizações Recentes
 
+### ✅ FASE 1A: SemParar SOAP Core - COMPLETA (2025-10-27)
+
+**Status:** Integração SOAP base com SemParar API está funcional
+
+**Implementado:**
+- ✅ Cliente SOAP com TLS 1.2/1.3 (`app/Services/SemParar/SemPararSoapClient.php`)
+- ✅ Autenticação com cache de token de 1 hora
+- ✅ Verificação de status de veículo
+- ✅ Endpoints REST de teste (`/api/semparar/*`)
+- ✅ Rate limiting configurado
+
+**Teste rápido:**
+```bash
+curl http://localhost:8002/api/semparar/test-connection
+# Deve retornar: {"success": true, "token_length": 19, ...}
+```
+
+**⚠️ Descoberta importante:**
+```php
+// ❌ ERRADO - Causa "Array to string conversion"
+$client->__soapCall('autenticarUsuario', [['cnpj' => $x, 'login' => $y, 'senha' => $z]]);
+
+// ✅ CORRETO - Parâmetros posicionais
+$client->autenticarUsuario($cnpj, $user, $password);
+// Retorna: stdClass { sessao: "3642419762017373443", status: 0 }
+```
+
+**Documentação completa:** `CHECKPOINT_FASE_1A.md`
+**Próxima fase:** FASE 1B - Roteirização e rotas temporárias
+
+---
+
 ### 🗺️ MIGRAÇÃO: Google Maps → Leaflet + OpenStreetMap + OSRM (100% GRATUITO!)
 
 **Data:** 2025-10-21 (Atualizado: 2025-10-27)
