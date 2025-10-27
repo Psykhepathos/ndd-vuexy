@@ -58,7 +58,79 @@ $client->autenticarUsuario($cnpj, $user, $password);
 ```
 
 **Documentação completa:** `CHECKPOINT_FASE_1A.md`
-**Próxima fase:** FASE 1B - Roteirização e rotas temporárias
+
+---
+
+### ✅ FASE 1B: SemParar SOAP Routing - COMPLETA (2025-10-27)
+
+**Status:** Roteirização de praças de pedágio funcional
+
+**Implementado:**
+- ✅ XML Builder para datasets Progress (`app/Services/SemParar/XmlBuilders/PontosParadaBuilder.php`)
+- ✅ `roteirizarPracasPedagio()` - Calcula praças de pedágio em rota
+- ✅ `cadastrarRotaTemporaria()` - Cadastra rota temporária
+- ✅ `obterCustoRota()` - Calcula custo total
+- ✅ Endpoints REST + interface de teste
+
+**Bug Crítico Resolvido:**
+```php
+// ❌ ERRADO - PHP SoapClient envia XML vazio
+$client->roteirizarPracasPedagio($pontosXml, $opcoesXml, $token);
+
+// ✅ CORRETO - Usar SoapVar com XSD_ANYXML
+$pontosParam = new \SoapVar($pontosXml, XSD_ANYXML);
+$opcoesParam = new \SoapVar($opcoesXml, XSD_ANYXML);
+$client->roteirizarPracasPedagio($pontosParam, $opcoesParam, $token);
+```
+
+**Testes bem-sucedidos:**
+- Rota SP→RJ: **6 praças** encontradas
+- Rota 183 + Pacote 3043368 (19 pontos): **12 praças** encontradas
+
+**Documentação:** `SEMPARAR_FASE1B_COMPLETO.md`
+
+---
+
+### ✅ FASE 2A: SemParar Trip Purchase - COMPLETA (2025-10-27)
+
+**Status:** Compra de viagens SemParar funcional
+
+**Implementado:**
+- ✅ `comprarViagem()` no SemPararService (105 linhas)
+- ✅ Endpoint REST `POST /api/semparar/comprar-viagem`
+- ✅ Validação de dados de compra
+- ✅ Interface de teste com confirmação
+
+**Fluxo completo:**
+1. Roteirizar praças → 2. Cadastrar rota temporária → 3. Obter custo → 4. **Comprar viagem**
+
+**Endpoint:**
+```bash
+POST /api/semparar/comprar-viagem
+{
+  "nome_rota": "TESTE_SP_RJ",
+  "placa": "ABC1234",
+  "eixos": 2,
+  "data_inicio": "2025-10-27",
+  "data_fim": "2025-10-27",
+  "item_fin1": "PEDAGIO"
+}
+
+# Response:
+{
+  "success": true,
+  "data": {
+    "cod_viagem": "123456789",
+    "status": 0
+  }
+}
+```
+
+**⚠️ ATENÇÃO:** Esta operação EFETIVA a compra no SemParar! Use com cuidado.
+
+**Página de teste:** http://localhost:8002/test-semparar-fase1b.html
+
+**Próxima fase:** FASE 2B - Integração com Progress (salvar viagens no banco)
 
 ---
 

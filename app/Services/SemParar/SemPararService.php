@@ -385,4 +385,110 @@ class SemPararService
             ];
         }
     }
+
+    /**
+     * Comprar viagem (efetivar compra no SemParar)
+     *
+     * Based on Rota.cls::compraViagem() (line 247-273)
+     * Progress code:
+     *   RUN VALUE("comprarViagem") IN hPorta(
+     *     INPUT rota, INPUT placa, INPUT nEixos,
+     *     INPUT inicioVigenciaStr, INPUT fimVigenciaStr,
+     *     INPUT itemFin1, INPUT "", INPUT "",
+     *     INPUT cToken, OUTPUT xml
+     *   )
+     *
+     * WSDL: Viagem comprarViagem(string $nomeRota, string $placa, int $nEixos,
+     *                             date $inicioVigencia, date $fimVigencia,
+     *                             string $itemFin1, string $itemFin2, string $itemFin3,
+     *                             long $sessao)
+     *
+     * @param string $nomeRota Route name (from cadastrarRotaTemporaria)
+     * @param string $placa License plate
+     * @param int $eixos Number of axles
+     * @param string $dataInicio Start date (Y-m-d)
+     * @param string $dataFim End date (Y-m-d)
+     * @param string $itemFin1 Financial item 1 (category code)
+     * @param string $itemFin2 Financial item 2 (optional)
+     * @param string $itemFin3 Financial item 3 (optional)
+     * @return array Result with 'cod_viagem' (trip code) and status
+     * @throws Exception if SOAP call fails
+     */
+    public function comprarViagem(
+        string $nomeRota,
+        string $placa,
+        int $eixos,
+        string $dataInicio,
+        string $dataFim,
+        string $itemFin1 = '',
+        string $itemFin2 = '',
+        string $itemFin3 = ''
+    ): array {
+        try {
+            Log::info('[SemParar] Comprando viagem', [
+                'nome_rota' => $nomeRota,
+                'placa' => $placa,
+                'eixos' => $eixos,
+                'data_inicio' => $dataInicio,
+                'data_fim' => $dataFim,
+                'item_fin1' => $itemFin1
+            ]);
+
+            // Get token and call directly
+            $soapClient = $this->soapClient->getSoapClient();
+            $token = $this->soapClient->getToken() ?? $this->soapClient->autenticarUsuario();
+
+            // WSDL signature: comprarViagem(nomeRota, placa, nEixos, inicioVigencia, fimVigencia,
+            //                               itemFin1, itemFin2, itemFin3, sessao)
+            $response = $soapClient->comprarViagem(
+                $nomeRota,
+                strtoupper(trim($placa)),
+                $eixos,
+                $dataInicio,
+                $dataFim,
+                $itemFin1,
+                $itemFin2,
+                $itemFin3,
+                $token
+            );
+
+            // Check status
+            $status = $response->status ?? 0;
+            if ($status !== 0) {
+                Log::error('[SemParar] Compra de viagem retornou erro', [
+                    'status' => $status,
+                    'status_mensagem' => $response->statusMensagem ?? null
+                ]);
+
+                throw new Exception("Erro SemParar status {$status}: " . ($response->statusMensagem ?? 'Erro desconhecido'));
+            }
+
+            // Extract trip code from response
+            // Progress extracts: <numero xsi:type="xsd:long">123456</numero>
+            $codViagem = (string)($response->numero ?? '');
+
+            Log::info('[SemParar] Viagem comprada com sucesso', [
+                'cod_viagem' => $codViagem,
+                'status' => $status
+            ]);
+
+            return [
+                'success' => true,
+                'cod_viagem' => $codViagem,
+                'status' => $status
+            ];
+
+        } catch (Exception $e) {
+            Log::error('[SemParar] Erro ao comprar viagem', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'cod_viagem' => null
+            ];
+        }
+    }
 }

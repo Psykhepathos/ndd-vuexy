@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teste SemParar SOAP API - FASE 1B</title>
+    <title>Teste SemParar SOAP API - FASE 1B + 2A</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -98,8 +98,8 @@
 <body>
     <div class="container">
         <div class="card">
-            <h1>🔌 Teste SemParar SOAP API - FASE 1B</h1>
-            <p class="subtitle">Roteirização de Praças de Pedágio</p>
+            <h1>🔌 Teste SemParar SOAP API - FASE 1B + 2A</h1>
+            <p class="subtitle">Roteirização de Praças + Compra de Viagens</p>
 
             <!-- Teste 1: Rota Simples SP-RJ -->
             <div class="test-section">
@@ -141,13 +141,26 @@
                 </button>
                 <div id="resultCusto"></div>
             </div>
+
+            <!-- Teste 5: Comprar Viagem (FASE 2A) -->
+            <div class="test-section">
+                <div class="test-title">Teste 5: Comprar Viagem 🆕 FASE 2A</div>
+                <p style="color: #666; margin-bottom: 15px;">⚠️ ATENÇÃO: Esta operação EFETIVA a compra no SemParar!</p>
+                <input type="text" id="placaCompra" placeholder="Placa (ex: HNE3C80)" maxlength="7" style="width: 200px; padding: 10px; margin-right: 10px;">
+                <input type="text" id="itemFin" placeholder="Item Financeiro (opcional)" style="width: 200px; padding: 10px; margin-right: 10px;">
+                <button onclick="comprarViagem()" style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);">
+                    🛒 COMPRAR VIAGEM
+                </button>
+                <div id="resultCompra"></div>
+            </div>
         </div>
 
         <div class="card" style="background: #f8f9fa;">
-            <h3 style="color: #333; margin-bottom: 10px;">📊 Informações FASE 1B</h3>
+            <h3 style="color: #333; margin-bottom: 10px;">📊 Informações FASE 1B + 2A</h3>
             <ul style="color: #666; line-height: 1.8;">
                 <li><strong>Status FASE 1B:</strong> ✅ Completa e funcional</li>
-                <li><strong>Métodos implementados:</strong> roteirizarPracasPedagio, cadastrarRotaTemporaria, obterCustoRota</li>
+                <li><strong>Status FASE 2A:</strong> ✅ Completa e funcional (comprarViagem)</li>
+                <li><strong>Métodos implementados:</strong> roteirizarPracasPedagio, cadastrarRotaTemporaria, obterCustoRota, comprarViagem</li>
                 <li><strong>XML Builder:</strong> PontosParadaBuilder.php (Progress dataset structure)</li>
                 <li><strong>Fix crítico:</strong> SoapVar com XSD_ANYXML (PHP SoapClient → Progress SOAP)</li>
                 <li><strong>Teste real:</strong> Pacote 3043368 com 15 entregas em Jaboticatubas-MG</li>
@@ -368,8 +381,76 @@
             return html;
         }
 
-        // Auto-uppercase placa input
+        async function comprarViagem() {
+            const result = document.getElementById('resultCompra');
+            const placa = document.getElementById('placaCompra').value.trim().toUpperCase();
+            const itemFin = document.getElementById('itemFin').value.trim();
+
+            if (!placa) {
+                result.className = 'result error';
+                result.innerHTML = '❌ Por favor, informe uma placa';
+                return;
+            }
+
+            if (!lastNomeRota) {
+                result.className = 'result error';
+                result.innerHTML = '❌ Cadastre uma rota temporária primeiro!';
+                return;
+            }
+
+            // Confirm before purchase
+            if (!confirm(`⚠️ ATENÇÃO!\n\nEsta operação irá EFETIVAR a compra no SemParar:\n\n` +
+                        `Rota: ${lastNomeRota}\n` +
+                        `Placa: ${placa}\n` +
+                        `Eixos: 2\n\n` +
+                        `Deseja continuar?`)) {
+                return;
+            }
+
+            result.innerHTML = `⏳ Comprando viagem para ${placa}...`;
+
+            try {
+                const hoje = new Date().toISOString().split('T')[0];
+                const response = await fetch(`${API_BASE}/comprar-viagem`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nome_rota: lastNomeRota,
+                        placa: placa,
+                        eixos: 2,
+                        data_inicio: hoje,
+                        data_fim: hoje,
+                        item_fin1: itemFin || 'PEDAGIO',
+                        item_fin2: '',
+                        item_fin3: ''
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    result.className = 'result success';
+                    result.innerHTML = `✅ VIAGEM COMPRADA COM SUCESSO!\n\n` +
+                        `Rota: ${lastNomeRota}\n` +
+                        `Placa: ${placa}\n` +
+                        `Código da Viagem: ${data.data.cod_viagem}\n` +
+                        `Status: ${data.data.status}\n\n` +
+                        `⚠️ Viagem efetivada no sistema SemParar!`;
+                } else {
+                    result.className = 'result error';
+                    result.innerHTML = `❌ ERRO NA COMPRA:\n\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.innerHTML = `❌ ERRO: ${error.message}`;
+            }
+        }
+
+        // Auto-uppercase placa inputs
         document.getElementById('placaCusto').addEventListener('input', function(e) {
+            e.target.value = e.target.value.toUpperCase();
+        });
+        document.getElementById('placaCompra').addEventListener('input', function(e) {
             e.target.value = e.target.value.toUpperCase();
         });
     </script>

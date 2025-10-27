@@ -264,4 +264,61 @@ class SemPararController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Comprar viagem (efetivar compra)
+     *
+     * POST /api/semparar/comprar-viagem
+     * Body: {
+     *   "nome_rota": "ROTA_TEMP_123456",
+     *   "placa": "ABC1234",
+     *   "eixos": 2,
+     *   "data_inicio": "2025-10-27",
+     *   "data_fim": "2025-11-03",
+     *   "item_fin1": "PEDAGIO",
+     *   "item_fin2": "",
+     *   "item_fin3": ""
+     * }
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function comprarViagem(Request $request): JsonResponse
+    {
+        $request->validate([
+            'nome_rota' => 'required|string',
+            'placa' => 'required|string|min:7|max:8',
+            'eixos' => 'required|integer|min:2|max:9',
+            'data_inicio' => 'required|date',
+            'data_fim' => 'required|date|after_or_equal:data_inicio',
+            'item_fin1' => 'nullable|string|max:50',
+            'item_fin2' => 'nullable|string|max:50',
+            'item_fin3' => 'nullable|string|max:50'
+        ]);
+
+        try {
+            $result = $this->semPararService->comprarViagem(
+                $request->input('nome_rota'),
+                $request->input('placa'),
+                $request->input('eixos'),
+                $request->input('data_inicio'),
+                $request->input('data_fim'),
+                $request->input('item_fin1', ''),
+                $request->input('item_fin2', ''),
+                $request->input('item_fin3', '')
+            );
+
+            return response()->json([
+                'success' => $result['success'],
+                'message' => $result['success'] ? 'Viagem comprada com sucesso' : 'Erro na compra',
+                'data' => $result
+            ], $result['success'] ? 200 : 400);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao comprar viagem',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
