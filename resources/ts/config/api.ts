@@ -42,6 +42,7 @@ export const API_ENDPOINTS = {
   routingCalculate: `${API_BASE_URL}/api/routing/calculate`,
   geocodingIbge: `${API_BASE_URL}/api/geocoding/ibge`,
   geocodingLote: `${API_BASE_URL}/api/geocoding/lote`,
+  osrmRoute: `${API_BASE_URL}/api/osrm/route`,
 
   // Rotas (autocomplete)
   rotas: `${API_BASE_URL}/api/rotas`,
@@ -49,6 +50,20 @@ export const API_ENDPOINTS = {
   // Estados e Municípios
   estados: `${API_BASE_URL}/api/semparar-rotas/estados`,
   municipios: `${API_BASE_URL}/api/semparar-rotas/municipios`,
+
+  // Compra de Viagem (⚠️ MODO DE TESTE - Não faz compras reais)
+  compraViagem: {
+    initialize: `${API_BASE_URL}/api/compra-viagem/initialize`,
+    statistics: `${API_BASE_URL}/api/compra-viagem/statistics`,
+    health: `${API_BASE_URL}/api/compra-viagem/health`,
+    validarPacote: `${API_BASE_URL}/api/compra-viagem/validar-pacote`,
+    validarPlaca: `${API_BASE_URL}/api/compra-viagem/validar-placa`,
+    rotas: `${API_BASE_URL}/api/compra-viagem/rotas`,
+    verificarPreco: `${API_BASE_URL}/api/compra-viagem/verificar-preco`,
+    // TODO: Adicionar endpoints das próximas fases
+    // comprar: `${API_BASE_URL}/api/compra-viagem/comprar`,
+    // gerarRecibo: `${API_BASE_URL}/api/compra-viagem/gerar-recibo`,
+  },
 } as const
 
 // Headers padrão para requisições

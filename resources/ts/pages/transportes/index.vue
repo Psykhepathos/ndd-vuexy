@@ -26,10 +26,10 @@ const search = ref('')
 const totalItems = ref(0)
 const serverItems = ref<Transporte[]>([])
 
-// Filtros - valores padrão sem filtrar nada
+// Filtros - valor padrão: mostrar apenas ativos
 const filtroTipo = ref()
 const filtroNatureza = ref()
-const filtroStatus = ref()
+const filtroStatus = ref('ativo')
 
 // Opções de paginação (padrão Vuexy)
 const options = ref({
@@ -172,7 +172,7 @@ const fetchTransportes = async (direction: 'next' | 'prev' | null = null) => {
       params.append('natureza', filtroNatureza.value)
     }
 
-    if (filtroStatus.value) {
+    if (filtroStatus.value && filtroStatus.value !== 'todos') {
       params.append('status_ativo', filtroStatus.value === 'ativo' ? 'true' : 'false')
     }
 

@@ -151,6 +151,29 @@ class GeocodingService
 
             $coordenadas = $this->getCoordenadasByIbge($codigoIbge, $nomeMunicipio, $uf);
 
+            // Se conseguiu coordenadas e tem cod_mun/cod_est, salvar no cache Progress também
+            if ($coordenadas && isset($municipio['cod_mun']) && isset($municipio['cod_est'])) {
+                \App\Models\ProgressMunicipioGps::findOrCreateByProgress(
+                    intval($municipio['cod_mun']),
+                    intval($municipio['cod_est']),
+                    [
+                        'des_mun' => $nomeMunicipio,
+                        'des_est' => $uf,
+                        'cdibge' => $codigoIbge,
+                        'latitude' => $coordenadas['lat'],
+                        'longitude' => $coordenadas['lon'],
+                        'fonte' => 'google',
+                        'geocoded_at' => now(),
+                    ]
+                );
+
+                Log::info('Coordenadas salvas no cache Progress', [
+                    'cod_mun' => $municipio['cod_mun'],
+                    'cod_est' => $municipio['cod_est'],
+                    'municipio' => $nomeMunicipio
+                ]);
+            }
+
             $resultado[] = [
                 'codigo_ibge' => $codigoIbge,
                 'nome_municipio' => $nomeMunicipio,

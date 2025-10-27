@@ -28,7 +28,72 @@ pnpm run build                # Frontend production build
 
 **⚠️ ATENÇÃO:** SEMPRE use http://localhost:8002 para acessar o sistema! O Vite (porta 517x) é apenas para desenvolvimento/hot-reload.
 
-## 🆕 Atualizações Recentes (2025-09-30)
+## 🆕 Atualizações Recentes
+
+### 🗺️ MIGRAÇÃO: Google Maps → Leaflet + OpenStreetMap + OSRM (100% GRATUITO!)
+
+**Data:** 2025-10-21 (Atualizado: 2025-10-27)
+**Impacto:** Sistema de mapas agora é 100% gratuito, sem dependência de API keys do Google Maps
+
+**O que mudou:**
+- ❌ **REMOVIDO:** Google Maps API (tiles + routing)
+- ✅ **ADICIONADO:** Leaflet.js + OpenStreetMap (tiles gratuitos)
+- ✅ **ADICIONADO:** OSRM OpenStreetMap.de (routing gratuito, sem API key)
+- ✅ **MANTIDO:** Google Geocoding API (apenas para IBGE → coordenadas, com cache agressivo)
+
+**Tecnologias:**
+```typescript
+// Frontend
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
+import 'leaflet-routing-machine'
+import 'leaflet-routing-machine/dist/leaflet-routing-machine.css'
+
+// Mapa
+L.map(container).setView([-14.2350, -51.9253], 4)
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
+
+// Routing GRATUITO
+const osrmRouter = L.Routing.osrmv1({
+  serviceUrl: 'https://routing.openstreetmap.de/routed-car/route/v1',
+  profile: 'driving',
+  timeout: 30000
+})
+```
+
+**Arquivos modificados:**
+- `resources/ts/pages/rotas-semparar/mapa/[id].vue` - Migrado para Leaflet
+- `resources/ts/pages/test-leaflet-pacote.vue` - Teste funcional com pacote real
+
+**Features mantidas:**
+- ✅ Marcadores numerados customizados
+- ✅ Popups com informações
+- ✅ Rotas seguindo estradas reais (não linhas retas)
+- ✅ Geocoding automático
+- ✅ Sistema de debug visual
+- ✅ Simulação de pacotes
+- ✅ Drag & drop de municípios
+- ✅ Fallback para linha reta em caso de erro
+
+**Limitações conhecidas:**
+- ⚠️ OSRM público pode ter downtime ocasional (fallback implementado)
+- ⚠️ Limite de ~25-50 waypoints por rota (limite do OSRM público)
+- ✅ Solução futura: Hospedar OSRM próprio via Docker
+
+**Benefícios:**
+- 💰 **Custo ZERO** - Sem mais custos de Google Maps API
+- 🚀 **Performance** - OpenStreetMap é rápido e confiável
+- 🔓 **Open Source** - Stack 100% open source
+
+**URLs de Teste:**
+- Rota SemParar: http://localhost:8002/rotas-semparar/mapa/204
+- Teste Pacote: http://localhost:8002/test-leaflet-pacote
+
+**Documentação:**
+- Análise completa: `ANALISE_ROTAS_SEMPARAR.md`
+- Debug system: `DEBUG_MAPA_ROTAS.md`
+
+---
 
 ### 1. Sistema de Debug para Mapa de Rotas SemParar
 Implementado sistema completo de debug e diagnóstico para resolver problemas de geocoding e renderização de mapas.
@@ -70,6 +135,10 @@ Progress JDBC **NÃO suporta transações**. Sistema atualizado para executar co
 - **Método existente**: `executeCustomQuery($sql)` - Apenas SELECT (segurança)
 - **Métodos atualizados**: `updateSemPararRota()`, `deleteSemPararRota()` agora usam `executeUpdate()`
 - **REMOVIDO**: Suporte a transações (beginTransaction/commit/rollBack não funcionam com ODBC)
+
+**Outros Services:**
+- **GeocodingService**: Converte códigos IBGE → lat/lon usando Google Geocoding API
+- **RoutingService**: Calcula rotas entre coordenadas usando Google Directions API
 
 **⚠️ IMPORTANTE**:
 ```php
@@ -232,12 +301,22 @@ $segment = RouteSegment::where('origin_lat', $lat)->first();  // Cache table (SQ
 - `GET /api/semparar-rotas/municipios?search={term}` - City autocomplete
 - `GET /api/semparar-rotas/estados` - List states
 
+**Geocoding:**
+- `POST /api/geocoding/ibge` - Get coordinates from single IBGE code
+- `POST /api/geocoding/lote` - Get coordinates from multiple IBGE codes (batch)
+
 **Routing & Maps:**
 - `GET /api/routing/test` - Test routing service
 - `POST /api/routing/route` - Calculate route
+- `POST /api/routing/calculate` - Calculate route with waypoints
 - `POST /api/route-cache/find` - Find cached route
 - `POST /api/route-cache/save` - Save route to cache
 - `GET /api/route-cache/stats` - Cache statistics
+- `DELETE /api/route-cache/clear-expired` - Clear expired cache entries
+
+**Google Maps Quota:**
+- `GET /api/google-maps/quota` - Get current API usage statistics
+- `POST /api/google-maps/reset-counters` - Reset usage counters (admin)
 
 ### Progress SQL Conventions
 - **Schema:** Always use `PUB.tablename` (e.g., `PUB.transporte`, `PUB.pacote`)
@@ -260,36 +339,67 @@ $segment = RouteSegment::where('origin_lat', $lat)->first();  // Cache table (SQ
 - `PUB.municipio` - Cities (codmun, desmun, cdibge)
 - `PUB.estado` - States (codest, nomest, siglaest)
 
+## API Rate Limiting & Security
+
+**Rate limits configured in `routes/api.php`:**
+- **Test endpoints**: 10 req/min (`/api/transportes/test-connection`)
+- **Statistics/Schema**: 10 req/min (expensive queries)
+- **CRUD operations**: 60 req/min (standard operations)
+- **Custom queries**: 5 req/min (admin-only, requires authentication)
+
+**Authentication:**
+- **Public endpoints** (no auth required):
+  - All Progress test connections
+  - Transporter/package listings
+  - Geocoding and routing services
+  - SemParar routes (read-only)
+
+- **Protected endpoints** (require `auth:sanctum`):
+  - `POST /api/transportes/query` - Custom SQL queries (admin-only)
+  - `POST /api/auth/logout`
+  - `GET /api/auth/user`
+
+**Auth flow:**
+1. `POST /api/auth/login` → Returns Sanctum token
+2. Include token in header: `Authorization: Bearer {token}`
+3. `POST /api/auth/logout` when done
+
 ## Project Structure
 
 ```
 ndd-vuexy/
 ├── app/
 │   ├── Http/Controllers/Api/
-│   │   ├── AuthController.php           # Authentication
-│   │   ├── TransporteController.php     # Transporters
-│   │   ├── PacoteController.php         # Packages
-│   │   ├── RotaController.php           # Routes autocomplete
-│   │   ├── SemPararRotaController.php   # SemParar routes CRUD
-│   │   ├── RoutingController.php        # Route calculation proxy
-│   │   └── ProgressController.php       # Raw Progress queries
+│   │   ├── AuthController.php              # Authentication
+│   │   ├── TransporteController.php        # Transporters
+│   │   ├── PacoteController.php            # Packages
+│   │   ├── MotoristaController.php         # Drivers
+│   │   ├── RotaController.php              # Routes autocomplete
+│   │   ├── SemPararRotaController.php      # SemParar routes CRUD
+│   │   ├── GeocodingController.php         # IBGE → lat/lon conversion
+│   │   ├── RoutingController.php           # Route calculation proxy
+│   │   ├── RouteCacheController.php        # Route cache management
+│   │   ├── GoogleMapsQuotaController.php   # API quota monitoring
+│   │   └── ProgressController.php          # Raw Progress queries
 │   └── Services/
-│       └── ProgressService.php          # Main Progress DB service (1500+ lines)
+│       ├── ProgressService.php             # Main Progress DB service (1500+ lines)
+│       ├── GeocodingService.php            # Google Geocoding API integration
+│       └── RoutingService.php              # Google Directions API integration
 ├── resources/ts/
 │   ├── pages/
-│   │   ├── transportes/                 # Transporters module
-│   │   ├── pacotes/                     # Packages module
-│   │   ├── vale-pedagio/                # Toll pass calculator
-│   │   ├── rotas-semparar/              # SemParar routes with map
-│   │   └── apps/                        # Vuexy example pages (reference templates)
-│   ├── @layouts/                        # Layout components
-│   ├── navigation/vertical/ndd.ts       # Left sidebar menu
-│   └── plugins/                         # Vue plugins (router, vuetify, etc)
-├── routes/api.php                       # API routes
+│   │   ├── transportes/                    # Transporters module
+│   │   ├── pacotes/                        # Packages module
+│   │   ├── vale-pedagio/                   # Toll pass calculator
+│   │   ├── rotas-semparar/                 # SemParar routes with map
+│   │   └── apps/                           # Vuexy example pages (reference templates)
+│   ├── @layouts/                           # Layout components
+│   ├── navigation/vertical/ndd.ts          # Left sidebar menu
+│   └── plugins/                            # Vue plugins (router, vuetify, etc)
+├── routes/api.php                          # API routes
 ├── storage/app/java/
-│   ├── ProgressJDBCConnector.java       # JDBC connector for Progress
-│   └── gson-2.8.9.jar                   # JSON library for Java
-└── database/migrations/                 # SQLite migrations (NOT Progress)
+│   ├── ProgressJDBCConnector.java          # JDBC connector for Progress
+│   └── gson-2.8.9.jar                      # JSON library for Java
+└── database/migrations/                    # SQLite migrations (NOT Progress)
 
 ## Development Workflow
 
@@ -337,25 +447,294 @@ PROGRESS_DATABASE=tambasa
 PROGRESS_USERNAME=sysprogress
 PROGRESS_PASSWORD=sysprogress
 
+# Google Maps API (for geocoding and routing)
+GOOGLE_MAPS_API_KEY=your_api_key_here
+
 # API URLs
 LARAVEL_API=http://localhost:8002
 VUE_FRONTEND=http://localhost:5174
 ```
+
+## 🛒 Sistema de Compra de Viagem SemParar (Em Desenvolvimento)
+
+**Visão Geral:**
+Sistema de compra de viagens integrado com API SemParar para gestão de pedágios e rotas de transporte.
+
+**Path:** `resources/ts/pages/compra-viagem/index.vue`
+
+**Funcionalidades Planejadas:**
+1. Validação de pacote e placa
+2. Seleção de rota SemParar (CD ou Retorno)
+3. Roteirização (manual ou automática)
+4. Verificação de preço via API SemParar
+5. Compra de viagem
+6. Geração e envio de recibos
+
+**Tabelas Progress:**
+- `PUB.sPararViagem` - Viagens compradas
+- `PUB.semPararRotMuLog` - Log de roteirizações
+- `PUB.trnvei` - Veículos cadastrados
+
+**Documentação:** `COMPRA_VIAGEM_ANALISE.md`
+
+---
+
+## 🗺️ Sistema de Rotas SemParar (Módulo Completo)
+
+**Visão Geral:**
+Sistema de gestão de rotas pré-cadastradas no Progress Database com visualização em mapa interativo (Leaflet + OpenStreetMap) e capacidade de simular entregas reais de pacotes sobre essas rotas.
+
+### Arquitetura
+
+```
+Frontend (Vue)                Backend (Laravel)              Database (Progress)
+┌──────────────┐             ┌──────────────────┐          ┌──────────────────┐
+│ index.vue    │────────────▶│ SemPararRota     │─────────▶│ PUB.semPararRot  │
+│ (Listagem)   │             │ Controller       │          │ (Rotas)          │
+└──────────────┘             └──────────────────┘          └──────────────────┘
+                                      │                              │
+┌──────────────┐                      │                              │
+│ mapa/[id].vue│                      ▼                              ▼
+│ (Visualizar/ │             ┌──────────────────┐          ┌──────────────────┐
+│  Editar)     │────────────▶│ ProgressService  │─────────▶│ PUB.semPararRotMu│
+└──────────────┘             │ (JDBC Connector) │          │ (Municípios)     │
+       │                     └──────────────────┘          └──────────────────┘
+       │
+       ▼
+┌──────────────────┐
+│ usePackage       │
+│ Simulation       │
+│ (Composable)     │
+└──────────────────┘
+       │
+       ▼
+┌──────────────────┐
+│ Leaflet +        │
+│ OpenStreetMap +  │
+│ OSRM Routing     │
+└──────────────────┘
+```
+
+### Componentes Principais
+
+#### 1. **index.vue** - Listagem de Rotas
+**Path:** `resources/ts/pages/rotas-semparar/index.vue`
+
+**Features:**
+- ✅ VDataTableServer com paginação server-side
+- ✅ Filtros tri-state (Tipo: All/CD/Rota, Retorno: All/Sim/Não)
+- ✅ Busca por nome com debounce (500ms)
+- ✅ Estatísticas (total, CDs, rotas com retorno)
+- ✅ Ações: Visualizar, Editar, Deletar
+
+**Endpoints usados:**
+- `GET /api/semparar-rotas?page=1&per_page=10&flg_cd=true`
+
+#### 2. **mapa/[id].vue** - Visualização + Edição + Simulação
+**Path:** `resources/ts/pages/rotas-semparar/mapa/[id].vue`
+
+**Features:**
+- ✅ Mapa interativo Leaflet + OpenStreetMap (100% gratuito)
+- ✅ Marcadores numerados customizados (L.divIcon)
+- ✅ Roteamento real via OSRM (routing.openstreetmap.de)
+- ✅ Geocoding automático (Google API + cache SQLite)
+- ✅ Drag & drop para reordenar municípios (vuedraggable)
+- ✅ Adicionar/remover municípios via autocomplete
+- ✅ Simulação de pacotes sobre a rota
+- ✅ Debug panel com logs e métricas
+
+**Endpoints usados:**
+- `GET /api/semparar-rotas/{id}/municipios`
+- `PUT /api/semparar-rotas/{id}`
+- `PUT /api/semparar-rotas/{id}/municipios`
+- `POST /api/geocoding/lote`
+- `POST /api/pacotes/itinerario`
+
+**Tecnologias de Mapa:**
+```typescript
+// Inicialização
+map = L.map(container).setView([-14.2350, -51.9253], 4)
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
+
+// Routing GRATUITO
+const osrmRouter = L.Routing.osrmv1({
+  serviceUrl: 'https://routing.openstreetmap.de/routed-car/route/v1',
+  profile: 'driving'
+})
+
+// Marcadores customizados
+const icon = L.divIcon({
+  html: `<div style="background: #2196F3; ...">1</div>`
+})
+```
+
+#### 3. **usePackageSimulation.ts** - Composable de Simulação
+**Path:** `resources/ts/composables/usePackageSimulation.ts`
+
+**Responsabilidades:**
+- Autocomplete de pacotes
+- Carregar itinerário de pacote
+- Processar coordenadas GPS do Progress ("230876543" → -23.0876543)
+- Gerenciar estado da simulação
+- Criar marcadores e waypoints combinados (rota + entregas)
+
+**Exemplo de uso:**
+```typescript
+const {
+  selectedPacote,
+  entregas,
+  simulationActive,
+  startSimulation,
+  stopSimulation
+} = usePackageSimulation()
+
+// Iniciar simulação
+await startSimulation()
+// entregas = [{lat: -23.08, lon: -46.01, razcli: "Cliente A", ...}, ...]
+
+// Parar simulação
+stopSimulation()
+```
+
+### Tabelas Progress
+
+#### PUB.semPararRot (Rotas)
+```sql
+CREATE TABLE PUB.semPararRot (
+  sPararRotID INTEGER PRIMARY KEY,
+  desSPararRot VARCHAR(60),     -- Nome da rota
+  tempoViagem INTEGER,          -- Dias de viagem
+  flgCD LOGICAL,                -- É Centro de Distribuição?
+  flgRetorno LOGICAL,           -- Tem retorno?
+  datAtu DATE,                  -- Data última atualização
+  resAtu VARCHAR(15)            -- Responsável atualização
+)
+```
+
+#### PUB.semPararRotMu (Municípios da Rota)
+```sql
+CREATE TABLE PUB.semPararRotMu (
+  sPararRotID INTEGER,          -- FK para semPararRot
+  sPararMuSeq INTEGER,          -- Sequência do município (1, 2, 3...)
+  codMun INTEGER,               -- Código do município
+  codEst INTEGER,               -- Código do estado
+  desMun VARCHAR(60),           -- Nome do município
+  desEst VARCHAR(60),           -- Nome do estado
+  cdibge INTEGER                -- Código IBGE (para geocoding)
+)
+```
+
+### Fluxo de Simulação
+
+```
+1. Usuário seleciona pacote no autocomplete
+   └─▶ POST /api/pacotes/itinerario {codPac: 3043368}
+
+2. Backend retorna pedidos com GPS
+   └─▶ {pedidos: [{gps_lat: "230876543", gps_lon: "460123456", ...}]}
+
+3. Composable processa coordenadas
+   └─▶ processGpsCoordinate("230876543") → -23.0876543
+
+4. Entregas filtradas (apenas com GPS válido)
+   └─▶ entregas: [{lat: -23.08, lon: -46.01, ...}]
+
+5. Mapa atualizado com marcadores combinados
+   └─▶ Azul: Municípios da rota SemParar
+   └─▶ Verde: Primeira entrega
+   └─▶ Laranja: Entregas intermediárias
+   └─▶ Vermelho: Última entrega
+
+6. OSRM calcula rota combinada
+   └─▶ waypoints: [rota1, rota2, ..., entrega1, entrega2, ...]
+   └─▶ Polyline desenhada em rosa (#E91E63)
+```
+
+### Problemas Conhecidos e Soluções
+
+#### ⚠️ CRÍTICO: `updateSemPararRotaMunicipios()` Pode Perder Dados
+
+**Problema:**
+```php
+// Progress JDBC NÃO suporta transações
+DELETE FROM PUB.semPararRotMu WHERE sPararRotID = 204;  // ✅ OK
+// Se falhar aqui, municípios são perdidos!
+INSERT INTO PUB.semPararRotMu VALUES (...);  // ❌ Falha
+```
+
+**Mitigação Atual:**
+- Validação prévia de dados
+- Logging detalhado
+
+**Solução Futura:**
+- Strategy pattern (UPDATE/INSERT/DELETE granular)
+- Validação completa antes de DELETE
+
+#### ⚠️ OSRM Público Pode Falhar
+
+**Problema:** Servidor público pode ter downtime
+
+**Mitigação:**
+```typescript
+.on('routingerror', (e) => {
+  // Fallback: desenhar linha reta tracejada
+  L.polyline(waypoints, {
+    dashArray: '10, 10',
+    opacity: 0.5
+  }).addTo(map)
+})
+```
+
+**Solução Futura:**
+- Hospedar OSRM próprio via Docker
+- Cache de rotas no banco
+
+### URLs Importantes
+
+- **Listagem:** http://localhost:8002/rotas-semparar
+- **Mapa (Rota 204):** http://localhost:8002/rotas-semparar/mapa/204
+- **Teste Pacote:** http://localhost:8002/test-leaflet-pacote
+
+### Documentação Adicional
+
+- **Análise Completa:** `ANALISE_ROTAS_SEMPARAR.md` (arquitetura, problemas, melhorias)
+- **Sistema de Debug:** `DEBUG_MAPA_ROTAS.md` (como usar debug panel)
+
+---
 
 ## Important Notes
 
 - **Repository:** https://github.com/Psykhepathos/ndd-vuexy.git
 - **Old systems (deprecated):** ndd-laravel, ndd-flutter repos
 - **Key features:**
-  - Vale Pedágio: http://localhost:8002/vale-pedagio
-  - Rotas SemParar: http://localhost:8002/rotas-semparar (CRUD + interactive map)
-  - Pacotes: http://localhost:8002/pacotes (package tracking)
+  - Dashboard NDD: http://localhost:8002/ndd-dashboard
   - Transportes: http://localhost:8002/transportes (transporter management)
+  - Pacotes: http://localhost:8002/pacotes (package tracking)
+  - Vale Pedágio: http://localhost:8002/vale-pedagio (toll pass calculator)
+  - Rotas Padrão: http://localhost:8002/rotas-padrao (CRUD + interactive map with Leaflet/OSM)
+  - Compra Viagem: http://localhost:8002/compra-viagem (SemParar trip purchase - in development)
 - **Progress JDBC:** Located in `c:/Progress/OpenEdge/java/openedge.jar`
 - **Java Connector:** Auto-compiled on first use in `storage/app/java/`
 - **Pagination:** Progress lacks OFFSET - use subquery pattern in ProgressService
 - **Always test functionality before committing**
 - **Use Progress API endpoints for schema exploration, not tinker**
+
+## Google Maps Integration
+
+**Cache Strategy:**
+- **Geocoding cache**: SQLite table `municipio_coordenadas` (persistent, no expiration)
+- **Routing cache**: SQLite table `route_segments` (30 days TTL, ~100m tolerance)
+- **Rate limiting**: 200ms delay between new Google API requests
+- **Cache hit rate**: 80%+ after first visualization of routes
+
+**Services:**
+- `GeocodingService` - Converts IBGE codes → lat/lon coordinates
+- `RoutingService` - Calculates real road routes between points
+- Both services use local cache to minimize API calls
+
+**Quota monitoring:**
+- Monitor usage: `GET /api/google-maps/quota`
+- Reset counters: `POST /api/google-maps/reset-counters`
 
 ## Debugging Tips
 

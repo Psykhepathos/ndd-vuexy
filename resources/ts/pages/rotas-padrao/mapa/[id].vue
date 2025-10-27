@@ -4,6 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import draggable from 'vuedraggable'
 import { usePackageSimulation } from '@/composables/usePackageSimulation'
 import { API_ENDPOINTS, apiFetch } from '@/config/api'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
+// @ts-ignore - leaflet-routing-machine doesn't have TypeScript definitions
+import 'leaflet-routing-machine'
+import 'leaflet-routing-machine/dist/leaflet-routing-machine.css'
 
 // Interfaces
 interface SemPararRota {
@@ -98,10 +103,10 @@ const municipios = ref<RotaMunicipio[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const editMode = ref(false)
-const map = ref<google.maps.Map | null>(null)
+const map = ref<L.Map | null>(null)
 const mapContainer = ref<HTMLElement>()
-const markers = ref<google.maps.Marker[]>([])
-const polyline = ref<google.maps.Polyline | null>(null)
+const markers = ref<L.Marker[]>([])
+const routingControl = ref<any>(null)
 const distanciaTotal = ref(0)
 
 // Controle de sincronização
@@ -233,35 +238,26 @@ const fetchMunicipios = async (search: string = '') => {
   }
 }
 
-// Inicializar mapa Google Maps
+// Inicializar mapa Leaflet + OpenStreetMap
 const initMap = async () => {
   console.log('🗺️ initMap() chamado')
   console.log('📦 mapContainer.value:', mapContainer.value)
-  console.log('🌍 google disponível?:', typeof google !== 'undefined')
-  console.log('🗺️ google.maps disponível?:', typeof google !== 'undefined' && typeof google.maps !== 'undefined')
 
   if (!mapContainer.value) {
     console.error('❌ mapContainer não encontrado!')
     return
   }
 
-  // Aguardar Google Maps carregar
-  if (typeof google === 'undefined' || !google.maps) {
-    console.log('⏳ Aguardando Google Maps carregar...')
-    setTimeout(initMap, 500)
-    return
-  }
-
-  console.log('✅ Criando mapa Google Maps...')
+  console.log('✅ Criando mapa Leaflet + OpenStreetMap...')
 
   // Criar mapa centrado no Brasil
-  map.value = new google.maps.Map(mapContainer.value, {
-    center: { lat: -14.2350, lng: -51.9253 },
-    zoom: 4,
-    mapTypeControl: true,
-    streetViewControl: false,
-    fullscreenControl: true
-  })
+  map.value = L.map(mapContainer.value).setView([-14.2350, -51.9253], 4)
+
+  // Adicionar tiles OpenStreetMap
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 19
+  }).addTo(map.value)
 
   console.log('✅ Mapa criado com sucesso!')
 
@@ -310,17 +306,17 @@ const updateMapMarkersInternal = async () => {
 
   try {
     // Limpar marcadores antigos
-    markers.value.forEach(marker => marker.setMap(null))
+    markers.value.forEach(marker => marker.remove())
     markers.value = []
 
-    // Limpar polyline antiga
-    if (polyline.value) {
-      polyline.value.setMap(null)
-      polyline.value = null
+    // Limpar routing control antigo
+    if (routingControl.value) {
+      map.value.removeControl(routingControl.value)
+      routingControl.value = null
     }
 
-    const path: google.maps.LatLngLiteral[] = []
-    const bounds = new google.maps.LatLngBounds()
+    const path: L.LatLngExpression[] = []
+    const bounds: [number, number][] = []
 
     // Verificar se há municípios
     if (municipios.value.length === 0) {
@@ -384,59 +380,64 @@ const updateMapMarkersInternal = async () => {
       }
     }
 
-    // Criar marcadores apenas para municípios com coordenadas válidas
+    // Criar waypoints e marcadores para municípios com coordenadas válidas
     let validMunicipios = 0
+    const waypoints: L.LatLng[] = []
+
     municipios.value.forEach((municipio, index) => {
       if (isValidCoordinate(municipio.lat, municipio.lon)) {
         validMunicipios++
-        const position = { lat: Number(municipio.lat), lng: Number(municipio.lon) }
-        path.push(position)
-        bounds.extend(position)
+        const latLng = L.latLng(Number(municipio.lat), Number(municipio.lon))
+        waypoints.push(latLng)
+        bounds.push([Number(municipio.lat), Number(municipio.lon)])
 
         // Cor do marcador baseado no status
         let fillColor = '#1976d2' // Azul padrão
         if (editMode.value) fillColor = '#ff9800' // Laranja em modo edição
         if (municipio.geocodingStatus === 'error') fillColor = '#f44336' // Vermelho se erro
 
-        // Criar marcador numerado
-        const marker = new google.maps.Marker({
-          position,
-          map: map.value!,
-          title: `${municipio.spararmuseq}. ${municipio.desmun}`,
-          label: {
-            text: String(municipio.spararmuseq),
-            color: 'white',
-            fontSize: '12px',
-            fontWeight: 'bold'
-          },
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 12,
-            fillColor,
-            fillOpacity: 1,
-            strokeColor: 'white',
-            strokeWeight: 2
-          }
-        })
-
-        // InfoWindow com mais informações de debug
-        const infoWindow = new google.maps.InfoWindow({
-          content: `
-            <div style="padding: 8px; font-family: sans-serif;">
-              <h6 style="margin: 0 0 8px 0;"><strong>${municipio.desmun}</strong></h6>
-              <p style="margin: 2px 0; font-size: 13px;">Estado: <strong>${municipio.desest}</strong></p>
-              <p style="margin: 2px 0; font-size: 13px;">Sequência: <strong>${municipio.spararmuseq}</strong></p>
-              <p style="margin: 2px 0; font-size: 13px;">IBGE: <strong>${municipio.cdibge}</strong></p>
-              <p style="margin: 2px 0; font-size: 12px; color: #666;">Lat: ${municipio.lat?.toFixed(6)}</p>
-              <p style="margin: 2px 0; font-size: 12px; color: #666;">Lon: ${municipio.lon?.toFixed(6)}</p>
-              ${municipio.geocodingStatus === 'error' ? `<p style="margin: 4px 0; color: #f44336; font-size: 12px;">⚠️ ${municipio.geocodingError}</p>` : ''}
+        // Criar marcador customizado com número
+        const icon = L.divIcon({
+          className: 'custom-marker',
+          html: `
+            <div style="
+              background-color: ${fillColor};
+              width: 32px;
+              height: 32px;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-weight: bold;
+              font-size: 12px;
+              border: 3px solid white;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            ">
+              ${municipio.spararmuseq}
             </div>
-          `
+          `,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
         })
 
-        marker.addListener('click', () => {
-          infoWindow.open(map.value!, marker)
-        })
+        const marker = L.marker(latLng, {
+          icon,
+          title: `${municipio.spararmuseq}. ${municipio.desmun}`
+        }).addTo(map.value!)
+
+        // Popup com informações
+        marker.bindPopup(`
+          <div style="padding: 8px; font-family: sans-serif; min-width: 200px;">
+            <h6 style="margin: 0 0 8px 0;"><strong>${municipio.desmun}</strong></h6>
+            <p style="margin: 2px 0; font-size: 13px;">Estado: <strong>${municipio.desest}</strong></p>
+            <p style="margin: 2px 0; font-size: 13px;">Sequência: <strong>${municipio.spararmuseq}</strong></p>
+            <p style="margin: 2px 0; font-size: 13px;">IBGE: <strong>${municipio.cdibge}</strong></p>
+            <p style="margin: 2px 0; font-size: 12px; color: #666;">Lat: ${municipio.lat?.toFixed(6)}</p>
+            <p style="margin: 2px 0; font-size: 12px; color: #666;">Lon: ${municipio.lon?.toFixed(6)}</p>
+            ${municipio.geocodingStatus === 'error' ? `<p style="margin: 4px 0; color: #f44336; font-size: 12px;">⚠️ ${municipio.geocodingError}</p>` : ''}
+          </div>
+        `)
 
         markers.value.push(marker)
       }
@@ -448,14 +449,79 @@ const updateMapMarkersInternal = async () => {
       invalidos: municipios.value.length - validMunicipios
     })
 
-    // Calcular rota real usando Google Directions API com cache
-    if (path.length > 1) {
-      addDebugLog('info', 'ROUTING', `Calculando rota com ${path.length} waypoints`)
-      await calculateAndDrawRoute(path, bounds)
-    } else if (path.length === 1) {
+    // Calcular rota real usando OSRM (OpenStreetMap Routing)
+    if (waypoints.length > 1) {
+      addDebugLog('info', 'ROUTING', `Calculando rota com ${waypoints.length} waypoints usando OSRM`)
+
+      // Cor da rota baseado no modo
+      let routeColor = '#2196F3' // Azul padrão
+      if (editMode.value) routeColor = '#FF9800' // Laranja em modo edição
+
+      // Configurar OSRM router (OpenStreetMap.de - 100% GRATUITO)
+      // @ts-ignore
+      const osrmRouter = L.Routing.osrmv1({
+        serviceUrl: 'https://routing.openstreetmap.de/routed-car/route/v1',
+        profile: 'driving',
+        timeout: 30000
+      })
+
+      // @ts-ignore
+      routingControl.value = L.Routing.control({
+        waypoints: waypoints,
+        router: osrmRouter,
+        language: 'pt-BR',
+        draggableWaypoints: false,
+        addWaypoints: false,
+        fitSelectedRoutes: 'smart',
+        lineOptions: {
+          styles: [{
+            color: routeColor,
+            weight: 4,
+            opacity: 0.7
+          }]
+        },
+        routeWhileDragging: false,
+        show: false, // Não mostrar painel de instruções
+        createMarker: () => null // Não criar marcadores adicionais (já temos os nossos)
+      }).on('routesfound', function(e: any) {
+        const route = e.routes[0]
+        const distance = (route.summary.totalDistance / 1000).toFixed(1)
+        const time = Math.round(route.summary.totalTime / 60)
+
+        distanciaTotal.value = parseFloat(distance)
+
+        addDebugLog('success', 'ROUTING', `Rota calculada com OSRM`, {
+          distanciaKm: distance,
+          duracaoMinutos: time,
+          pontosRota: route.coordinates?.length || 0
+        })
+      }).on('routingerror', function(e: any) {
+        addDebugLog('error', 'ROUTING', 'Erro ao calcular rota com OSRM', e)
+
+        // Fallback: desenhar linha reta entre pontos
+        const polylinePoints = waypoints.map(w => [w.lat, w.lng] as L.LatLngExpression)
+        L.polyline(polylinePoints, {
+          color: routeColor,
+          weight: 3,
+          opacity: 0.5,
+          dashArray: '10, 10'
+        }).addTo(map.value!)
+
+        // Calcular distância aproximada
+        let totalDist = 0
+        for (let i = 0; i < waypoints.length - 1; i++) {
+          totalDist += waypoints[i].distanceTo(waypoints[i + 1])
+        }
+        distanciaTotal.value = totalDist / 1000
+      }).addTo(map.value!)
+
+      // Ajustar bounds para mostrar todos os pontos
+      if (bounds.length > 0) {
+        map.value.fitBounds(bounds, { padding: [50, 50] })
+      }
+    } else if (waypoints.length === 1) {
       // Se apenas 1 ponto, centralizar nele
-      map.value.setCenter(path[0])
-      map.value.setZoom(10)
+      map.value.setView([waypoints[0].lat, waypoints[0].lng], 10)
       addDebugLog('warn', 'ROUTING', 'Apenas 1 município válido, não é possível calcular rota')
     } else {
       addDebugLog('error', 'ROUTING', 'Nenhum município com coordenadas válidas')
@@ -468,119 +534,7 @@ const updateMapMarkersInternal = async () => {
   }
 }
 
-// Calcular e desenhar rota usando Google Directions API com cache
-const calculateAndDrawRoute = async (waypoints: google.maps.LatLngLiteral[], bounds: google.maps.LatLngBounds, customColor?: string) => {
-  const startTime = performance.now()
-
-  try {
-    addDebugLog('info', 'ROUTING', `Solicitando cálculo de rota`, {
-      waypoints: waypoints.length,
-      primeiroPonto: waypoints[0],
-      ultimoPonto: waypoints[waypoints.length - 1],
-      customColor: customColor || 'default'
-    })
-
-    const response = await apiFetch(API_ENDPOINTS.routingCalculate, {
-      method: 'POST',
-      body: JSON.stringify({
-        waypoints: waypoints.map(w => ({ lat: w.lat, lng: w.lng }))
-      })
-    })
-
-    const data = await response.json()
-    const endTime = performance.now()
-    const duration = ((endTime - startTime) / 1000).toFixed(2)
-
-    if (data.success && data.data) {
-      debugStats.value.cachedGeocodes += data.data.cached_segments || 0
-
-      addDebugLog('success', 'ROUTING', `Rota calculada em ${duration}s`, {
-        cached: data.data.cached_segments,
-        novos: data.data.new_segments,
-        distanciaKm: (data.data.total_distance_meters / 1000).toFixed(2),
-        duracaoMinutos: (data.data.total_duration_seconds / 60).toFixed(0)
-      })
-
-      // Decodificar polylines e desenhar no mapa
-      const allCoords: google.maps.LatLngLiteral[] = []
-
-      for (const polylineEncoded of data.data.polylines) {
-        const decoded = google.maps.geometry.encoding.decodePath(polylineEncoded)
-        decoded.forEach(latLng => {
-          allCoords.push({ lat: latLng.lat(), lng: latLng.lng() })
-        })
-      }
-
-      if (allCoords.length === 0) {
-        addDebugLog('error', 'ROUTING', 'Polyline decodificado está vazio')
-        drawStraightLine(waypoints, bounds)
-        return
-      }
-
-      // Desenhar polyline com a rota real
-      // Cor: customColor (simulação) > editMode (laranja) > padrão (azul)
-      let polylineColor = '#1976d2' // Azul padrão
-      if (customColor) {
-        polylineColor = customColor // Cor customizada (simulação)
-      } else if (editMode.value) {
-        polylineColor = '#ff9800' // Laranja (modo edição)
-      }
-
-      polyline.value = new google.maps.Polyline({
-        path: allCoords,
-        geodesic: false,
-        strokeColor: polylineColor,
-        strokeOpacity: 0.8,
-        strokeWeight: 4
-      })
-
-      polyline.value.setMap(map.value!)
-
-      // Atualizar distância total
-      distanciaTotal.value = data.data.total_distance_meters / 1000
-
-      // Ajustar zoom
-      map.value!.fitBounds(bounds)
-
-      addDebugLog('success', 'ROUTING', `Polyline desenhada com ${allCoords.length} pontos`)
-    } else {
-      addDebugLog('warn', 'ROUTING', 'API retornou erro, usando linha reta', data)
-      drawStraightLine(waypoints, bounds)
-    }
-  } catch (error: any) {
-    const endTime = performance.now()
-    const duration = ((endTime - startTime) / 1000).toFixed(2)
-
-    addDebugLog('error', 'ROUTING', `Erro ao calcular rota após ${duration}s`, error)
-    drawStraightLine(waypoints, bounds)
-  }
-}
-
-// Desenhar linha reta como fallback
-const drawStraightLine = (waypoints: google.maps.LatLngLiteral[], bounds: google.maps.LatLngBounds) => {
-  polyline.value = new google.maps.Polyline({
-    path: waypoints,
-    geodesic: true,
-    strokeColor: editMode.value ? '#ff9800' : '#1976d2',
-    strokeOpacity: 0.7,
-    strokeWeight: 3
-  })
-
-  polyline.value.setMap(map.value!)
-  calcularDistanciaTotal(waypoints)
-  map.value!.fitBounds(bounds)
-}
-
-// Calcular distância total da rota
-const calcularDistanciaTotal = (path: google.maps.LatLngLiteral[]) => {
-  let total = 0
-  for (let i = 0; i < path.length - 1; i++) {
-    const from = new google.maps.LatLng(path[i].lat, path[i].lng)
-    const to = new google.maps.LatLng(path[i + 1].lat, path[i + 1].lng)
-    total += google.maps.geometry.spherical.computeDistanceBetween(from, to)
-  }
-  distanciaTotal.value = total / 1000 // Converter para km
-}
+// Funções de cálculo de rota removidas - agora usando OSRM diretamente
 
 // Função para geocoding usando código IBGE via Google Maps
 const geocodeByIBGE = async (municipio: RotaMunicipio): Promise<{lat: number, lon: number} | null> => {
@@ -604,7 +558,9 @@ const geocodeByIBGE = async (municipio: RotaMunicipio): Promise<{lat: number, lo
         municipios: [{
           cdibge: codigoIBGE,
           desmun: nomeMunicipio,
-          desest: nomeEstado
+          desest: nomeEstado,
+          cod_mun: municipio.codmun,
+          cod_est: municipio.codest
         }]
       })
     })
@@ -657,20 +613,28 @@ const geocodeByIBGE = async (municipio: RotaMunicipio): Promise<{lat: number, lo
 const adicionarMunicipio = async () => {
   if (!selectedMunicipio.value) return
 
+  console.log('🔍 selectedMunicipio.value:', selectedMunicipio.value)
+
+  // VAutocomplete com return-object retorna o objeto inteiro do item
+  // Precisamos acessar a propriedade 'value' se existir, ou usar o objeto diretamente
+  const municipioData = selectedMunicipio.value.value || selectedMunicipio.value
+
+  console.log('🔍 municipioData:', municipioData)
+
   addDebugLog('info', 'EDIT', 'Adicionando novo município', {
-    municipio: selectedMunicipio.value.desmun,
+    municipio: municipioData.desmun,
     posicao: municipios.value.length + 1
   })
 
   const novoMunicipio: RotaMunicipio = {
     spararmuseq: municipios.value.length + 1,
-    codmun: selectedMunicipio.value.codmun,
-    codest: selectedMunicipio.value.codest,
-    desmun: selectedMunicipio.value.desmun,
-    desest: selectedMunicipio.value.desest,
-    cdibge: selectedMunicipio.value.cdibge,
-    lat: sanitizeCoordinate(selectedMunicipio.value.lat),
-    lon: sanitizeCoordinate(selectedMunicipio.value.lon),
+    codmun: municipioData.codmun,
+    codest: municipioData.codest,
+    desmun: municipioData.desmun,
+    desest: municipioData.desest,
+    cdibge: municipioData.cdibge,
+    lat: sanitizeCoordinate(municipioData.lat),
+    lon: sanitizeCoordinate(municipioData.lon),
     geocodingStatus: 'pending'
   }
 
@@ -809,37 +773,11 @@ const formatDate = (date: string | null) => {
 
 // Voltar para listagem
 const goBack = () => {
-  router.push('/rotas-semparar')
+  router.push('/rotas-padrao')
 }
 
 // Nota: Não usamos watch aqui pois updateMapMarkers já é chamado
 // explicitamente em todas as operações (adicionar, remover, drag)
-
-// Carregar Google Maps API
-const loadGoogleMaps = (): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    if (typeof google !== 'undefined' && google.maps) {
-      resolve()
-      return
-    }
-
-    const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
-
-    if (!GOOGLE_MAPS_API_KEY) {
-      console.error('Google Maps API key não configurada')
-      reject(new Error('Google Maps API key não configurada'))
-      return
-    }
-
-    const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=geometry,places`
-    script.async = true
-    script.defer = true
-    script.onload = () => resolve()
-    script.onerror = () => reject(new Error('Erro ao carregar Google Maps'))
-    document.head.appendChild(script)
-  })
-}
 
 // ===================================
 // FUNÇÕES DE SIMULAÇÃO
@@ -854,67 +792,73 @@ const updateMapWithSimulation = async () => {
     totalEntregas: entregas.value.length
   })
 
-  // Limpar marcadores e polyline existentes
-  markers.value.forEach(marker => marker.setMap(null))
+  // Limpar marcadores e routing control existentes
+  markers.value.forEach(marker => marker.remove())
   markers.value = []
-  if (polyline.value) {
-    polyline.value.setMap(null)
-    polyline.value = null
+  if (routingControl.value) {
+    map.value.removeControl(routingControl.value)
+    routingControl.value = null
   }
 
-  const bounds = new google.maps.LatLngBounds()
-  const allWaypoints: google.maps.LatLngLiteral[] = []
+  const bounds: [number, number][] = []
+  const allWaypoints: L.LatLng[] = []
 
   // 1. Processar municípios da rota SemParar (azul)
   const validMunicipios = municipios.value.filter(m => isValidCoordinate(m.lat, m.lon))
 
   validMunicipios.forEach((municipio, index) => {
-    const position = { lat: Number(municipio.lat), lng: Number(municipio.lon) }
-    allWaypoints.push(position)
-    bounds.extend(position)
+    const latLng = L.latLng(Number(municipio.lat), Number(municipio.lon))
+    allWaypoints.push(latLng)
+    bounds.push([Number(municipio.lat), Number(municipio.lon)])
 
     // Marcador azul para rota base
-    const marker = new google.maps.Marker({
-      position,
-      map: map.value!,
-      title: `Rota ${municipio.spararmuseq}: ${municipio.desmun}`,
-      label: {
-        text: String(municipio.spararmuseq),
-        color: 'white',
-        fontSize: '12px',
-        fontWeight: 'bold'
-      },
-      icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 12,
-        fillColor: '#2196F3', // Azul para rota
-        fillOpacity: 1,
-        strokeColor: 'white',
-        strokeWeight: 2
-      },
-      zIndex: 1000 + index // Rota: z-index crescente (1000, 1001, 1002...)
-    })
-
-    const infoWindow = new google.maps.InfoWindow({
-      content: `
-        <div style="padding: 8px; font-family: sans-serif;">
-          <h6 style="margin: 0 0 8px 0; color: #2196F3;"><strong>🗺️ Rota SemParar ${municipio.spararmuseq}</strong></h6>
-          <p style="margin: 2px 0; font-size: 13px;"><strong>${municipio.desmun} - ${municipio.desest}</strong></p>
-          <p style="margin: 2px 0; font-size: 12px; color: #666;">IBGE: ${municipio.cdibge}</p>
-          <p style="margin: 2px 0; font-size: 12px; color: #666;">Lat: ${municipio.lat?.toFixed(6)}, Lon: ${municipio.lon?.toFixed(6)}</p>
+    const icon = L.divIcon({
+      className: 'custom-marker',
+      html: `
+        <div style="
+          background-color: #2196F3;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-weight: bold;
+          font-size: 12px;
+          border: 3px solid white;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          z-index: ${1000 + index};
+        ">
+          ${municipio.spararmuseq}
         </div>
-      `
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16]
     })
 
-    marker.addListener('click', () => infoWindow.open(map.value!, marker))
+    const marker = L.marker(latLng, {
+      icon,
+      title: `Rota ${municipio.spararmuseq}: ${municipio.desmun}`
+    }).addTo(map.value!)
+
+    marker.bindPopup(`
+      <div style="padding: 8px; font-family: sans-serif;">
+        <h6 style="margin: 0 0 8px 0; color: #2196F3;"><strong>🗺️ Rota Padrão ${municipio.spararmuseq}</strong></h6>
+        <p style="margin: 2px 0; font-size: 13px;"><strong>${municipio.desmun} - ${municipio.desest}</strong></p>
+        <p style="margin: 2px 0; font-size: 12px; color: #666;">IBGE: ${municipio.cdibge}</p>
+        <p style="margin: 2px 0; font-size: 12px; color: #666;">Lat: ${municipio.lat?.toFixed(6)}, Lon: ${municipio.lon?.toFixed(6)}</p>
+      </div>
+    `)
+
     markers.value.push(marker)
   })
 
   // 2. Processar entregas do pacote (laranja/verde/vermelho)
   entregas.value.forEach((entrega, index) => {
-    const position = { lat: Number(entrega.lat), lng: Number(entrega.lon) }
-    allWaypoints.push(position)
-    bounds.extend(position)
+    const latLng = L.latLng(Number(entrega.lat), Number(entrega.lon))
+    allWaypoints.push(latLng)
+    bounds.push([Number(entrega.lat), Number(entrega.lon)])
 
     // Cor baseada na posição
     let fillColor = '#FF9800' // Laranja padrão
@@ -923,45 +867,51 @@ const updateMapWithSimulation = async () => {
 
     const markerLabel = validMunicipios.length + index + 1
 
-    const marker = new google.maps.Marker({
-      position,
-      map: map.value!,
-      title: `Entrega ${entrega.seqent}: ${entrega.razcli}`,
-      label: {
-        text: String(markerLabel),
-        color: 'white',
-        fontSize: '12px',
-        fontWeight: 'bold'
-      },
-      icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 12,
-        fillColor,
-        fillOpacity: 1,
-        strokeColor: 'white',
-        strokeWeight: 2
-      },
-      zIndex: 2000 + index // Entregas: z-index alto e crescente (2000, 2001, 2002...)
-    })
-
-    const infoWindow = new google.maps.InfoWindow({
-      content: `
-        <div style="padding: 8px; font-family: sans-serif; min-width: 200px;">
-          <h6 style="margin: 0 0 8px 0; color: ${fillColor};"><strong>📦 Entrega ${entrega.seqent}</strong></h6>
-          <p style="margin: 2px 0; font-size: 13px;"><strong>${entrega.razcli}</strong></p>
-          <p style="margin: 2px 0; font-size: 12px; color: #666;">Cliente: ${entrega.codcli}</p>
-          <hr style="margin: 8px 0; border: none; border-top: 1px solid #ddd;">
-          <p style="margin: 2px 0; font-size: 12px;">📍 ${entrega.desend}</p>
-          <p style="margin: 2px 0; font-size: 12px;">${entrega.desbai}, ${entrega.desmun} - ${entrega.uf}</p>
-          <hr style="margin: 8px 0; border: none; border-top: 1px solid #ddd;">
-          <p style="margin: 2px 0; font-size: 12px;">💰 Valor: R$ ${entrega.valnot?.toFixed(2)}</p>
-          <p style="margin: 2px 0; font-size: 12px;">⚖️ Peso: ${entrega.peso?.toFixed(1)} kg</p>
-          <p style="margin: 2px 0; font-size: 12px;">📐 Volume: ${entrega.volume?.toFixed(2)} m³</p>
+    const icon = L.divIcon({
+      className: 'custom-marker',
+      html: `
+        <div style="
+          background-color: ${fillColor};
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-weight: bold;
+          font-size: 12px;
+          border: 3px solid white;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          z-index: ${2000 + index};
+        ">
+          ${markerLabel}
         </div>
-      `
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16]
     })
 
-    marker.addListener('click', () => infoWindow.open(map.value!, marker))
+    const marker = L.marker(latLng, {
+      icon,
+      title: `Entrega ${entrega.seqent}: ${entrega.razcli}`
+    }).addTo(map.value!)
+
+    marker.bindPopup(`
+      <div style="padding: 8px; font-family: sans-serif; min-width: 200px;">
+        <h6 style="margin: 0 0 8px 0; color: ${fillColor};"><strong>📦 Entrega ${entrega.seqent}</strong></h6>
+        <p style="margin: 2px 0; font-size: 13px;"><strong>${entrega.razcli}</strong></p>
+        <p style="margin: 2px 0; font-size: 12px; color: #666;">Cliente: ${entrega.codcli}</p>
+        <hr style="margin: 8px 0; border: none; border-top: 1px solid #ddd;">
+        <p style="margin: 2px 0; font-size: 12px;">📍 ${entrega.desend}</p>
+        <p style="margin: 2px 0; font-size: 12px;">${entrega.desbai}, ${entrega.desmun} - ${entrega.uf}</p>
+        <hr style="margin: 8px 0; border: none; border-top: 1px solid #ddd;">
+        <p style="margin: 2px 0; font-size: 12px;">💰 Valor: R$ ${entrega.valnot?.toFixed(2)}</p>
+        <p style="margin: 2px 0; font-size: 12px;">⚖️ Peso: ${entrega.peso?.toFixed(1)} kg</p>
+        <p style="margin: 2px 0; font-size: 12px;">📐 Volume: ${entrega.volume?.toFixed(2)} m³</p>
+      </div>
+    `)
+
     markers.value.push(marker)
   })
 
@@ -974,9 +924,46 @@ const updateMapWithSimulation = async () => {
   // 3. Calcular rota combinada (rota + entregas) com cor magenta/rosa vibrante
   if (allWaypoints.length > 1) {
     addDebugLog('info', 'SIMULATION', `Calculando rota combinada com ${allWaypoints.length} pontos`)
-    await calculateAndDrawRoute(allWaypoints, bounds, '#E91E63') // Magenta/Pink vibrante para simulação
-  } else {
-    map.value.fitBounds(bounds)
+
+    // Configurar OSRM router
+    // @ts-ignore
+    const osrmRouter = L.Routing.osrmv1({
+      serviceUrl: 'https://routing.openstreetmap.de/routed-car/route/v1',
+      profile: 'driving',
+      timeout: 30000
+    })
+
+    // @ts-ignore
+    routingControl.value = L.Routing.control({
+      waypoints: allWaypoints,
+      router: osrmRouter,
+      language: 'pt-BR',
+      draggableWaypoints: false,
+      addWaypoints: false,
+      fitSelectedRoutes: 'smart',
+      lineOptions: {
+        styles: [{
+          color: '#E91E63', // Magenta/Pink vibrante para simulação
+          weight: 4,
+          opacity: 0.7
+        }]
+      },
+      routeWhileDragging: false,
+      show: false,
+      createMarker: () => null
+    }).on('routesfound', function(e: any) {
+      const route = e.routes[0]
+      const distance = (route.summary.totalDistance / 1000).toFixed(1)
+      const time = Math.round(route.summary.totalTime / 60)
+      distanciaTotal.value = parseFloat(distance)
+    }).addTo(map.value!)
+
+    // Ajustar bounds
+    if (bounds.length > 0) {
+      map.value.fitBounds(bounds, { padding: [50, 50] })
+    }
+  } else if (bounds.length > 0) {
+    map.value.fitBounds(bounds, { padding: [50, 50] })
   }
 }
 
@@ -1005,13 +992,7 @@ const handleStopSimulation = async () => {
 
 // Lifecycle
 onMounted(async () => {
-  try {
-    await loadGoogleMaps()
-    console.log('✅ Google Maps API carregada com sucesso')
-  } catch (error) {
-    console.error('❌ Erro ao carregar Google Maps:', error)
-  }
-
+  console.log('✅ Leaflet + OpenStreetMap carregado')
   fetchRota()
   fetchMunicipios()
 })
@@ -1030,7 +1011,7 @@ onMounted(async () => {
         />
         <div>
           <h4 class="text-h4 font-weight-medium mb-1">
-            {{ editMode ? 'Editar' : 'Visualizar' }} Rota SemParar
+            {{ editMode ? 'Editar' : 'Visualizar' }} Rota Padrão
           </h4>
           <p class="text-body-1 mb-0" v-if="rota">
             {{ rota.desspararrot }}
@@ -1098,7 +1079,7 @@ onMounted(async () => {
         <VCardTitle class="d-flex justify-space-between align-center bg-warning">
           <div class="d-flex align-center gap-2">
             <VIcon icon="tabler-bug" />
-            <span>Painel de Debug - Rotas SemParar</span>
+            <span>Painel de Debug - Rotas Padrão</span>
           </div>
           <VBtn
             icon="tabler-x"
@@ -1248,7 +1229,7 @@ onMounted(async () => {
         Alguns municípios não possuem coordenadas GPS. O sistema tentará buscar automaticamente usando Google Maps Geocoding.
         <br>
         <strong>Municípios sem GPS:</strong>
-        {{ municipios.filter(m => !m.lat || !m.lon).map(m => m.desmun.trim()).join(', ') }}
+        {{ municipios.filter(m => !m.lat || !m.lon).map(m => m.desmun?.trim() || 'N/A').join(', ') }}
       </div>
     </VAlert>
 
@@ -1333,7 +1314,6 @@ onMounted(async () => {
               prepend-inner-icon="tabler-search"
               clearable
               item-title="title"
-              item-value="value"
               return-object
               @update:search="fetchMunicipios"
               no-data-text="Nenhum município encontrado"
@@ -1580,5 +1560,11 @@ onMounted(async () => {
 
 .border-b:last-child {
   border-bottom: none;
+}
+
+/* Leaflet custom marker style */
+:deep(.custom-marker) {
+  background: transparent !important;
+  border: none !important;
 }
 </style>
