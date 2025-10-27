@@ -303,9 +303,9 @@ class SemPararController extends Controller
                 $request->input('eixos'),
                 $request->input('data_inicio'),
                 $request->input('data_fim'),
-                $request->input('item_fin1', ''),
-                $request->input('item_fin2', ''),
-                $request->input('item_fin3', '')
+                $request->input('item_fin1') ?? '',
+                $request->input('item_fin2') ?? '',
+                $request->input('item_fin3') ?? ''
             );
 
             return response()->json([
