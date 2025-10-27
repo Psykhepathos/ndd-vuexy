@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste SemParar SOAP API - FASE 1B</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 { color: #333; margin-bottom: 10px; }
+        .subtitle { color: #666; margin-bottom: 20px; }
+        .test-section { margin-bottom: 30px; }
+        .test-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin: 5px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+        tr:hover { background-color: #f5f5f5; }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .badge.success { background: #28a745; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>🔌 Teste SemParar SOAP API - FASE 1B</h1>
+            <p class="subtitle">Roteirização de Praças de Pedágio</p>
+
+            <!-- Teste 1: Rota Simples SP-RJ -->
+            <div class="test-section">
+                <div class="test-title">Teste 1: Rota São Paulo → Rio de Janeiro</div>
+                <p style="color: #666; margin-bottom: 15px;">Rota simples com 2 pontos (rodovia com muitos pedágios)</p>
+                <button onclick="testRotaSimples()">
+                    🚗 Testar Rota SP-RJ
+                </button>
+                <div id="resultSimples"></div>
+            </div>
+
+            <!-- Teste 2: Rota Completa com Pacote -->
+            <div class="test-section">
+                <div class="test-title">Teste 2: Rota CD-BARREIRAS + Entregas Pacote 3043368</div>
+                <p style="color: #666; margin-bottom: 15px;">Rota 183 (4 municípios) + 15 entregas reais em Jaboticatubas-MG</p>
+                <button onclick="testRotaCompleta()">
+                    📦 Testar Rota Completa (19 pontos)
+                </button>
+                <div id="resultCompleta"></div>
+            </div>
+
+            <!-- Teste 3: Cadastrar Rota Temporária -->
+            <div class="test-section">
+                <div class="test-title">Teste 3: Cadastrar Rota Temporária</div>
+                <p style="color: #666; margin-bottom: 15px;">Cadastra uma rota temporária com as praças encontradas</p>
+                <button onclick="cadastrarRotaTemp()">
+                    💾 Cadastrar Rota "TESTE_SP_RJ"
+                </button>
+                <div id="resultCadastro"></div>
+            </div>
+
+            <!-- Teste 4: Obter Custo da Rota -->
+            <div class="test-section">
+                <div class="test-title">Teste 4: Obter Custo da Rota</div>
+                <p style="color: #666; margin-bottom: 15px;">Calcula o custo total da rota cadastrada para um veículo</p>
+                <input type="text" id="placaCusto" placeholder="Placa (ex: HNE3C80)" maxlength="7" style="width: 200px; padding: 10px; margin-right: 10px;">
+                <button onclick="obterCusto()">
+                    💰 Calcular Custo
+                </button>
+                <div id="resultCusto"></div>
+            </div>
+        </div>
+
+        <div class="card" style="background: #f8f9fa;">
+            <h3 style="color: #333; margin-bottom: 10px;">📊 Informações FASE 1B</h3>
+            <ul style="color: #666; line-height: 1.8;">
+                <li><strong>Status FASE 1B:</strong> ✅ Completa e funcional</li>
+                <li><strong>Métodos implementados:</strong> roteirizarPracasPedagio, cadastrarRotaTemporaria, obterCustoRota</li>
+                <li><strong>XML Builder:</strong> PontosParadaBuilder.php (Progress dataset structure)</li>
+                <li><strong>Fix crítico:</strong> SoapVar com XSD_ANYXML (PHP SoapClient → Progress SOAP)</li>
+                <li><strong>Teste real:</strong> Pacote 3043368 com 15 entregas em Jaboticatubas-MG</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8002/api/semparar';
+        let lastPracaIds = [];
+        let lastNomeRota = '';
+
+        async function testRotaSimples() {
+            const result = document.getElementById('resultSimples');
+            result.innerHTML = '⏳ Roteirizando...';
+
+            try {
+                const response = await fetch(`${API_BASE}/roteirizar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        pontos: [
+                            { cod_ibge: 3550308, desc: "SAO PAULO - SP", latitude: -23.5505199, longitude: -46.6333094 },
+                            { cod_ibge: 3304557, desc: "RIO DE JANEIRO - RJ", latitude: -22.9068467, longitude: -43.1728965 }
+                        ],
+                        alternativas: false
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    lastPracaIds = data.data.pracas.map(p => p.id);
+                    lastNomeRota = 'TESTE_SP_RJ';
+
+                    result.className = 'result success';
+                    result.innerHTML = `✅ ROTEIRIZAÇÃO CONCLUÍDA!\n\n` +
+                        `Total de praças: ${data.data.total}\n` +
+                        `Status: ${data.data.status}\n\n` +
+                        renderTable(data.data.pracas);
+                } else {
+                    result.className = 'result error';
+                    result.innerHTML = `❌ ERRO: ${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.innerHTML = `❌ ERRO: ${error.message}`;
+            }
+        }
+
+        async function testRotaCompleta() {
+            const result = document.getElementById('resultCompleta');
+            result.innerHTML = '⏳ Roteirizando 19 pontos...';
+
+            try {
+                // Payload direto (JSON inline)
+                const payload = {
+                    "pontos": [
+                        {"cod_ibge": 3118601, "desc": "CONTAGEM - MG (Rota CD)", "latitude": -19.9384589, "longitude": -44.0518344},
+                        {"cod_ibge": 3136306, "desc": "JOAO PINHEIRO - MG (Rota)", "latitude": -17.7406406, "longitude": -46.1743626},
+                        {"cod_ibge": 3147006, "desc": "PARACATU - MG (Rota)", "latitude": -17.2250251, "longitude": -46.8680057},
+                        {"cod_ibge": 3170404, "desc": "UNAI - MG (Rota)", "latitude": -16.3577794, "longitude": -46.9062823},
+                        {"cod_ibge": 3133758, "desc": "Jaboticatubas - MG (Entrega 1)", "latitude": -19.4342, "longitude": -43.8322},
+                        {"cod_ibge": 3133758, "desc": "Jaboticatubas - MG (Entrega 2)", "latitude": -19.4341, "longitude": -43.8332},
+                        {"cod_ibge": 3133758, "desc": "Jaboticatubas - MG (Entrega 3)", "latitude": -19.4340, "longitude": -43.8323},
+                        {"cod_ibge": 3133758, "desc": "Jaboticatubas - MG (Entrega 4)", "latitude": -19.4340, "longitude": -43.8323},
+                        {"cod_ibge": 3133758, "desc": "Jaboticatubas - MG (Entrega 5)", "latitude": -19.4340, "longitude": -43.8323},
+                        {"cod_ibge": 3133758, "desc": "Jaboticatubas - MG (Entrega 6)", "latitude": -19.4344, "longitude": -43.8315},
+                        {"cod_ibge": 3133758, "desc": "Jaboticatubas - MG (Entrega 7)", "latitude": -19.4374, "longitude": -43.8298},
+                        {"cod_ibge": 3133758, "desc": "Jaboticatubas - MG (Entrega 9)", "latitude": -19.4403, "longitude": -43.8271},
+                        {"cod_ibge": 3133758, "desc": "Jaboticatubas - MG (Entrega 10)", "latitude": -19.4461, "longitude": -43.6392},
+                        {"cod_ibge": 3133758, "desc": "Jaboticatubas - MG (Entrega 11)", "latitude": -19.5087, "longitude": -43.7547},
+                        {"cod_ibge": 3133758, "desc": "Jaboticatubas - MG (Entrega 12)", "latitude": -19.5111, "longitude": -43.7514},
+                        {"cod_ibge": 3133758, "desc": "Jaboticatubas - MG (Entrega 13)", "latitude": -19.5162, "longitude": -43.7485},
+                        {"cod_ibge": 3133758, "desc": "Jaboticatubas - MG (Entrega 14)", "latitude": -19.5279, "longitude": -43.7436},
+                        {"cod_ibge": 3133758, "desc": "Jaboticatubas - MG (Entrega 15)", "latitude": -19.5573, "longitude": -43.7589},
+                        {"cod_ibge": 3133758, "desc": "Jaboticatubas - MG (Entrega 16)", "latitude": -19.5626, "longitude": -43.7644}
+                    ],
+                    "alternativas": false
+                };
+
+                const rotaResponse = await fetch(`${API_BASE}/roteirizar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await rotaResponse.json();
+
+                if (data.success) {
+                    lastPracaIds = data.data.pracas.map(p => p.id);
+                    lastNomeRota = 'TESTE_PACOTE_3043368';
+
+                    result.className = 'result success';
+                    result.innerHTML = `✅ ROTEIRIZAÇÃO CONCLUÍDA!\n\n` +
+                        `Total de pontos enviados: 19 (4 rota + 15 entregas)\n` +
+                        `Total de praças encontradas: ${data.data.total}\n` +
+                        `Status: ${data.data.status}\n\n` +
+                        renderTable(data.data.pracas);
+                } else {
+                    result.className = 'result error';
+                    result.innerHTML = `❌ ERRO: ${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.innerHTML = `❌ ERRO: ${error.message}`;
+            }
+        }
+
+        async function cadastrarRotaTemp() {
+            const result = document.getElementById('resultCadastro');
+
+            if (lastPracaIds.length === 0) {
+                result.className = 'result error';
+                result.innerHTML = '❌ Execute primeiro um teste de roteirização!';
+                return;
+            }
+
+            result.innerHTML = `⏳ Cadastrando rota ${lastNomeRota}...`;
+
+            try {
+                const response = await fetch(`${API_BASE}/rota-temporaria`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        praca_ids: lastPracaIds,
+                        nome_rota: lastNomeRota
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    result.className = 'result success';
+                    result.innerHTML = `✅ ROTA CADASTRADA!\n\n` +
+                        `Nome: ${data.data.nome_rota_semparar}\n` +
+                        `Código: ${data.data.cod_rota_semparar}\n` +
+                        `Total de praças: ${lastPracaIds.length}\n` +
+                        `IDs: ${lastPracaIds.join(', ')}`;
+                } else {
+                    result.className = 'result error';
+                    result.innerHTML = `❌ ERRO: ${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.innerHTML = `❌ ERRO: ${error.message}`;
+            }
+        }
+
+        async function obterCusto() {
+            const result = document.getElementById('resultCusto');
+            const placa = document.getElementById('placaCusto').value.trim().toUpperCase();
+
+            if (!placa) {
+                result.className = 'result error';
+                result.innerHTML = '❌ Por favor, informe uma placa';
+                return;
+            }
+
+            if (!lastNomeRota) {
+                result.className = 'result error';
+                result.innerHTML = '❌ Cadastre uma rota temporária primeiro!';
+                return;
+            }
+
+            result.innerHTML = `⏳ Calculando custo para ${placa}...`;
+
+            try {
+                const hoje = new Date().toISOString().split('T')[0];
+                const response = await fetch(`${API_BASE}/custo-rota`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nome_rota: lastNomeRota,
+                        placa: placa,
+                        eixos: 2,
+                        data_inicio: hoje,
+                        data_fim: hoje
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    result.className = 'result success';
+                    result.innerHTML = `✅ CUSTO CALCULADO!\n\n` +
+                        `Rota: ${lastNomeRota}\n` +
+                        `Placa: ${placa}\n` +
+                        `Eixos: 2\n` +
+                        `Valor: R$ ${data.data.valor.toFixed(2)}\n` +
+                        `Status: ${data.data.status}`;
+                } else {
+                    result.className = 'result error';
+                    result.innerHTML = `❌ ERRO: ${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.innerHTML = `❌ ERRO: ${error.message}`;
+            }
+        }
+
+        function renderTable(pracas) {
+            let html = '<table><thead><tr>' +
+                '<th>#</th><th>Praça</th><th>Rodovia</th><th>KM</th><th>Concessionária</th>' +
+                '</tr></thead><tbody>';
+
+            pracas.forEach((p, i) => {
+                html += `<tr>` +
+                    `<td>${i + 1}</td>` +
+                    `<td>${p.praca}</td>` +
+                    `<td>${p.rodovia}</td>` +
+                    `<td>${p.km}</td>` +
+                    `<td>${p.concessionaria}</td>` +
+                    `</tr>`;
+            });
+
+            html += '</tbody></table>';
+            return html;
+        }
+
+        // Auto-uppercase placa input
+        document.getElementById('placaCusto').addEventListener('input', function(e) {
+            e.target.value = e.target.value.toUpperCase();
+        });
+    </script>
+</body>
+</html>
