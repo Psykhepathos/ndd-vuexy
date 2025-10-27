@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<pontosParada xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <pontoParada>
+    <ponto>
+      <codigoIBGE>3118601</codigoIBGE>
+      <latLong>
+        <latitude>0.0</latitude>
+        <longitude>0.0</longitude>
+      </latLong>
+      <descricao>CONTAGEM</descricao>
+    </ponto>
+    <ponto>
+      <codigoIBGE>3136702</codigoIBGE>
+      <latLong>
+        <latitude>0.0</latitude>
+        <longitude>0.0</longitude>
+      </latLong>
+      <descricao>JUIZ DE FORA</descricao>
+    </ponto>
+    <ponto>
+      <codigoIBGE>3134608</codigoIBGE>
+      <latLong>
+        <latitude>0.0</latitude>
+        <longitude>0.0</longitude>
+      </latLong>
+      <descricao>AV. VER CANDIDO MARTINS,18</descricao>
+    </ponto>
+  </pontoParada>
+  <status>0</status>
+</pontosParada>

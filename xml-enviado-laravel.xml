@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pontosParada>
+  <status>0</status>
+  <pontoParada>
+    <ponto>
+      <codigoIBGE>3118601</codigoIBGE>
+      <descricao>CONTAGEM</descricao>
+    </ponto>
+    <ponto>
+      <codigoIBGE>3143906</codigoIBGE>
+      <descricao>MURIAE</descricao>
+    </ponto>
+    <ponto>
+      <codigoIBGE>3304557</codigoIBGE>
+      <descricao>RIO DE JANEIRO</descricao>
+    </ponto>
+  </pontoParada>
+</pontosParada>

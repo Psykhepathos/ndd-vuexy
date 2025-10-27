@@ -40,7 +40,7 @@ class TransporteController extends Controller
             ],
             'tipo' => 'nullable|string|in:autonomo,empresa,todos',
             'natureza' => 'nullable|string|in:T,A',
-            'status_ativo' => 'nullable|boolean'  // Added missing validation
+            'status_ativo' => 'nullable|in:true,false,1,0'  // Accept both boolean and string representations
         ]);
 
         $page = isset($validated['page']) ? (int) $validated['page'] : 1;
@@ -50,7 +50,8 @@ class TransporteController extends Controller
         $nome = $validated['nome'] ?? '';
         $tipo = $validated['tipo'] ?? 'todos';
         $natureza = $validated['natureza'] ?? '';
-        $ativo = isset($validated['status_ativo']) ? (bool) $validated['status_ativo'] : null;
+        // Convert string/numeric status to consistent format for ProgressService
+        $ativo = isset($validated['status_ativo']) ? $validated['status_ativo'] : null;
 
         // Preparar filtros para o service (já validados)
         $filters = [

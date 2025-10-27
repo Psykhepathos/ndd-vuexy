@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pontosParada>
+  <status>0</status>
+  <pontoParada>
+    <ponto>
+      <codigoIBGE>3118601</codigoIBGE>
+      <latLong>
+        <latitude>0</latitude>
+        <longitude>0</longitude>
+      </latLong>
+      <descricao>CONTAGEM</descricao>
+    </ponto>
+    <ponto>
+      <codigoIBGE>3143906</codigoIBGE>
+      <latLong>
+        <latitude>0</latitude>
+        <longitude>0</longitude>
+      </latLong>
+      <descricao>MURIAE</descricao>
+    </ponto>
+    <ponto>
+      <codigoIBGE>3304557</codigoIBGE>
+      <latLong>
+        <latitude>0</latitude>
+        <longitude>0</longitude>
+      </latLong>
+      <descricao>RIO DE JANEIRO</descricao>
+    </ponto>
+  </pontoParada>
+</pontosParada>

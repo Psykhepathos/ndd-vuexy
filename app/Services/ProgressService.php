@@ -1186,18 +1186,10 @@ class ProgressService
             $nextId = $nextIdResult['data']['results'][0]['nextid'] ?? 1;
 
             // Inserir rota principal
-            $insertRotaSql = "INSERT INTO PUB.semPararRot
-                (sPararRotID, desSPararRot, tempoViagem, flgCD, flgRetorno, datAtu, resAtu)
-                VALUES
-                (" . $nextId . ",
-                 " . $this->escapeSqlString($data['nome']) . ",
-                 " . intval($data['tempo_viagem'] ?? 5) . ",
-                 " . ($data['flg_cd'] ? '1' : '0') . ",
-                 " . ($data['flg_retorno'] ? '1' : '0') . ",
-                 '" . date('Y-m-d') . "',
-                 " . $this->escapeSqlString(auth()->user()->name ?? 'system') . ")";
+            // IMPORTANTE: SQL single-line (Progress JDBC não gosta de quebras de linha)
+            $insertRotaSql = "INSERT INTO PUB.semPararRot (sPararRotID, desSPararRot, tempoViagem, flgCD, flgRetorno, datAtu, resAtu) VALUES (" . $nextId . ", " . $this->escapeSqlString($data['nome']) . ", " . intval($data['tempo_viagem'] ?? 5) . ", " . ($data['flg_cd'] ? '1' : '0') . ", " . ($data['flg_retorno'] ? '1' : '0') . ", '" . date('Y-m-d') . "', " . $this->escapeSqlString(auth()->user()->name ?? 'system') . ")";
 
-            $insertResult = $this->executeCustomQuery($insertRotaSql);
+            $insertResult = $this->executeUpdate($insertRotaSql);
 
             if (!$insertResult['success']) {
                 throw new Exception('Erro ao inserir rota principal');
@@ -1206,18 +1198,10 @@ class ProgressService
             // Inserir municípios se fornecidos
             if (!empty($data['municipios'])) {
                 foreach ($data['municipios'] as $index => $municipio) {
-                    $insertMunSql = "INSERT INTO PUB.semPararRotMu
-                        (sPararRotID, sPararMuSeq, codEst, codMun, desEst, desMun, cdibge)
-                        VALUES
-                        (" . $nextId . ",
-                         " . ($index + 1) . ",
-                         " . intval($municipio['cod_est']) . ",
-                         " . intval($municipio['cod_mun']) . ",
-                         " . $this->escapeSqlString($municipio['des_est']) . ",
-                         " . $this->escapeSqlString($municipio['des_mun']) . ",
-                         " . intval($municipio['cdibge']) . ")";
+                    // IMPORTANTE: SQL single-line (Progress JDBC não gosta de quebras de linha)
+                    $insertMunSql = "INSERT INTO PUB.semPararRotMu (sPararRotID, sPararMuSeq, codEst, codMun, desEst, desMun, cdibge) VALUES (" . $nextId . ", " . ($index + 1) . ", " . intval($municipio['cod_est']) . ", " . intval($municipio['cod_mun']) . ", " . $this->escapeSqlString($municipio['des_est']) . ", " . $this->escapeSqlString($municipio['des_mun']) . ", " . intval($municipio['cdibge']) . ")";
 
-                    $munResult = $this->executeCustomQuery($insertMunSql);
+                    $munResult = $this->executeUpdate($insertMunSql);
                     if (!$munResult['success']) {
                         throw new Exception('Erro ao inserir município: ' . $municipio['des_mun']);
                     }
@@ -1462,6 +1446,26 @@ class ProgressService
             $municipios = [];
             if ($resultMunicipios['success'] && !empty($resultMunicipios['data']['results'])) {
                 $municipios = $resultMunicipios['data']['results'];
+
+                // Buscar coordenadas do cache local (instantâneo!)
+                foreach ($municipios as &$municipio) {
+                    $codMun = intval($municipio['codmun']);
+                    $codEst = intval($municipio['codest']);
+
+                    $gpsCache = \App\Models\ProgressMunicipioGps::findByProgress($codMun, $codEst);
+
+                    if ($gpsCache && $gpsCache->hasValidCoordinates()) {
+                        $municipio['lat'] = $gpsCache->latitude;
+                        $municipio['lon'] = $gpsCache->longitude;
+                        $municipio['gps_fonte'] = $gpsCache->fonte;
+                        $municipio['gps_cached'] = true;
+                    } else {
+                        $municipio['lat'] = null;
+                        $municipio['lon'] = null;
+                        $municipio['gps_fonte'] = null;
+                        $municipio['gps_cached'] = false;
+                    }
+                }
             }
 
             return [
@@ -1497,46 +1501,39 @@ class ProgressService
             ]);
 
             // Primeiro, deletar todos os municípios existentes
+            // IMPORTANTE: usar executeUpdate() para DELETE/INSERT/UPDATE
             $sqlDelete = "DELETE FROM PUB.semPararRotMu WHERE sPararRotID = " . intval($rotaId);
-            $this->executeCustomQuery($sqlDelete);
+            $deleteResult = $this->executeUpdate($sqlDelete);
+
+            if (!$deleteResult['success']) {
+                throw new Exception('Erro ao deletar municípios antigos');
+            }
 
             // Inserir novos municípios com a sequência correta
+            // IMPORTANTE: SQL single-line (Progress JDBC não gosta de quebras de linha)
             foreach ($municipios as $municipio) {
-                $sqlInsert = "INSERT INTO PUB.semPararRotMu (
-                                sPararRotID,
-                                sPararMuSeq,
-                                CodEst,
-                                CodMun,
-                                DesEst,
-                                DesMun,
-                                cdibge
-                            ) VALUES (
-                                " . intval($rotaId) . ",
-                                " . intval($municipio['sequencia']) . ",
-                                " . intval($municipio['cod_est']) . ",
-                                " . intval($municipio['cod_mun']) . ",
-                                '" . $municipio['des_est'] . "',
-                                '" . $municipio['des_mun'] . "',
-                                " . intval($municipio['cdibge']) . "
-                            )";
+                $sqlInsert = "INSERT INTO PUB.semPararRotMu (sPararRotID, sPararMuSeq, CodEst, CodMun, DesEst, DesMun, cdibge) VALUES (" . intval($rotaId) . ", " . intval($municipio['sequencia']) . ", " . intval($municipio['cod_est']) . ", " . intval($municipio['cod_mun']) . ", " . $this->escapeSqlString($municipio['des_est']) . ", " . $this->escapeSqlString($municipio['des_mun']) . ", " . intval($municipio['cdibge']) . ")";
 
-                $result = $this->executeCustomQuery($sqlInsert);
+                $result = $this->executeUpdate($sqlInsert);
 
                 if (!$result['success']) {
                     Log::error('Erro ao inserir município na rota', [
                         'municipio' => $municipio,
                         'error' => $result['error']
                     ]);
+                    throw new Exception('Erro ao inserir município: ' . $municipio['des_mun']);
                 }
             }
 
             // Atualizar data de modificação da rota
-            $sqlUpdate = "UPDATE PUB.semPararRot SET
-                            datAtu = CURDATE(),
-                            resAtu = 'web'
-                          WHERE sPararRotID = " . intval($rotaId);
+            // IMPORTANTE: Usar date() do PHP ao invés de CURDATE() do SQL
+            $sqlUpdate = "UPDATE PUB.semPararRot SET datAtu = '" . date('Y-m-d') . "', resAtu = 'web' WHERE sPararRotID = " . intval($rotaId);
 
-            $this->executeCustomQuery($sqlUpdate);
+            $updateResult = $this->executeUpdate($sqlUpdate);
+
+            if (!$updateResult['success']) {
+                throw new Exception('Erro ao atualizar data da rota');
+            }
 
             return [
                 'success' => true,
@@ -1552,6 +1549,648 @@ class ProgressService
             return [
                 'success' => false,
                 'error' => 'Erro ao atualizar municípios: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * ========================================
+     * COMPRA DE VIAGEM SEMPARAR
+     * ========================================
+     */
+
+    /**
+     * FASE 3: Valida status do veículo na API SemParar
+     * Em TEST_MODE: retorna dados simulados
+     * Em PRODUÇÃO: faz chamada SOAP real à API SemParar
+     */
+    public function validateVehicleStatusSemParar(string $placa, bool $testMode = true): array
+    {
+        try {
+            Log::info('Validando status do veículo SemParar', [
+                'placa' => $placa,
+                'test_mode' => $testMode
+            ]);
+
+            // Em TEST_MODE: retorna dados simulados
+            if ($testMode) {
+                Log::info('TEST_MODE ativo - Retornando dados simulados para veículo');
+
+                // Simula veículo cadastrado no SemParar
+                return [
+                    'success' => true,
+                    'data' => [
+                        'placa' => strtoupper($placa),
+                        'descricao' => 'CAMINHÃO TOCO - SIMULADO',
+                        'eixos' => 3,
+                        'proprietario' => 'TESTE LTDA - SIMULADO',
+                        'tag' => 'TAG123456789',
+                        'status' => 'ATIVO'
+                    ],
+                    'test_mode' => true,
+                    'message' => 'Dados simulados - API SemParar não foi chamada'
+                ];
+            }
+
+            // PRODUÇÃO: Chamada SOAP real à API SemParar
+            Log::info('Fazendo chamada SOAP REAL à API SemParar');
+
+            $soapService = new \App\Services\SemPararSoapService();
+            $vehicleData = $soapService->obterStatusVeiculo($placa);
+            $soapService->disconnect();
+
+            return [
+                'success' => true,
+                'data' => [
+                    'placa' => strtoupper($placa),
+                    'descricao' => $vehicleData['descricao'] ?? 'N/A',
+                    'eixos' => $vehicleData['eixos'] ?? 0,
+                    'proprietario' => $vehicleData['proprietario'] ?? 'N/A',
+                    'tag' => $vehicleData['tag'] ?? 'N/A',
+                    'status' => $vehicleData['status'] ?? 'DESCONHECIDO'
+                ],
+                'test_mode' => false,
+                'message' => 'Dados obtidos da API SemParar (chamada SOAP real)'
+            ];
+
+        } catch (Exception $e) {
+            Log::error('Erro ao validar status do veículo', [
+                'placa' => $placa,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao validar veículo: ' . $e->getMessage(),
+                'code' => 'ERRO_INTERNO'
+            ];
+        }
+    }
+
+    /**
+     * FASE 5: Verifica preço da viagem na API SemParar
+     * Em TEST_MODE: retorna dados simulados
+     * Em PRODUÇÃO: faz chamada SOAP real à API SemParar
+     */
+    /**
+     * Verifica preço da viagem SemParar
+     * Segue exatamente o fluxo de compraRota.p e Rota.cls:
+     * 1. Busca municípios da rota no Progress
+     * 2. Roteiriza praças de pedágio (roteirizarPracasPedagio)
+     * 3. Cadastra rota temporária (cadastrarRotaTemporaria)
+     * 4. Verifica preço usando nome da rota temporária
+     *
+     * @param int $codRota Código da rota no Progress (sPararRotID)
+     * @param int $codPac Código do pacote (para gerar nome único da rota temporária)
+     * @param int $qtdEixos Quantidade de eixos do veículo
+     * @param string $placa Placa do veículo
+     * @param string $dataInicio Data de início da viagem (YYYY-MM-DD)
+     * @param string $dataFim Data de fim da viagem (YYYY-MM-DD)
+     * @param bool $testMode Se true, retorna dados simulados
+     */
+    public function verifyTripPriceSemParar(
+        int $codRota,
+        int $codPac,
+        int $qtdEixos,
+        string $placa,
+        string $dataInicio,
+        string $dataFim,
+        bool $testMode = true
+    ): array {
+        try {
+            Log::info('Verificando preço da viagem SemParar - Fluxo completo com rota temporária', [
+                'cod_rota' => $codRota,
+                'cod_pac' => $codPac,
+                'qtd_eixos' => $qtdEixos,
+                'placa' => $placa,
+                'data_inicio' => $dataInicio,
+                'data_fim' => $dataFim,
+                'test_mode' => $testMode
+            ]);
+
+            // Em TEST_MODE: retorna dados simulados
+            if ($testMode) {
+                Log::info('TEST_MODE ativo - Retornando dados simulados para verificação de preço');
+
+                // Simula preço calculado
+                $valorSimulado = 150.00 + ($qtdEixos * 50.00); // Base + valor por eixo
+
+                return [
+                    'success' => true,
+                    'data' => [
+                        'valor' => $valorSimulado,
+                        'numero_viagem' => 'SIM-' . time(),
+                        'rota_temporaria' => 'SIMULADO-' . $codRota . '-' . $codPac,
+                        'placa' => strtoupper($placa),
+                        'data_inicio' => $dataInicio,
+                        'data_fim' => $dataFim,
+                        'qtd_eixos' => $qtdEixos
+                    ],
+                    'test_mode' => true,
+                    'message' => 'Dados simulados - API SemParar não foi chamada'
+                ];
+            }
+
+            // PRODUÇÃO: Fluxo completo seguindo compraRota.p
+            Log::info('Iniciando fluxo de criação de rota temporária (compraRota.p pattern)');
+
+            // PASSO 1: Buscar dados da rota e municípios no Progress
+            $sqlRota = "SELECT TOP 1 r.sPararRotID, r.desSPararRot, r.flgRetorno, r.flgCD FROM PUB.semPararRot r WHERE r.sPararRotID = " . intval($codRota);
+            $resultRota = $this->executeCustomQuery($sqlRota);
+
+            if (!$resultRota['success'] || empty($resultRota['data']['results'])) {
+                throw new Exception('Rota não encontrada no Progress (código: ' . $codRota . ')');
+            }
+
+            $rota = $resultRota['data']['results'][0];
+            $nomeRota = $rota['desspararrot'];
+            $flgRetorno = $rota['flgretorno'] ?? false;
+            $flgCD = $rota['flgcd'] ?? false;
+
+            Log::info('Rota encontrada', ['nome' => $nomeRota, 'retorno' => $flgRetorno, 'cd' => $flgCD]);
+
+            // PASSO 2: Buscar municípios da rota em ordem de sequência
+            // Usa APENAS código IBGE e descrição, EXATAMENTE como no Progress (Rota.cls linha 702-713)
+            $sqlMunicipios = "SELECT m.cdibge, m.desMun FROM PUB.semPararRotMu m WHERE m.sPararRotID = " . intval($codRota) . " ORDER BY m.sPararMuSeq";
+            $resultMunicipios = $this->executeCustomQuery($sqlMunicipios);
+
+            if (!$resultMunicipios['success'] || empty($resultMunicipios['data']['results'])) {
+                throw new Exception('Nenhum município encontrado para a rota ' . $codRota);
+            }
+
+            // Array para pontos de parada (municípios + entregas)
+            $pontos = [];
+
+            // Adiciona municípios da rota (IBGE, lat/lon = 0)
+            foreach ($resultMunicipios['data']['results'] as $mun) {
+                $pontos[] = [
+                    'cod_ibge' => $mun['cdibge'],
+                    'desc' => $mun['desmun'],
+                    'latitude' => '0',
+                    'longitude' => '0'
+                ];
+            }
+
+            Log::info('Municípios da rota carregados', ['total' => count($pontos)]);
+
+            // PASSO 2.5: Buscar entregas do pacote com GPS (Rota.cls linha 716-797)
+            // Só busca entregas se NÃO for rota CD (flgCD)
+            if (!$flgCD) {
+                Log::info('Buscando entregas do pacote com GPS', ['codpac' => $codPac]);
+
+                $itinerario = $this->getItinerarioPacote($codPac);
+
+                if ($itinerario['success'] && !empty($itinerario['data']['entregas'])) {
+                    $entregas = $itinerario['data']['entregas'];
+
+                    foreach ($entregas as $entrega) {
+                        // Só adiciona entregas com GPS válido (Rota.cls linha 739-740)
+                        if (!empty($entrega['gps_lat']) && !empty($entrega['gps_lon'])
+                            && $entrega['gps_lat'] !== null && $entrega['gps_lon'] !== null) {
+
+                            $pontos[] = [
+                                'cod_ibge' => '0',  // Entregas usam GPS, não IBGE (linha 741)
+                                'desc' => $entrega['desend'] ?? $entrega['razcli'],
+                                'latitude' => $entrega['gps_lat'],
+                                'longitude' => $entrega['gps_lon']
+                            ];
+                        }
+                    }
+
+                    Log::info('Entregas com GPS adicionadas', ['total_entregas' => count($entregas), 'total_pontos' => count($pontos)]);
+                } else {
+                    Log::info('Nenhuma entrega com GPS encontrada', ['codpac' => $codPac]);
+                }
+            } else {
+                Log::info('Rota é CD (Centro de Distribuição), não busca entregas do pacote');
+            }
+
+            // DEBUG: Log pontos para investigação
+            Log::info('Pontos que serão enviados ao SemParar', [
+                'total' => count($pontos),
+                'pontos_sample' => array_slice($pontos, 0, 5)
+            ]);
+
+            // Verificação crítica: SemParar retorna erro 999 se TODOS os pontos tiverem lat/lon = 0
+            // TEMPORARIAMENTE DESABILITADO para debug - permitir envio mesmo sem GPS
+            $temPontoComGPS = false;
+            foreach ($pontos as $ponto) {
+                if ($ponto['latitude'] !== '0' && $ponto['longitude'] !== '0') {
+                    $temPontoComGPS = true;
+                    break;
+                }
+            }
+
+            if (!$temPontoComGPS) {
+                Log::warning('AVISO: Nenhum ponto com GPS válido - SemParar provavelmente retornará erro 999');
+            }
+
+            // PASSO 3: Roteirizar praças de pedágio (linha 899 de Rota.cls)
+            $soapService = new \App\Services\SemPararSoapService();
+
+            Log::info('Chamando roteirizarPracasPedagio com pontos combinados', ['total_pontos' => count($pontos)]);
+            $resultRoteirizar = $soapService->roteirizarPracasPedagio($pontos);
+
+            if (!$resultRoteirizar['success'] || empty($resultRoteirizar['pracas_ids'])) {
+                throw new Exception('Erro ao roteirizar praças de pedágio: nenhuma praça retornada');
+            }
+
+            $pracasIds = $resultRoteirizar['pracas_ids'];
+            Log::info('Praças de pedágio calculadas', ['total_pracas' => count($pracasIds)]);
+
+            // PASSO 4: Gerar nome da rota temporária (linha 943-944 de Rota.cls)
+            // Formato: "{rotaId} - {nomeRota} - {codPac}-{random(0-99)}"
+            $randomSuffix = rand(0, 99);
+            $nomeRotaTemporaria = $codRota . ' - ' . $nomeRota . ' - ' . $codPac . '-' . $randomSuffix;
+
+            if ($flgRetorno) {
+                $nomeRotaTemporaria .= ' - Retorno';
+            }
+
+            Log::info('Nome da rota temporária gerado', ['nome' => $nomeRotaTemporaria]);
+
+            // PASSO 5: Cadastrar rota temporária no SemParar (linha 947 de Rota.cls)
+            Log::info('Chamando cadastrarRotaTemporaria...');
+            $resultCadastrar = $soapService->cadastrarRotaTemporaria($pracasIds, $nomeRotaTemporaria);
+
+            if (!$resultCadastrar['success']) {
+                throw new Exception('Erro ao cadastrar rota temporária no SemParar');
+            }
+
+            $idRotaTemporaria = $resultCadastrar['id_rota'];
+            Log::info('Rota temporária cadastrada', ['id' => $idRotaTemporaria, 'nome' => $nomeRotaTemporaria]);
+
+            // PASSO 6: Verificar preço usando nome da rota temporária (linha 673 de compraRota.p)
+            Log::info('Chamando verificarPreco com rota temporária...');
+            $priceData = $soapService->verificarPreco(
+                $nomeRotaTemporaria,  // USA O NOME, não o ID
+                $qtdEixos,
+                $placa,
+                $dataInicio,
+                $dataFim
+            );
+
+            $soapService->disconnect();
+
+            Log::info('Preço verificado com sucesso', [
+                'valor' => $priceData['valor'],
+                'numero_viagem' => $priceData['numero_viagem']
+            ]);
+
+            return [
+                'success' => true,
+                'data' => [
+                    'valor' => $priceData['valor'] ?? 0.0,
+                    'numero_viagem' => $priceData['numero_viagem'] ?? '',
+                    'rota_temporaria' => $nomeRotaTemporaria,
+                    'id_rota_temporaria' => $idRotaTemporaria,
+                    'total_pracas' => count($pracasIds),
+                    'placa' => strtoupper($placa),
+                    'data_inicio' => $dataInicio,
+                    'data_fim' => $dataFim,
+                    'qtd_eixos' => $qtdEixos
+                ],
+                'test_mode' => false,
+                'message' => 'Preço obtido da API SemParar com rota temporária criada'
+            ];
+
+        } catch (Exception $e) {
+            Log::error('Erro ao verificar preço da viagem com rota temporária', [
+                'cod_rota' => $codRota ?? null,
+                'cod_pac' => $codPac ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao verificar preço: ' . $e->getMessage(),
+                'code' => 'ERRO_INTERNO'
+            ];
+        }
+    }
+
+    /**
+     * Valida pacote para compra de viagem
+     */
+    public function validatePackageForCompraViagem(int $codpac, bool $flgcd): array
+    {
+        try {
+            Log::info('Validando pacote para compra de viagem', ['codpac' => $codpac, 'flgcd' => $flgcd]);
+
+            // 1. Verifica se pacote existe
+            $sqlPacote = "SELECT TOP 1 p.codpac, p.codtrn, p.codmot, p.sitpac, p.datforpac, p.numpla, p.codrot FROM PUB.pacote p WHERE p.codpac = " . intval($codpac);
+            $resultPacote = $this->executeCustomQuery($sqlPacote);
+
+            if (!$resultPacote['success'] || empty($resultPacote['data']['results'])) {
+                return ['success' => false, 'error' => 'Pacote não encontrado', 'code' => 'PACOTE_NAO_ENCONTRADO'];
+            }
+
+            $pacote = $resultPacote['data']['results'][0];
+
+            // 2. Verifica se é TCD quando não deveria ser
+            if (!$flgcd) {
+                $sqlPacCD = "SELECT TOP 1 codpaccd FROM PUB.paccd WHERE codpaccd = " . intval($codpac);
+                $resultPacCD = $this->executeCustomQuery($sqlPacCD);
+
+                if ($resultPacCD['success'] && !empty($resultPacCD['data']['results'])) {
+                    return ['success' => false, 'error' => 'Este pacote é TCD. Use o modo CD.', 'code' => 'PACOTE_E_TCD'];
+                }
+            }
+
+            // 3. Busca transporte
+            if (empty($pacote['codtrn'])) {
+                return ['success' => false, 'error' => 'Pacote sem transportador associado', 'code' => 'SEM_TRANSPORTE'];
+            }
+
+            // Progress: compraRota.p linha 242 - Busca placa do TRANSPORTE, não do pacote
+            $sqlTransporte = "SELECT TOP 1 t.CodTrn, t.NomTrn, t.NumPla, t.flgautonomo, t.codcnpjcpf FROM PUB.transporte t WHERE t.CodTrn = " . intval($pacote['codtrn']);
+            $resultTransporte = $this->executeCustomQuery($sqlTransporte);
+
+            if (!$resultTransporte['success'] || empty($resultTransporte['data']['results'])) {
+                return ['success' => false, 'error' => 'Transportador não encontrado', 'code' => 'TRANSPORTE_NAO_ENCONTRADO'];
+            }
+
+            $transporte = $resultTransporte['data']['results'][0];
+
+            // 4. Busca rota (introt)
+            $introt = null;
+            if (!empty($pacote['codrot'])) {
+                $sqlIntrot = "SELECT TOP 1 i.codrot, i.desrot FROM PUB.introt i WHERE i.codrot = " . $this->escapeSqlString($pacote['codrot']);
+                $resultIntrot = $this->executeCustomQuery($sqlIntrot);
+
+                if ($resultIntrot['success'] && !empty($resultIntrot['data']['results'])) {
+                    $introt = $resultIntrot['data']['results'][0];
+                }
+            }
+
+            return [
+                'success' => true,
+                'data' => [
+                    'pacote' => [
+                        'codpac' => $pacote['codpac'],
+                        'codtrn' => $pacote['codtrn'],
+                        'codrot' => $pacote['codrot'] ?? null
+                    ],
+                    'transporte' => [
+                        'codtrn' => $transporte['codtrn'],
+                        'nomtrn' => trim($transporte['nomtrn']),
+                        'numpla' => trim($transporte['numpla'] ?? '') // Progress: compraRota.p linha 242
+                    ],
+                    'rota' => $introt,
+                    'introt' => $introt ? ['codrot' => trim($introt['codrot']), 'desrot' => trim($introt['desrot'])] : null
+                ]
+            ];
+
+        } catch (Exception $e) {
+            Log::error('Erro ao validar pacote', ['codpac' => $codpac, 'error' => $e->getMessage()]);
+            return ['success' => false, 'error' => 'Erro ao validar pacote: ' . $e->getMessage(), 'code' => 'ERRO_INTERNO'];
+        }
+    }
+
+    // ============================================================================
+    // COMPRA VIAGEM - VALIDAÇÕES E REGRAS DE NEGÓCIO
+    // ============================================================================
+
+    /**
+     * Verifica se pacote é TCD (Transfer CD)
+     * Progress: compraRota.p linha 216-227
+     */
+    public function isPacoteTCD(int $codpac): bool
+    {
+        try {
+            $sql = "SELECT TOP 1 codpaccd FROM PUB.paccd WHERE codpaccd = {$codpac}";
+            $result = $this->executeCustomQuery($sql);
+            return !empty($result['data']);
+        } catch (Exception $e) {
+            Log::error('Erro ao verificar pacote TCD', ['codpac' => $codpac, 'error' => $e->getMessage()]);
+            return false;
+        }
+    }
+
+    /**
+     * Verifica se já existe viagem comprada para pacote+rota
+     * Progress: compraRota.p linha 555-581
+     */
+    public function viagemJaComprada(int $codpac, int $rotaId): array
+    {
+        try {
+            $sql = "SELECT TOP 1 codViagem, NumPla, valViagem, dataCompra " .
+                   "FROM PUB.sPararViagem " .
+                   "WHERE CodPac = {$codpac} " .
+                   "AND sPararRotID = {$rotaId} " .
+                   "AND flgCancelado = false";
+
+            $result = $this->executeCustomQuery($sql);
+
+            if (!empty($result['data'])) {
+                return [
+                    'duplicada' => true,
+                    'viagem' => $result['data'][0]
+                ];
+            }
+
+            return ['duplicada' => false];
+        } catch (Exception $e) {
+            Log::error('Erro ao verificar viagem duplicada', [
+                'codpac' => $codpac,
+                'rotaId' => $rotaId,
+                'error' => $e->getMessage()
+            ]);
+            return ['duplicada' => false];
+        }
+    }
+
+    /**
+     * Busca rota sugerida via pacsoc (pacote sócio)
+     * Progress: compraRota.p linha 433-440
+     */
+    public function getRotaSugeridaPorPacsoc(int $codpac): ?array
+    {
+        try {
+            // Busca pacsoc
+            $sql = "SELECT TOP 1 codpac FROM PUB.pacsoc WHERE codpacsoc = {$codpac}";
+            $result = $this->executeCustomQuery($sql);
+
+            if (empty($result['data'])) {
+                return null;
+            }
+
+            $codpacPai = $result['data'][0]['codpac'];
+
+            // Busca rota do pacote pai
+            return $this->getRotaSugeridaPorIntrot($codpacPai, false);
+        } catch (Exception $e) {
+            Log::error('Erro ao buscar rota por pacsoc', ['codpac' => $codpac, 'error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    /**
+     * Busca rota sugerida via semPararIntrot
+     * Progress: compraRota.p linha 441-463
+     */
+    public function getRotaSugeridaPorIntrot(int $codpac, bool $flgRetorno = false): ?array
+    {
+        try {
+            // Busca codrot do pacote
+            $sql = "SELECT TOP 1 codrot FROM PUB.pacote WHERE codpac = {$codpac}";
+            $result = $this->executeCustomQuery($sql);
+
+            if (empty($result['data'])) {
+                return null;
+            }
+
+            $codrot = $result['data'][0]['codrot'];
+
+            // Busca rota SemParar via semPararIntrot
+            $filtroRetorno = $flgRetorno
+                ? "AND CHARINDEX('RETORNO', r.desSPararRot) > 0"
+                : "AND (CHARINDEX('RETORNO', r.desSPararRot) = 0 OR CHARINDEX('RETORNO', r.desSPararRot) IS NULL)";
+
+            $sql = "SELECT TOP 1 r.sPararRotID, r.desSPararRot, r.flgCD, r.flgRetorno, r.tempoViagem " .
+                   "FROM PUB.semPararIntrot si " .
+                   "INNER JOIN PUB.semPararRot r ON r.sPararRotID = si.sPararRotID " .
+                   "WHERE si.codrot = " . $this->escapeSqlString($codrot) . " " .
+                   $filtroRetorno;
+
+            $result = $this->executeCustomQuery($sql);
+
+            if (empty($result['data'])) {
+                return null;
+            }
+
+            return $result['data'][0];
+        } catch (Exception $e) {
+            Log::error('Erro ao buscar rota por introt', [
+                'codpac' => $codpac,
+                'flgRetorno' => $flgRetorno,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Busca DDD do município do transportador
+     * Progress: Rota.cls linha 655-677 (formataCelular)
+     */
+    public function getDDDTransportador(int $codtrn): ?string
+    {
+        try {
+            $sql = "SELECT TOP 1 " .
+                   "t.dddcel, m.codddd " .
+                   "FROM PUB.transporte t " .
+                   "LEFT JOIN PUB.municipio m ON m.codmun = t.codmun AND m.codest = t.codest " .
+                   "WHERE t.codtrn = {$codtrn}";
+
+            $result = $this->executeCustomQuery($sql);
+
+            if (empty($result['data'])) {
+                return null;
+            }
+
+            $row = $result['data'][0];
+            return $row['dddcel'] ?: $row['codddd'];
+        } catch (Exception $e) {
+            Log::error('Erro ao buscar DDD transportador', ['codtrn' => $codtrn, 'error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    /**
+     * Salva registro de viagem SemParar no Progress
+     * Progress: compraRota.p linha 856-867
+     */
+    public function salvarSPararViagem(array $dados): array
+    {
+        try {
+            $sql = "INSERT INTO PUB.sPararViagem (" .
+                   "CodPac, codRotCreateSP, codtrn, codViagem, nomRotSemParar, " .
+                   "NumPla, sPararRotID, valViagem, resCompra, dataCompra" .
+                   ") VALUES (" .
+                   "{$dados['codpac']}, " .
+                   $this->escapeSqlString($dados['codRotCreateSP']) . ", " .
+                   "{$dados['codtrn']}, " .
+                   $this->escapeSqlString($dados['codViagem']) . ", " .
+                   $this->escapeSqlString($dados['nomRotSemParar']) . ", " .
+                   $this->escapeSqlString($dados['placa']) . ", " .
+                   "{$dados['rotaId']}, " .
+                   "{$dados['valorViagem']}, " .
+                   $this->escapeSqlString($dados['usuario']) . ", " .
+                   "TODAY" .
+                   ")";
+
+            $result = $this->executeUpdate($sql);
+
+            Log::info('Viagem SemParar salva no Progress', [
+                'codpac' => $dados['codpac'],
+                'codViagem' => $dados['codViagem'],
+                'rows_affected' => $result['rows_affected'] ?? 0
+            ]);
+
+            return [
+                'success' => true,
+                'rows_affected' => $result['rows_affected'] ?? 0
+            ];
+        } catch (Exception $e) {
+            Log::error('Erro ao salvar sPararViagem', [
+                'dados' => $dados,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao salvar viagem: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Salva log de municípios da viagem
+     * Progress: compraRota.p linha 868-888
+     */
+    public function salvarSemPararRotMuLog(string $codViagem, int $rotaId, array $municipios): array
+    {
+        try {
+            $rowsAffected = 0;
+
+            foreach ($municipios as $index => $mun) {
+                $sql = "INSERT INTO PUB.semPararRotMuLog (" .
+                       "cdibge, DesEst, DesMun, sPararMuSeq, codViagem, datAtu, resAtu" .
+                       ") VALUES (" .
+                       (int)$mun['cdibge'] . ", " .
+                       $this->escapeSqlString($mun['DesEst'] ?? '') . ", " .
+                       $this->escapeSqlString($mun['DesMun'] ?? '') . ", " .
+                       ($index + 1) . ", " .
+                       $this->escapeSqlString($codViagem) . ", " .
+                       "TODAY, " .
+                       $this->escapeSqlString($mun['resAtu'] ?? 'SYSTEM') .
+                       ")";
+
+                $result = $this->executeUpdate($sql);
+                $rowsAffected += $result['rows_affected'] ?? 0;
+            }
+
+            Log::info('Log de municípios salvo', [
+                'codViagem' => $codViagem,
+                'total_municipios' => count($municipios),
+                'rows_affected' => $rowsAffected
+            ]);
+
+            return [
+                'success' => true,
+                'rows_affected' => $rowsAffected
+            ];
+        } catch (Exception $e) {
+            Log::error('Erro ao salvar semPararRotMuLog', [
+                'codViagem' => $codViagem,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao salvar log de municípios: ' . $e->getMessage()
             ];
         }
     }

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { API_ENDPOINTS, apiFetch } from '@/config/api'
+import { useToast } from '@/composables/useToast'
 
 // Interface para tipagem
 interface RotaSemParar {
@@ -15,8 +16,10 @@ interface RotaSemParar {
   resatu: string | null
 }
 
+// Composables
+const { showError, showSuccess, showWarning, toast } = useToast()
+
 // Estados reativos
-const rotas = ref<RotaSemParar[]>([])
 const loading = ref(false)
 const searchQuery = ref('')
 const itemsPerPage = ref(10)
@@ -30,9 +33,11 @@ const selectedRetorno = ref<'all' | 'com' | 'sem'>('all') // 3 estados: all, com
 
 // Função para toggle do tipo (3 estados)
 const toggleTipo = () => {
+  console.log('🔄 toggleTipo ANTES:', selectedTipo.value)
   if (selectedTipo.value === 'all') selectedTipo.value = 'cd'
   else if (selectedTipo.value === 'cd') selectedTipo.value = 'rota'
   else selectedTipo.value = 'all'
+  console.log('🔄 toggleTipo DEPOIS:', selectedTipo.value)
 }
 
 // Função para toggle do retorno (3 estados)
@@ -44,20 +49,39 @@ const toggleRetorno = () => {
 
 // Computed para label e cor do botão TIPO
 const tipoButtonLabel = computed(() => {
-  if (selectedTipo.value === 'cd') return 'Apenas CDs'
-  if (selectedTipo.value === 'rota') return 'Apenas Rotas'
+  const tipo = selectedTipo.value
+  console.log('🔍 tipoButtonLabel computed - selectedTipo.value:', tipo)
+  if (tipo === 'cd') {
+    console.log('✅ Retornando: CD')
+    return 'CD'
+  }
+  if (tipo === 'rota') {
+    console.log('✅ Retornando: Rotas')
+    return 'Rotas'
+  }
+  console.log('✅ Retornando: Todas')
   return 'Todas'
 })
 
 const tipoButtonColor = computed(() => {
-  if (selectedTipo.value === 'cd') return 'info'
-  if (selectedTipo.value === 'rota') return 'primary'
+  const tipo = selectedTipo.value
+  console.log('🎨 tipoButtonColor computed - selectedTipo.value:', tipo)
+  if (tipo === 'cd') {
+    console.log('🎨 Retornando cor: info (ciano)')
+    return 'info'
+  }
+  if (tipo === 'rota') {
+    console.log('🎨 Retornando cor: primary (azul)')
+    return 'primary'
+  }
+  console.log('🎨 Retornando cor: default (cinza)')
   return 'default'
 })
 
 const tipoButtonIcon = computed(() => {
-  if (selectedTipo.value === 'cd') return 'tabler-building-warehouse'
-  if (selectedTipo.value === 'rota') return 'tabler-route'
+  const tipo = selectedTipo.value
+  if (tipo === 'cd') return 'tabler-building-warehouse'
+  if (tipo === 'rota') return 'tabler-route'
   return 'tabler-list'
 })
 
@@ -93,6 +117,18 @@ const headers = [
   { title: 'RETORNO', key: 'flgretorno', sortable: false },
   { title: 'AÇÕES', key: 'actions', sortable: false }
 ]
+
+// Função helper para normalizar dados da API
+const normalizeRotaData = (item: any): RotaSemParar => ({
+  spararrotid: Number(item.spararrotid ?? item.sPararRotID ?? 0),
+  desspararrot: String(item.desspararrot ?? item.desSPararRot ?? ''),
+  tempoviagem: Number(item.tempoviagem ?? item.tempoViagem ?? 0),
+  flgcd: Boolean(item.flgcd ?? item.flgCD),
+  flgretorno: Boolean(item.flgretorno ?? item.flgRetorno),
+  totalmunicipios: Number(item.totalmunicipios ?? 0),
+  datatu: item.datatu || null,
+  resatu: item.resatu || null
+})
 
 // Computed para estatísticas
 const statistics = computed(() => {
@@ -148,16 +184,8 @@ const fetchRotas = async () => {
     const data = await response.json()
 
     if (data.success && data.data) {
-      serverItems.value = data.data.map((item: any) => ({
-        spararrotid: item.spararrotid || item.sPararRotID,
-        desspararrot: item.desspararrot || item.desSPararRot || '',
-        tempoviagem: item.tempoviagem || item.tempoViagem || 0,
-        flgcd: item.flgcd === true || item.flgcd === 1 || item.flgCD === true || item.flgCD === 1,
-        flgretorno: item.flgretorno === true || item.flgretorno === 1 || item.flgRetorno === true || item.flgRetorno === 1,
-        totalmunicipios: item.totalmunicipios || 0,
-        datatu: item.datatu || null,
-        resatu: item.resatu || null
-      }))
+      // Usar função de normalização
+      serverItems.value = data.data.map(normalizeRotaData)
 
       if (data.pagination) {
         totalRotas.value = data.pagination.total || 0
@@ -165,9 +193,14 @@ const fetchRotas = async () => {
       } else {
         totalRotas.value = serverItems.value.length
       }
+    } else {
+      showError('Erro ao carregar rotas: ' + (data.message || 'Erro desconhecido'))
+      serverItems.value = []
+      totalRotas.value = 0
     }
   } catch (error) {
     console.error('Erro ao buscar rotas:', error)
+    showError('Erro ao carregar rotas. Verifique sua conexão e tente novamente.')
     serverItems.value = []
     totalRotas.value = 0
   } finally {
@@ -203,33 +236,55 @@ watch([page, itemsPerPage], () => {
   fetchRotas()
 })
 
+// Cleanup de timers ao desmontar
+onBeforeUnmount(() => {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
+})
+
 // Funções
 const viewMap = (item: RotaSemParar) => {
-  router.push(`/rotas-semparar/mapa/${item.spararrotid}`)
+  router.push(`/rotas-padrao/mapa/${item.spararrotid}`)
 }
 
-const deleteRoute = async (item: RotaSemParar) => {
-  if (!confirm(`Tem certeza que deseja excluir a rota "${item.desspararrot}"?`)) {
-    return
-  }
+// Estado do dialog de confirmação
+const deleteDialog = ref(false)
+const rotaToDelete = ref<RotaSemParar | null>(null)
+
+const confirmDelete = (item: RotaSemParar) => {
+  rotaToDelete.value = item
+  deleteDialog.value = true
+}
+
+const deleteRoute = async () => {
+  if (!rotaToDelete.value) return
 
   try {
-    const response = await apiFetch(API_ENDPOINTS.semPararRota(item.spararrotid), {
+    const response = await apiFetch(API_ENDPOINTS.semPararRota(rotaToDelete.value.spararrotid), {
       method: 'DELETE'
     })
 
     const data = await response.json()
 
     if (data.success) {
+      showSuccess(`Rota "${rotaToDelete.value.desspararrot}" excluída com sucesso!`)
       await fetchRotas()
+    } else {
+      showError('Erro ao excluir rota: ' + (data.message || 'Erro desconhecido'))
     }
   } catch (error) {
     console.error('Erro ao excluir rota:', error)
+    showError('Erro ao excluir rota. Verifique sua conexão e tente novamente.')
+  } finally {
+    deleteDialog.value = false
+    rotaToDelete.value = null
   }
 }
 
 const createNewRoute = () => {
-  router.push('/rotas-semparar/nova')
+  router.push('/rotas-padrao/nova')
 }
 
 // Formatar data
@@ -251,7 +306,7 @@ onMounted(() => {
     <div class="d-flex flex-wrap justify-space-between align-center mb-6">
       <div>
         <h4 class="text-h4 font-weight-medium mb-1">
-          Rotas SemParar
+          Rotas Padrão
         </h4>
         <div class="d-flex align-center flex-wrap gap-3">
           <span class="text-body-1">Sistema de rotas pré-programadas</span>
@@ -259,7 +314,7 @@ onMounted(() => {
             {{ statistics.total }} Total
           </VChip>
           <VChip size="small" color="info" variant="tonal" v-if="!selectedTipo">
-            {{ statistics.comCD }} c/ Retorno
+            {{ statistics.comCD }} Retornos
           </VChip>
         </div>
       </div>
@@ -303,7 +358,7 @@ onMounted(() => {
 
           <!-- Toggle Tipo (3 estados) -->
           <VBtn
-            :variant="selectedTipo !== 'all' ? 'flat' : 'tonal'"
+            :variant="selectedTipo === 'all' ? 'tonal' : 'flat'"
             :color="tipoButtonColor"
             :prepend-icon="tipoButtonIcon"
             @click="toggleTipo"
@@ -440,7 +495,7 @@ onMounted(() => {
             <VTooltip activator="parent">Ver no Mapa</VTooltip>
           </IconBtn>
 
-          <IconBtn @click="deleteRoute(item)">
+          <IconBtn @click="confirmDelete(item)">
             <VIcon icon="tabler-trash" />
             <VTooltip activator="parent">Excluir</VTooltip>
           </IconBtn>
@@ -456,6 +511,58 @@ onMounted(() => {
         </template>
       </VDataTableServer>
     </VCard>
+
+    <!-- Dialog de Confirmação de Exclusão -->
+    <VDialog
+      v-model="deleteDialog"
+      max-width="500"
+    >
+      <VCard>
+        <VCardTitle class="d-flex align-center gap-2 bg-error">
+          <VIcon icon="tabler-alert-triangle" />
+          Confirmar Exclusão
+        </VCardTitle>
+
+        <VCardText class="pt-5">
+          <p class="text-body-1 mb-4">
+            Tem certeza que deseja excluir a rota:
+          </p>
+          <p class="text-h6 font-weight-medium text-error mb-2">
+            {{ rotaToDelete?.desspararrot }}
+          </p>
+          <p class="text-body-2 text-medium-emphasis">
+            Esta ação não pode ser desfeita.
+          </p>
+        </VCardText>
+
+        <VCardActions>
+          <VSpacer />
+          <VBtn
+            variant="text"
+            @click="deleteDialog = false"
+          >
+            Cancelar
+          </VBtn>
+          <VBtn
+            color="error"
+            variant="flat"
+            @click="deleteRoute"
+          >
+            Excluir
+          </VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <!-- Toast de Notificações -->
+    <VSnackbar
+      v-model="toast.show"
+      :color="toast.color"
+      :timeout="toast.timeout"
+      location="top right"
+    >
+      {{ toast.message }}
+    </VSnackbar>
   </div>
 </template>
 

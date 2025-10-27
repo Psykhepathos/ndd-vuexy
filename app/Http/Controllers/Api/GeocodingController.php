@@ -81,7 +81,9 @@ class GeocodingController extends Controller
                 'municipios' => 'required|array|min:1',
                 'municipios.*.cdibge' => 'required|string',
                 'municipios.*.desmun' => 'required|string',
-                'municipios.*.desest' => 'required|string'
+                'municipios.*.desest' => 'required|string',
+                'municipios.*.cod_mun' => 'nullable|integer',
+                'municipios.*.cod_est' => 'nullable|integer'
             ]);
 
             Log::info('API: Buscando coordenadas em lote', [

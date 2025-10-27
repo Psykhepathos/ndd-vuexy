@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CompraViagemController;
 use App\Http\Controllers\Api\GeocodingController;
 use App\Http\Controllers\Api\MotoristaController;
+use App\Http\Controllers\Api\OSRMController;
 use App\Http\Controllers\Api\PacoteController;
 use App\Http\Controllers\Api\ProgressController;
 use App\Http\Controllers\Api\RotaController;
@@ -104,5 +106,38 @@ Route::middleware('api')->group(function () {
     Route::prefix('geocoding')->group(function () {
         Route::post('ibge', [GeocodingController::class, 'getCoordenadasByIbge']);
         Route::post('lote', [GeocodingController::class, 'getCoordenadasLote']);
+    });
+
+    // Proxy OSRM (roteamento gratuito)
+    Route::post('osrm/route', [OSRMController::class, 'getRoute']);
+
+    // ⚠️ Compra de Viagem SemParar - MODO DE TESTE ATIVO ⚠️
+    // IMPORTANTE: Todas as chamadas estão em modo simulação para evitar compras acidentais
+    Route::prefix('compra-viagem')->group(function () {
+        Route::get('initialize', [CompraViagemController::class, 'initialize']);
+        Route::get('statistics', [CompraViagemController::class, 'statistics']);
+        Route::get('health', [CompraViagemController::class, 'health']);
+
+        // FASE 2: Validação de pacote
+        Route::post('validar-pacote', [CompraViagemController::class, 'validarPacote']);
+
+        // FASE 3: Validação de placa/veículo
+        Route::post('validar-placa', [CompraViagemController::class, 'validarPlaca']);
+
+        // FASE 4: Seleção de rota
+        Route::get('rotas', [CompraViagemController::class, 'listarRotas']);
+        Route::post('validar-rota', [CompraViagemController::class, 'validarRota']);
+
+        // FASE 5: Verificação de preço
+        Route::post('verificar-preco', [CompraViagemController::class, 'verificarPreco']);
+
+        // FASE 6: Compra de viagem
+        Route::post('comprar', [CompraViagemController::class, 'comprarViagem']);
+
+        // DEBUG: Análise completa do fluxo
+        Route::post('debug-flow', [\App\Http\Controllers\Api\DebugSemPararController::class, 'debugFlow']);
+
+        // TODO: Adicionar rotas das próximas fases aqui
+        // Route::post('gerar-recibo', [CompraViagemController::class, 'gerarRecibo']);
     });
 });

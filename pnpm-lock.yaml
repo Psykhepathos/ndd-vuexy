@@ -25,6 +25,9 @@ importers:
       '@formkit/drag-and-drop':
         specifier: 0.1.6
         version: 0.1.6
+      '@gegeweb/leaflet-routing-machine-openroute':
+        specifier: ^0.1.10
+        version: 0.1.10(leaflet-routing-machine@3.2.12)(leaflet@1.9.4)
       '@sindresorhus/is':
         specifier: 7.0.1
         version: 7.0.1
@@ -79,6 +82,12 @@ importers:
       leaflet:
         specifier: ^1.9.4
         version: 1.9.4
+      leaflet-routing-machine:
+        specifier: ^3.2.12
+        version: 3.2.12
+      lrm-graphhopper:
+        specifier: ^1.3.0
+        version: 1.3.0
       mapbox-gl:
         specifier: 3.5.2
         version: 3.5.2
@@ -779,6 +788,12 @@ packages:
       '@fullcalendar/core': ~6.1.17
       vue: ^3.0.11
 
+  '@gegeweb/leaflet-routing-machine-openroute@0.1.10':
+    resolution: {integrity: sha512-yG7NsXPGQsag7tx8W2Em7Lx2zEUF66PdYdu33YhDHOP1R3ekl2b+udoeGKh45yo5Iw0OK7mHl+4o/HZhcKDHew==}
+    peerDependencies:
+      leaflet: ^1.6.0
+      leaflet-routing-machine: ^3.2.12
+
   '@humanwhocodes/config-array@0.13.0':
     resolution: {integrity: sha512-DZLEEqFWQFiyK6h5YIeynKx7JlvCYWL0cImfSRXZ9l4Sg2efkFGTuFf6vzXjK1cq6IYkU+Eg/JizXw+TD2vRNw==}
     engines: {node: '>=10.10.0'}
@@ -912,6 +927,9 @@ packages:
   '@kurkle/color@0.3.4':
     resolution: {integrity: sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w==}
 
+  '@mapbox/corslite@0.0.7':
+    resolution: {integrity: sha512-w/uS474VFjmqQ7fFWIMZINQM1BAQxDLuoJaZZIPES1BmeYpCtlh9MtbFxKGGDAsfvut8/HircIsVvEYRjQ+iMg==}
+
   '@mapbox/jsonlint-lines-primitives@2.0.2':
     resolution: {integrity: sha512-rY0o9A5ECsTQRVhv7tL/OyDpGAoUB4tTvLiW1DSzQGq4bvTPhNw1VpSNjDJc5GFZ2XuyOtSWSVN05qOtcD71qQ==}
     engines: {node: '>= 0.6'}
@@ -921,6 +939,10 @@ packages:
 
   '@mapbox/point-geometry@0.1.0':
     resolution: {integrity: sha512-6j56HdLTwWGO0fJPlrZtdU/B13q8Uwmo18Ck2GnGgN9PCFyKTZ3UbXeEdRFh18i9XQ92eH2VdtpJHpBD3aripQ==}
+
+  '@mapbox/polyline@0.2.0':
+    resolution: {integrity: sha512-GCddO0iw6AzOQqZgBmjEQI9Pgo40/yRgkTkikGctE01kNBN0ThWYuAnTD+hRWrAWMV6QJ0rNm4m8DAsaAXE7Pg==}
+    hasBin: true
 
   '@mapbox/tiny-sdf@2.0.7':
     resolution: {integrity: sha512-25gQLQMcpivjOSA40g3gO6qgiFPDpWRoMfd+G/GoppPIeP6JDaMMkMrEJnMZhKyyS6iKwVt5YKu02vCUyJM3Ug==}
@@ -2143,6 +2165,10 @@ packages:
   core-js-compat@3.45.1:
     resolution: {integrity: sha512-tqTt5T4PzsMIZ430XGviK4vzYSoeNJ6CXODi6c/voxOT6IZqBht5/EKaSNnYiEjjRYxjVz7DQIsOsY0XNi8PIA==}
 
+  corslite@0.0.6:
+    resolution: {integrity: sha512-CqrvLTZk8IhahX7RHYxBPbTuKlpNDAnS3cYJTidbZ5yl69J20c0RojeAFQ+r6tnpuHtl2+LU4yK6Taw44SANDg==}
+    deprecated: 'This module is now under the @mapbox namespace: install @mapbox/corslite instead'
+
   cosmiconfig@9.0.0:
     resolution: {integrity: sha512-itvL5h8RETACmOTFc4UfIyB2RfEHi71Ax6E/PivVxq9NseKbOWpeyHEOIbmAw1rs8Ak0VursQNww7lf7YtUwzg==}
     engines: {node: '>=14'}
@@ -3258,6 +3284,9 @@ packages:
     peerDependencies:
       vite: ^5.0.0 || ^6.0.0
 
+  leaflet-routing-machine@3.2.12:
+    resolution: {integrity: sha512-HLde58G1YtD9xSIzZavJ6BPABZaV1hHeGst8ouhzuxmSC3s32NVtADT+njbIUMW1maHRCrsgTk/E4hz5QH7FrA==}
+
   leaflet@1.9.4:
     resolution: {integrity: sha512-nxS1ynzJOmOlHp+iL3FyWqK89GtNL8U8rvlMOsQdTTssxZwCXh8N2NB3GDQOL+YR3XnWyZAxwQixURb+FA74PA==}
 
@@ -3305,6 +3334,9 @@ packages:
 
   lodash@4.17.21:
     resolution: {integrity: sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==}
+
+  lrm-graphhopper@1.3.0:
+    resolution: {integrity: sha512-Guvm2rGtUJU/OqymOKKtcgUORo8GCC5BGM5vwX4vaqIllEDWqPPNh60fDJoAi9/XclBPQVR5hsMsVBEjyhmljg==}
 
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
@@ -3584,6 +3616,9 @@ packages:
   orderedmap@2.1.1:
     resolution: {integrity: sha512-TvAWxi0nDe1j/rtMcWcIj94+Ffe6n7zhow33h40SKxmsmozs6dz/e+EajymfoFcHd7sxNn8yHM8839uixMOV6g==}
 
+  osrm-text-instructions@0.13.4:
+    resolution: {integrity: sha512-ge4ZTIetMQKAHKq2MwWf83ntzdJN20ndRKRaVNoZ3SkDkBNO99Qddz7r6+hrVx38I+ih6Rk5T1yslczAB6Q9Pg==}
+
   outvariant@1.4.3:
     resolution: {integrity: sha512-+Sl2UErvtsoajRDKCE5/dBz4DIvHXQQnAxtQTF04OJxY0+DyZXSo5P5Bb7XYWOh81syohlYL24hbDwxedPUJCA==}
 
@@ -3715,6 +3750,10 @@ packages:
   pluralize@8.0.0:
     resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
     engines: {node: '>=4'}
+
+  polyline@0.0.3:
+    resolution: {integrity: sha512-kM9l6Zi5m8GxNH4VF2amQm64gP+RcdQZN7DzwqeYZT6ILyFRhjibRAgTnV9jsckzApRByPiVOtwna1/6fOLGYg==}
+    deprecated: 'This module is now under the @mapbox namespace: install @mapbox/polyline instead'
 
   possible-typed-array-names@1.1.0:
     resolution: {integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==}
@@ -5375,6 +5414,11 @@ snapshots:
       '@fullcalendar/core': 6.1.17
       vue: 3.5.14(typescript@5.8.3)
 
+  '@gegeweb/leaflet-routing-machine-openroute@0.1.10(leaflet-routing-machine@3.2.12)(leaflet@1.9.4)':
+    dependencies:
+      leaflet: 1.9.4
+      leaflet-routing-machine: 3.2.12
+
   '@humanwhocodes/config-array@0.13.0':
     dependencies:
       '@humanwhocodes/object-schema': 2.0.3
@@ -5536,11 +5580,15 @@ snapshots:
 
   '@kurkle/color@0.3.4': {}
 
+  '@mapbox/corslite@0.0.7': {}
+
   '@mapbox/jsonlint-lines-primitives@2.0.2': {}
 
   '@mapbox/mapbox-gl-supported@3.0.0': {}
 
   '@mapbox/point-geometry@0.1.0': {}
+
+  '@mapbox/polyline@0.2.0': {}
 
   '@mapbox/tiny-sdf@2.0.7': {}
 
@@ -6924,6 +6972,8 @@ snapshots:
     dependencies:
       browserslist: 4.25.4
 
+  corslite@0.0.6: {}
+
   cosmiconfig@9.0.0(typescript@5.8.3):
     dependencies:
       env-paths: 2.2.1
@@ -8240,6 +8290,12 @@ snapshots:
       vite: 6.3.5(@types/node@22.15.21)(sass@1.76.0)(tsx@4.19.4)(yaml@2.8.1)
       vite-plugin-full-reload: 1.2.0
 
+  leaflet-routing-machine@3.2.12:
+    dependencies:
+      '@mapbox/corslite': 0.0.7
+      '@mapbox/polyline': 0.2.0
+      osrm-text-instructions: 0.13.4
+
   leaflet@1.9.4: {}
 
   levn@0.4.1:
@@ -8283,6 +8339,11 @@ snapshots:
   lodash.truncate@4.4.2: {}
 
   lodash@4.17.21: {}
+
+  lrm-graphhopper@1.3.0:
+    dependencies:
+      corslite: 0.0.6
+      polyline: 0.0.3
 
   lru-cache@5.1.1:
     dependencies:
@@ -8633,6 +8694,8 @@ snapshots:
 
   orderedmap@2.1.1: {}
 
+  osrm-text-instructions@0.13.4: {}
+
   outvariant@1.4.3: {}
 
   own-keys@1.0.1:
@@ -8755,6 +8818,8 @@ snapshots:
       pathe: 2.0.3
 
   pluralize@8.0.0: {}
+
+  polyline@0.0.3: {}
 
   possible-typed-array-names@1.1.0: {}
 

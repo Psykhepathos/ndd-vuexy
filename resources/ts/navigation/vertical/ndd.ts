@@ -25,9 +25,14 @@ export default [
         icon: { icon: 'tabler-route-2' },
       },
       {
-        title: 'Rotas SemParar',
-        to: 'rotas-semparar',
+        title: 'Rotas Padrão',
+        to: 'rotas-padrao',
         icon: { icon: 'tabler-map-route' },
+      },
+      {
+        title: 'Compra Viagem',
+        to: 'compra-viagem',
+        icon: { icon: 'tabler-shopping-cart' },
       },
     ],
   },
