@@ -611,4 +611,134 @@ class SemPararService
             ];
         }
     }
+
+    /**
+     * Gerar recibo da viagem e enviar por WhatsApp/Email
+     *
+     * Based on Rota.cls::criaRecibo() (line 608-653)
+     *
+     * Fluxo:
+     * 1. Chama SOAP obterReciboViagem() para pegar dados da viagem
+     * 2. Envia para serviço Node.js (192.168.19.35:5001/gerar-vale-pedagio)
+     * 3. Serviço gera PDF e envia por WhatsApp/Email
+     *
+     * Progress code:
+     *   RUN VALUE("obterReciboViagem") IN hPorta(...)
+     *   paiOjson:Add("data", oJson).
+     *   paiOjson:Add("telefone", formataCelular(codtrn)).
+     *   paiOjson:Add("email", email).
+     *   paiOjson:add("flgImprime", flgImprime).
+     *   POST http://192.168.19.35:5001/gerar-vale-pedagio
+     *
+     * @param string $codViagem Trip code
+     * @param string $telefone Phone number in format 5531988892076 (country+ddd+number)
+     * @param string $email Email address
+     * @param bool $flgImprime Flag to print/display
+     * @return array Result with success status and message from Node.js service
+     * @throws Exception if SOAP or HTTP call fails
+     */
+    public function gerarRecibo(
+        string $codViagem,
+        string $telefone,
+        string $email = '',
+        bool $flgImprime = true
+    ): array {
+        try {
+            Log::info('[SemParar] Gerando recibo da viagem', [
+                'cod_viagem' => $codViagem,
+                'telefone' => $telefone,
+                'email' => $email
+            ]);
+
+            // Step 1: Get receipt data from SOAP
+            $reciboData = $this->obterRecibo($codViagem);
+
+            if (!$reciboData['success']) {
+                return [
+                    'success' => false,
+                    'error' => 'Erro ao obter dados do recibo: ' . ($reciboData['error'] ?? 'Desconhecido')
+                ];
+            }
+
+            // Step 2: Prepare payload for Node.js service
+            $payload = [
+                'data' => [
+                    'reciboPDF' => $reciboData['recibo_pdf'],
+                    'status' => $reciboData['status'],
+                    'statusMensagem' => $reciboData['status_mensagem']
+                ],
+                'telefone' => $telefone,
+                'email' => $email,
+                'flgImprime' => $flgImprime
+            ];
+
+            Log::debug('[SemParar] Calling Node.js PDF service', [
+                'url' => 'http://192.168.19.35:5001/gerar-vale-pedagio',
+                'telefone' => $telefone,
+                'has_email' => !empty($email)
+            ]);
+
+            // Step 3: Call Node.js service to generate and send PDF
+            $client = new \GuzzleHttp\Client([
+                'timeout' => 30,
+                'connect_timeout' => 10
+            ]);
+
+            $response = $client->post('http://192.168.19.35:5001/gerar-vale-pedagio', [
+                'json' => $payload,
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json'
+                ]
+            ]);
+
+            $responseBody = json_decode($response->getBody()->getContents(), true);
+
+            Log::info('[SemParar] Recibo gerado e enviado com sucesso', [
+                'cod_viagem' => $codViagem,
+                'telefone' => $telefone,
+                'response' => $responseBody
+            ]);
+
+            return [
+                'success' => true,
+                'message' => 'Recibo gerado e enviado com sucesso',
+                'status' => $responseBody['status'] ?? 'success',
+                'telefone' => $telefone,
+                'email' => $email
+            ];
+
+        } catch (\GuzzleHttp\Exception\ConnectException $e) {
+            Log::error('[SemParar] Erro de conexão com serviço Node.js', [
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Serviço de geração de PDF indisponível. Verifique se o servidor Node.js está rodando.'
+            ];
+
+        } catch (\GuzzleHttp\Exception\RequestException $e) {
+            Log::error('[SemParar] Erro HTTP ao gerar recibo', [
+                'error' => $e->getMessage(),
+                'response' => $e->hasResponse() ? $e->getResponse()->getBody()->getContents() : null
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao gerar recibo: ' . $e->getMessage()
+            ];
+
+        } catch (Exception $e) {
+            Log::error('[SemParar] Erro ao gerar recibo', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
 }

@@ -135,6 +135,8 @@ Route::middleware('api')->group(function () {
         // FASE 2C - Receipt
         Route::post('obter-recibo', [SemPararController::class, 'obterRecibo'])
             ->middleware('throttle:60,1');  // 60 requests per minute
+        Route::post('gerar-recibo', [SemPararController::class, 'gerarRecibo'])
+            ->middleware('throttle:20,1');  // 20 requests per minute (sends WhatsApp/Email)
 
         // Debug endpoints (only available in APP_DEBUG=true)
         Route::get('debug/token', [SemPararController::class, 'debugToken']);

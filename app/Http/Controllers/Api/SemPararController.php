@@ -403,4 +403,57 @@ class SemPararController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Gerar recibo e enviar por WhatsApp/Email (FASE 2C - Correção)
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function gerarRecibo(Request $request): JsonResponse
+    {
+        try {
+            // Validate input
+            $request->validate([
+                'cod_viagem' => 'required|string|min:1|max:50',
+                'telefone' => 'required|string|min:12|max:15', // Format: 5531988892076
+                'email' => 'nullable|email|max:255',
+                'flg_imprime' => 'nullable|boolean'
+            ]);
+
+            $codViagem = $request->input('cod_viagem');
+            $telefone = $request->input('telefone');
+            $email = $request->input('email', '');
+            $flgImprime = $request->input('flg_imprime', true);
+
+            // Call SemParar service to generate and send receipt
+            $result = $this->semPararService->gerarRecibo(
+                $codViagem,
+                $telefone,
+                $email,
+                $flgImprime
+            );
+
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Recibo gerado e enviado com sucesso',
+                    'data' => $result
+                ], 200);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Erro ao gerar recibo',
+                    'data' => $result
+                ], 400);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao gerar recibo',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
