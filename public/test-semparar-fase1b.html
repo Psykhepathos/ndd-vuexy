@@ -142,25 +142,34 @@
                 <div id="resultCusto"></div>
             </div>
 
-            <!-- Teste 5: Comprar Viagem (FASE 2A) -->
+            <!-- Teste 5: Comprar Viagem (FASE 2A + 2B) -->
             <div class="test-section">
-                <div class="test-title">Teste 5: Comprar Viagem 🆕 FASE 2A</div>
-                <p style="color: #666; margin-bottom: 15px;">⚠️ ATENÇÃO: Esta operação EFETIVA a compra no SemParar!</p>
-                <input type="text" id="placaCompra" placeholder="Placa (ex: HNE3C80)" maxlength="7" style="width: 200px; padding: 10px; margin-right: 10px;">
-                <input type="text" id="itemFin" placeholder="Item Financeiro (opcional)" style="width: 200px; padding: 10px; margin-right: 10px;">
+                <div class="test-title">Teste 5: Comprar Viagem 🆕 FASE 2A + 2B (com persistência)</div>
+                <p style="color: #666; margin-bottom: 15px;">⚠️ ATENÇÃO: Esta operação EFETIVA a compra no SemParar e SALVA no Progress!</p>
+                <div style="margin-bottom: 10px;">
+                    <input type="text" id="placaCompra" placeholder="Placa (ex: HNE3C80)" maxlength="7" style="width: 200px; padding: 10px; margin-right: 10px;">
+                    <input type="text" id="itemFin" placeholder="Item Financeiro (opcional)" style="width: 200px; padding: 10px; margin-right: 10px;">
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <input type="number" id="codPac" placeholder="Código Pacote (opcional)" style="width: 200px; padding: 10px; margin-right: 10px;">
+                    <input type="number" id="codTrn" placeholder="Código Transportador (opcional)" style="width: 200px; padding: 10px; margin-right: 10px;">
+                    <input type="number" id="sPararRotID" placeholder="ID Rota SemParar (opcional)" style="width: 200px; padding: 10px; margin-right: 10px;">
+                </div>
                 <button onclick="comprarViagem()" style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);">
-                    🛒 COMPRAR VIAGEM
+                    🛒 COMPRAR VIAGEM (+ SALVAR NO PROGRESS)
                 </button>
                 <div id="resultCompra"></div>
             </div>
         </div>
 
         <div class="card" style="background: #f8f9fa;">
-            <h3 style="color: #333; margin-bottom: 10px;">📊 Informações FASE 1B + 2A</h3>
+            <h3 style="color: #333; margin-bottom: 10px;">📊 Informações FASE 1B + 2A + 2B</h3>
             <ul style="color: #666; line-height: 1.8;">
                 <li><strong>Status FASE 1B:</strong> ✅ Completa e funcional</li>
                 <li><strong>Status FASE 2A:</strong> ✅ Completa e funcional (comprarViagem)</li>
-                <li><strong>Métodos implementados:</strong> roteirizarPracasPedagio, cadastrarRotaTemporaria, obterCustoRota, comprarViagem</li>
+                <li><strong>Status FASE 2B:</strong> ✅ Completa e funcional (salvar no Progress)</li>
+                <li><strong>Métodos implementados:</strong> roteirizarPracasPedagio, cadastrarRotaTemporaria, obterCustoRota, comprarViagem, salvarViagemSemParar</li>
+                <li><strong>Persistência:</strong> Viagens são salvas em PUB.sPararViagem automaticamente</li>
                 <li><strong>XML Builder:</strong> PontosParadaBuilder.php (Progress dataset structure)</li>
                 <li><strong>Fix crítico:</strong> SoapVar com XSD_ANYXML (PHP SoapClient → Progress SOAP)</li>
                 <li><strong>Teste real:</strong> Pacote 3043368 com 15 entregas em Jaboticatubas-MG</li>
@@ -386,6 +395,11 @@
             const placa = document.getElementById('placaCompra').value.trim().toUpperCase();
             const itemFin = document.getElementById('itemFin').value.trim();
 
+            // FASE 2B - Campos opcionais para salvar no Progress
+            const codPac = document.getElementById('codPac').value.trim();
+            const codTrn = document.getElementById('codTrn').value.trim();
+            const sPararRotID = document.getElementById('sPararRotID').value.trim();
+
             if (!placa) {
                 result.className = 'result error';
                 result.innerHTML = '❌ Por favor, informe uma placa';
@@ -399,11 +413,20 @@
             }
 
             // Confirm before purchase
-            if (!confirm(`⚠️ ATENÇÃO!\n\nEsta operação irá EFETIVAR a compra no SemParar:\n\n` +
+            let confirmMsg = `⚠️ ATENÇÃO!\n\nEsta operação irá EFETIVAR a compra no SemParar:\n\n` +
                         `Rota: ${lastNomeRota}\n` +
                         `Placa: ${placa}\n` +
-                        `Eixos: 2\n\n` +
-                        `Deseja continuar?`)) {
+                        `Eixos: 2\n`;
+
+            if (codPac) {
+                confirmMsg += `\n✅ TAMBÉM IRÁ SALVAR NO PROGRESS:\n`;
+                confirmMsg += `Pacote: ${codPac}\n`;
+                confirmMsg += `Transportador: ${codTrn || 'N/A'}\n`;
+            }
+
+            confirmMsg += `\nDeseja continuar?`;
+
+            if (!confirm(confirmMsg)) {
                 return;
             }
 
@@ -411,31 +434,56 @@
 
             try {
                 const hoje = new Date().toISOString().split('T')[0];
+
+                // Montar payload base
+                const payload = {
+                    nome_rota: lastNomeRota,
+                    placa: placa,
+                    eixos: 2,
+                    data_inicio: hoje,
+                    data_fim: hoje,
+                    item_fin1: itemFin || 'PEDAGIO',
+                    item_fin2: '',
+                    item_fin3: ''
+                };
+
+                // FASE 2B - Adicionar campos opcionais se preenchidos
+                if (codPac) {
+                    payload.cod_pac = parseInt(codPac);
+                    payload.cod_trn = codTrn ? parseInt(codTrn) : 0;
+                    payload.s_parar_rot_id = sPararRotID ? parseInt(sPararRotID) : 0;
+                    payload.cod_rota_create_sp = lastNomeRota;
+                    payload.valor_viagem = 0; // Será atualizado depois
+                    payload.res_compra = 'sistema';
+                }
+
                 const response = await fetch(`${API_BASE}/comprar-viagem`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        nome_rota: lastNomeRota,
-                        placa: placa,
-                        eixos: 2,
-                        data_inicio: hoje,
-                        data_fim: hoje,
-                        item_fin1: itemFin || 'PEDAGIO',
-                        item_fin2: '',
-                        item_fin3: ''
-                    })
+                    body: JSON.stringify(payload)
                 });
 
                 const data = await response.json();
 
                 if (data.success) {
                     result.className = 'result success';
-                    result.innerHTML = `✅ VIAGEM COMPRADA COM SUCESSO!\n\n` +
+                    let msg = `✅ VIAGEM COMPRADA COM SUCESSO!\n\n` +
                         `Rota: ${lastNomeRota}\n` +
                         `Placa: ${placa}\n` +
                         `Código da Viagem: ${data.data.cod_viagem}\n` +
                         `Status: ${data.data.status}\n\n` +
                         `⚠️ Viagem efetivada no sistema SemParar!`;
+
+                    // FASE 2B - Mostrar status da persistência
+                    if (codPac) {
+                        if (data.data.progress_saved) {
+                            msg += `\n\n✅ SALVO NO PROGRESS DATABASE!`;
+                        } else {
+                            msg += `\n\n⚠️ Erro ao salvar no Progress: ${data.data.progress_error || 'Desconhecido'}`;
+                        }
+                    }
+
+                    result.innerHTML = msg;
                 } else {
                     result.className = 'result error';
                     result.innerHTML = `❌ ERRO NA COMPRA:\n\n${JSON.stringify(data, null, 2)}`;

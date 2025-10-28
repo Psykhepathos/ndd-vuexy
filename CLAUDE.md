@@ -559,27 +559,190 @@ LARAVEL_API=http://localhost:8002
 VUE_FRONTEND=http://localhost:5174
 ```
 
-## 🛒 Sistema de Compra de Viagem SemParar (Em Desenvolvimento)
+## 🛒 Sistema de Compra de Viagem SemParar - API Backend (FASE 1A + 1B + 2A + 2B ✅)
+
+**Status:** Backend completo e funcional. Frontend em desenvolvimento.
 
 **Visão Geral:**
-Sistema de compra de viagens integrado com API SemParar para gestão de pedágios e rotas de transporte.
+Sistema de compra de viagens integrado com API SOAP SemParar para gestão de pedágios e rotas de transporte. O backend está 100% funcional e testado.
 
-**Path:** `resources/ts/pages/compra-viagem/index.vue`
+### FASE 1A - SOAP Core (✅ COMPLETA)
+**Implementação:** `app/Services/SemParar/SemPararService.php`, `app/Services/SemParar/SoapClient.php`
 
-**Funcionalidades Planejadas:**
-1. Validação de pacote e placa
-2. Seleção de rota SemParar (CD ou Retorno)
-3. Roteirização (manual ou automática)
-4. Verificação de preço via API SemParar
-5. Compra de viagem
-6. Geração e envio de recibos
+**Funcionalidades:**
+- ✅ Autenticação SOAP (`autenticarUsuario()`)
+- ✅ Cache de token (duração da sessão)
+- ✅ Status de veículo (`statusVeiculo()`)
+- ✅ Gestão de sessão SOAP
 
-**Tabelas Progress:**
-- `PUB.sPararViagem` - Viagens compradas
-- `PUB.semPararRotMuLog` - Log de roteirizações
-- `PUB.trnvei` - Veículos cadastrados
+**Endpoints:**
+- `GET /api/semparar/test-connection` - Test SOAP connection
+- `POST /api/semparar/status-veiculo` - Verify vehicle status
+- `GET /api/semparar/debug/token` - Get cached token (debug only)
+- `POST /api/semparar/debug/clear-cache` - Clear token cache
 
-**Documentação:** `COMPRA_VIAGEM_ANALISE.md`
+### FASE 1B - Roteirização (✅ COMPLETA)
+**Funcionalidades:**
+- ✅ Roteirizar praças de pedágio entre municípios (`roteirizarPracasPedagio()`)
+- ✅ Cadastrar rota temporária (`cadastrarRotaTemporaria()`)
+- ✅ Obter custo da rota (`obterCustoRota()`)
+- ✅ Suporte a SoapVar para parâmetros XML
+
+**Endpoints:**
+- `POST /api/semparar/roteirizar` - Route toll plazas between municipalities
+- `POST /api/semparar/rota-temporaria` - Create temporary route
+- `POST /api/semparar/custo-rota` - Get route cost
+
+**Exemplo de uso:**
+```bash
+# 1. Roteirizar municípios
+curl -X POST http://localhost:8002/api/semparar/roteirizar \
+  -H "Content-Type: application/json" \
+  -d '{"pontos": [{"cod_ibge": 3118601, "desc": "CONTAGEM", "latitude": -19.9384589, "longitude": -44.0518344}], "alternativas": false}'
+
+# 2. Cadastrar rota temporária
+curl -X POST http://localhost:8002/api/semparar/rota-temporaria \
+  -H "Content-Type: application/json" \
+  -d '{"praca_ids": [1030, 1028, 1026], "nome_rota": "ROTA_TEMP_123456"}'
+
+# 3. Obter custo
+curl -X POST http://localhost:8002/api/semparar/custo-rota \
+  -H "Content-Type: application/json" \
+  -d '{"nome_rota": "ROTA_TEMP_123456", "placa": "ABC1234", "eixos": 2, "data_inicio": "2025-10-27", "data_fim": "2025-11-03"}'
+```
+
+### FASE 2A - Compra de Viagem (✅ COMPLETA)
+**Implementação:** `app/Services/SemParar/SemPararService.php` - `comprarViagem()` (105 lines)
+
+**Funcionalidades:**
+- ✅ Comprar viagem via SOAP (`comprarViagem()`)
+- ✅ Extração do código da viagem do XML response
+- ✅ Tratamento de erros SOAP
+- ✅ Rate limiting (10 req/min)
+
+**Endpoint:**
+- `POST /api/semparar/comprar-viagem` - Purchase trip
+
+**Parâmetros obrigatórios:**
+- `nome_rota` (string) - Nome da rota temporária criada
+- `placa` (string) - Placa do veículo (7-8 chars)
+- `eixos` (int) - Número de eixos (2-9)
+- `data_inicio` (date) - Data início formato YYYY-MM-DD
+- `data_fim` (date) - Data fim (>= data_inicio)
+- `item_fin1` (string, opcional) - Item financeiro 1 (default: "")
+
+**Retorno:**
+```json
+{
+  "success": true,
+  "message": "Viagem comprada com sucesso",
+  "data": {
+    "success": true,
+    "cod_viagem": "68470838",
+    "status": "0"
+  }
+}
+```
+
+### FASE 2B - Persistência no Progress Database (✅ COMPLETA)
+**Implementação:**
+- `app/Services/ProgressService.php` - `salvarViagemSemParar()` (109 lines)
+- `app/Http/Controllers/Api/SemPararController.php` - Integration (lines 325-344)
+
+**Funcionalidades:**
+- ✅ Salvar viagem no Progress após compra bem-sucedida
+- ✅ Validação de campos obrigatórios
+- ✅ SQL escaping para prevenir injection
+- ✅ Persistência opcional (só salva se `cod_pac` fornecido)
+- ✅ Non-blocking (compra funciona mesmo se Progress falhar)
+
+**Tabela Progress:**
+```sql
+PUB.sPararViagem
+├── codviagem (string) - Código da viagem no SemParar
+├── codpac (int) - Código do pacote
+├── numpla (string) - Placa do veículo
+├── nomrotsemparar (string) - Nome da rota
+├── valviagem (decimal) - Valor da viagem
+├── codtrn (int) - Código do transportador
+├── codrotcreatesp (string) - Código da rota criada
+├── spararrotid (int) - ID da rota SemParar
+├── rescompra (string) - Responsável pela compra
+├── datacompra (date) - Data da compra
+├── flgcancelado (bool) - Flag de cancelamento
+└── rescancel (string) - Responsável pelo cancelamento
+```
+
+**Endpoint (integrado):**
+- `POST /api/semparar/comprar-viagem` - Purchase trip + save to Progress
+
+**Parâmetros opcionais (FASE 2B):**
+- `cod_pac` (int) - Package ID (triggers Progress save)
+- `cod_trn` (int) - Transporter ID
+- `s_parar_rot_id` (int) - SemParar route ID
+- `cod_rota_create_sp` (string) - Route creation code
+- `valor_viagem` (decimal) - Trip cost
+- `res_compra` (string) - Purchase responsible
+
+**Retorno com Progress:**
+```json
+{
+  "success": true,
+  "message": "Viagem comprada com sucesso",
+  "data": {
+    "success": true,
+    "cod_viagem": "68470838",
+    "status": "0",
+    "progress_saved": true
+  }
+}
+```
+
+**Exemplo completo (FASE 2A + 2B):**
+```bash
+curl -X POST http://localhost:8002/api/semparar/comprar-viagem \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nome_rota": "ROTA_TEMP_123456",
+    "placa": "ABC1234",
+    "eixos": 2,
+    "data_inicio": "2025-10-27",
+    "data_fim": "2025-11-03",
+    "item_fin1": "PEDAGIO",
+    "cod_pac": 3043368,
+    "cod_trn": 5576,
+    "s_parar_rot_id": 204,
+    "cod_rota_create_sp": "ROTA_TEMP_123456",
+    "valor_viagem": 123.45,
+    "res_compra": "sistema"
+  }'
+```
+
+### 🧪 Teste Completo (FASE 1A → 1B → 2A → 2B)
+**Interface HTML:** `public/test-semparar-fase1b.html`
+
+**Acesso:** http://localhost:8002/test-semparar-fase1b.html
+
+**Workflow de teste:**
+1. **Teste 1:** Roteirizar municípios (FASE 1B)
+2. **Teste 2:** Cadastrar rota temporária (FASE 1B)
+3. **Teste 3:** Obter custo da rota (FASE 1B)
+4. **Teste 4:** Comprar viagem (FASE 2A)
+5. **Verificar Progress:** Query `PUB.sPararViagem` (FASE 2B)
+
+**Scripts de teste:**
+- `test-fase2b-completo.ps1` - PowerShell test script (Windows)
+- `test-roteirizar.json` - Simple route test data
+- `test-roteirizar-completo.json` - Complete route test data (4 municipalities)
+
+### 📋 Próximas Fases (Planejadas)
+- **FASE 2C:** Obter recibo PDF da viagem
+- **FASE 3A:** Validação e pesquisa de viagens
+- **FASE 3B:** Frontend Vue.js integration (`resources/ts/pages/compra-viagem/`)
+
+### 🔗 Documentação Adicional
+- `SEMPARAR_IMPLEMENTATION_ROADMAP.md` - Complete implementation plan
+- `COMPRA_VIAGEM_ANALISE.md` - Business analysis and requirements
 
 ---
 
