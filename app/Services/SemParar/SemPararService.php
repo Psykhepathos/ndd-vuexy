@@ -554,7 +554,6 @@ class SemPararService
             // Extract data from response
             $status = (int)($response->status ?? 999);
             $statusMensagem = (string)($response->statusMensagem ?? 'Erro desconhecido');
-            $reciboPDF = (string)($response->reciboPDF ?? '');
 
             // Check for errors
             if ($status !== 0) {
@@ -566,20 +565,21 @@ class SemPararService
                 throw new \Exception("Erro SemParar status {$status}: {$statusMensagem}");
             }
 
-            // Validate PDF content
-            if (empty($reciboPDF)) {
-                throw new \Exception('Recibo PDF não disponível na resposta');
-            }
+            // Convert SOAP response object to array
+            // SOAP returns trip data (pracas, total, viagem, catVeiculo, etc.), NOT PDF
+            // This data will be sent to Node.js service for PDF generation
+            $responseData = json_decode(json_encode($response), true);
 
-            Log::info('[SemParar] Recibo obtido com sucesso', [
+            Log::info('[SemParar] Recibo data obtido com sucesso', [
                 'cod_viagem' => $codViagem,
-                'pdf_size_bytes' => strlen($reciboPDF),
-                'status' => $status
+                'status' => $status,
+                'has_pracas' => isset($responseData['pracas']),
+                'pracas_count' => isset($responseData['pracas']) ? count((array)$responseData['pracas']) : 0
             ]);
 
             return [
                 'success' => true,
-                'recibo_pdf' => $reciboPDF,  // Base64 encoded PDF
+                'data' => $responseData,  // Full SOAP response data
                 'status' => $status,
                 'status_mensagem' => $statusMensagem
             ];
@@ -595,7 +595,7 @@ class SemPararService
             return [
                 'success' => false,
                 'error' => 'Erro SOAP: ' . $e->getMessage(),
-                'recibo_pdf' => null
+                'data' => null
             ];
 
         } catch (Exception $e) {
@@ -607,7 +607,7 @@ class SemPararService
             return [
                 'success' => false,
                 'error' => $e->getMessage(),
-                'recibo_pdf' => null
+                'data' => null
             ];
         }
     }
@@ -661,11 +661,18 @@ class SemPararService
             }
 
             // Step 2: Prepare payload for Node.js service
+            // Progress DATASET has parent-child tables: obterReciboViagemReturn (parent) + pracas (child)
+            // Extract pracas array from main data and create as separate table
+            $mainData = $reciboData['data'];
+            $pracasArray = $mainData['pracas'] ?? [];
+            unset($mainData['pracas']);  // Remove pracas from main record
+
             $payload = [
                 'data' => [
-                    'reciboPDF' => $reciboData['recibo_pdf'],
-                    'status' => $reciboData['status'],
-                    'statusMensagem' => $reciboData['status_mensagem']
+                    'obterReciboViagemReturnDset' => [
+                        'obterReciboViagemReturn' => [$mainData],  // Main record without pracas
+                        'pracas' => $pracasArray  // Separate child table
+                    ]
                 ],
                 'telefone' => $telefone,
                 'email' => $email,
@@ -675,7 +682,11 @@ class SemPararService
             Log::debug('[SemParar] Calling Node.js PDF service', [
                 'url' => 'http://192.168.19.35:5001/gerar-vale-pedagio',
                 'telefone' => $telefone,
-                'has_email' => !empty($email)
+                'has_email' => !empty($email),
+                'dataset_keys' => array_keys($payload['data']['obterReciboViagemReturnDset'] ?? []),
+                'main_record_keys' => array_keys($mainData),
+                'pracas_count' => count($pracasArray),
+                'full_payload_json' => json_encode($payload, JSON_PRETTY_PRINT)
             ]);
 
             // Step 3: Call Node.js service to generate and send PDF
