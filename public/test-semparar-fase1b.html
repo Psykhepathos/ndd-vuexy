@@ -161,15 +161,21 @@
                 <div id="resultCompra"></div>
             </div>
 
-            <!-- Teste 6: Obter Recibo (FASE 2C) -->
+            <!-- Teste 6: Gerar e Enviar Recibo (FASE 2C - Corrigido) -->
             <div class="test-section">
-                <div class="test-title">Teste 6: Obter Recibo PDF 🆕 FASE 2C</div>
-                <p style="color: #666; margin-bottom: 15px;">Baixa o recibo em PDF da viagem comprada</p>
+                <div class="test-title">Teste 6: Gerar e Enviar Recibo por WhatsApp 🆕 FASE 2C (Corrigido)</div>
+                <p style="color: #666; margin-bottom: 15px;">Gera o PDF e envia por WhatsApp/Email (seguindo fluxo do Progress)</p>
                 <div style="margin-bottom: 10px;">
                     <input type="text" id="codViagemRecibo" placeholder="Código da Viagem" style="width: 300px; padding: 10px; margin-right: 10px;">
+                    <br><br>
+                    <input type="text" id="telefoneRecibo" placeholder="Telefone (5531988892076)" value="5531988892076" style="width: 300px; padding: 10px; margin-right: 10px;">
+                    <input type="email" id="emailRecibo" placeholder="Email (opcional)" style="width: 300px; padding: 10px;">
                 </div>
+                <button onclick="gerarRecibo()" style="background: linear-gradient(135deg, #27ae60 0%, #229954 100%);">
+                    📱 GERAR E ENVIAR POR WHATSAPP
+                </button>
                 <button onclick="obterRecibo()" style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);">
-                    📄 BAIXAR RECIBO PDF
+                    📄 APENAS BAIXAR PDF
                 </button>
                 <div id="resultRecibo"></div>
             </div>
@@ -574,6 +580,57 @@
                     `;
                 } else {
                     result.innerHTML = `<div class="error">❌ ERRO: ${data.message || data.data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ ERRO: ${error.message}</div>`;
+            }
+        }
+
+        // FASE 2C - Gerar e Enviar Recibo por WhatsApp/Email
+        async function gerarRecibo() {
+            const result = document.getElementById('resultRecibo');
+            const codViagem = document.getElementById('codViagemRecibo').value.trim();
+            const telefone = document.getElementById('telefoneRecibo').value.trim();
+            const email = document.getElementById('emailRecibo').value.trim();
+
+            if (!codViagem) {
+                result.innerHTML = '<div class="error">❌ ERRO: Informe o código da viagem</div>';
+                return;
+            }
+
+            if (!telefone) {
+                result.innerHTML = '<div class="error">❌ ERRO: Informe o telefone no formato 5531988892076</div>';
+                return;
+            }
+
+            result.innerHTML = '⏳ Gerando recibo e enviando por WhatsApp...';
+
+            try {
+                const response = await fetch(`${API_BASE}/gerar-recibo`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        cod_viagem: codViagem,
+                        telefone: telefone,
+                        email: email,
+                        flg_imprime: true
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    result.innerHTML = `
+                        <div class="success">
+                            ✅ RECIBO GERADO E ENVIADO COM SUCESSO!<br>
+                            📱 WhatsApp: ${data.data.telefone}<br>
+                            ${data.data.email ? `📧 Email: ${data.data.email}<br>` : ''}
+                            📊 Status: ${data.data.status}<br><br>
+                            ⚠️ Verifique seu WhatsApp para receber o PDF!
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `<div class="error">❌ ERRO: ${data.message || data.data?.error || 'Erro desconhecido'}</div>`;
                 }
             } catch (error) {
                 result.innerHTML = `<div class="error">❌ ERRO: ${error.message}</div>`;

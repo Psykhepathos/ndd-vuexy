@@ -718,20 +718,22 @@ curl -X POST http://localhost:8002/api/semparar/comprar-viagem \
   }'
 ```
 
-### FASE 2C - Recibo PDF (✅ COMPLETA)
+### FASE 2C - Recibo PDF (✅ COMPLETA + Envio WhatsApp)
 **Implementação:**
-- `app/Services/SemParar/SemPararService.php` - `obterRecibo()` (118 lines)
-- `app/Http/Controllers/Api/SemPararController.php` - `obterRecibo()` endpoint
+- `app/Services/SemParar/SemPararService.php` - `obterRecibo()` (118 lines) + `gerarRecibo()` (130 lines)
+- `app/Http/Controllers/Api/SemPararController.php` - `obterRecibo()` + `gerarRecibo()` endpoints
 
 **Funcionalidades:**
-- ✅ Obter recibo em PDF da viagem comprada
-- ✅ PDF retornado em base64 pelo SOAP
+- ✅ Obter recibo em PDF da viagem comprada (base64)
+- ✅ Gerar recibo e enviar por WhatsApp/Email (via serviço Node.js)
 - ✅ Download automático no browser
-- ✅ Validação de código de viagem
-- ✅ Tratamento de erros (viagem não encontrada, recibo indisponível)
+- ✅ Validação de código de viagem e telefone
+- ✅ Tratamento de erros (viagem não encontrada, recibo indisponível, serviço offline)
 
-**Endpoint:**
-- `POST /api/semparar/obter-recibo` - Get trip receipt PDF
+**Endpoints:**
+
+#### 1. Obter Recibo PDF (download direto)
+- `POST /api/semparar/obter-recibo` - Get trip receipt PDF in base64
 
 **Parâmetros:**
 - `cod_viagem` (string, obrigatório) - Trip code from comprarViagem()
@@ -760,18 +762,54 @@ curl -X POST http://localhost:8002/api/semparar/comprar-viagem \
 curl -X POST http://localhost:8002/api/semparar/obter-recibo \
   -H "Content-Type: application/json" \
   -d '{"cod_viagem": "68470838"}'
-
-# Download PDF usando JavaScript no frontend
-const response = await fetch('/api/semparar/obter-recibo', {
-  method: 'POST',
-  headers: {'Content-Type': 'application/json'},
-  body: JSON.stringify({cod_viagem: '68470838'})
-});
-const data = await response.json();
-const blob = new Blob([atob(data.data.recibo_pdf)], {type: 'application/pdf'});
-const url = window.URL.createObjectURL(blob);
-window.open(url);  // Open in new tab or download
 ```
+
+#### 2. Gerar e Enviar Recibo por WhatsApp/Email (recomendado)
+- `POST /api/semparar/gerar-recibo` - Generate receipt and send via WhatsApp/Email
+
+**Parâmetros:**
+- `cod_viagem` (string, obrigatório) - Trip code
+- `telefone` (string, obrigatório) - Phone in format 5531988892076 (country+ddd+number)
+- `email` (string, opcional) - Email address
+- `flg_imprime` (boolean, opcional) - Print/display flag (default: true)
+
+**Retorno com sucesso:**
+```json
+{
+  "success": true,
+  "message": "Recibo gerado e enviado com sucesso",
+  "data": {
+    "success": true,
+    "message": "Recibo gerado e enviado com sucesso",
+    "status": "success",
+    "telefone": "5531988892076",
+    "email": "user@example.com"
+  }
+}
+```
+
+**Fluxo interno (seguindo Progress):**
+1. Chama SOAP `obterReciboViagem()` para pegar dados
+2. Envia para Node.js service (`http://192.168.19.35:5001/gerar-vale-pedagio`)
+3. Service gera PDF e envia por WhatsApp/Email
+
+**Exemplo de uso:**
+```bash
+curl -X POST http://localhost:8002/api/semparar/gerar-recibo \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cod_viagem": "68470838",
+    "telefone": "5531988892076",
+    "email": "usuario@example.com",
+    "flg_imprime": true
+  }'
+```
+
+**Observações:**
+- ⚠️ Requer serviço Node.js rodando em 192.168.19.35:5001
+- 📱 WhatsApp recebe PDF automaticamente
+- 📧 Email opcional (se fornecido, também envia por email)
+- ⏱️ Rate limit: 20 req/min (protege contra spam)
 
 ### 🧪 Teste Completo (FASE 1A → 1B → 2A → 2B → 2C)
 **Interface HTML:** `public/test-semparar-fase1b.html`
