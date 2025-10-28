@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teste SemParar SOAP API - FASE 1B + 2A</title>
+    <title>Teste SemParar SOAP API - FASE 1B + 2A + 2B + 2C</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -98,8 +98,8 @@
 <body>
     <div class="container">
         <div class="card">
-            <h1>🔌 Teste SemParar SOAP API - FASE 1B + 2A</h1>
-            <p class="subtitle">Roteirização de Praças + Compra de Viagens</p>
+            <h1>🔌 Teste SemParar SOAP API - FASE 1B + 2A + 2B + 2C</h1>
+            <p class="subtitle">Roteirização de Praças + Compra de Viagens + Recibo PDF</p>
 
             <!-- Teste 1: Rota Simples SP-RJ -->
             <div class="test-section">
@@ -160,15 +160,29 @@
                 </button>
                 <div id="resultCompra"></div>
             </div>
+
+            <!-- Teste 6: Obter Recibo (FASE 2C) -->
+            <div class="test-section">
+                <div class="test-title">Teste 6: Obter Recibo PDF 🆕 FASE 2C</div>
+                <p style="color: #666; margin-bottom: 15px;">Baixa o recibo em PDF da viagem comprada</p>
+                <div style="margin-bottom: 10px;">
+                    <input type="text" id="codViagemRecibo" placeholder="Código da Viagem" style="width: 300px; padding: 10px; margin-right: 10px;">
+                </div>
+                <button onclick="obterRecibo()" style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);">
+                    📄 BAIXAR RECIBO PDF
+                </button>
+                <div id="resultRecibo"></div>
+            </div>
         </div>
 
         <div class="card" style="background: #f8f9fa;">
-            <h3 style="color: #333; margin-bottom: 10px;">📊 Informações FASE 1B + 2A + 2B</h3>
+            <h3 style="color: #333; margin-bottom: 10px;">📊 Informações FASE 1B + 2A + 2B + 2C</h3>
             <ul style="color: #666; line-height: 1.8;">
                 <li><strong>Status FASE 1B:</strong> ✅ Completa e funcional</li>
                 <li><strong>Status FASE 2A:</strong> ✅ Completa e funcional (comprarViagem)</li>
                 <li><strong>Status FASE 2B:</strong> ✅ Completa e funcional (salvar no Progress)</li>
-                <li><strong>Métodos implementados:</strong> roteirizarPracasPedagio, cadastrarRotaTemporaria, obterCustoRota, comprarViagem, salvarViagemSemParar</li>
+                <li><strong>Status FASE 2C:</strong> ✅ Completa e funcional (obterRecibo)</li>
+                <li><strong>Métodos implementados:</strong> roteirizarPracasPedagio, cadastrarRotaTemporaria, obterCustoRota, comprarViagem, salvarViagemSemParar, obterRecibo</li>
                 <li><strong>Persistência:</strong> Viagens são salvas em PUB.sPararViagem automaticamente</li>
                 <li><strong>XML Builder:</strong> PontosParadaBuilder.php (Progress dataset structure)</li>
                 <li><strong>Fix crítico:</strong> SoapVar com XSD_ANYXML (PHP SoapClient → Progress SOAP)</li>
@@ -484,6 +498,9 @@
                     }
 
                     result.innerHTML = msg;
+
+                    // Auto-populate recibo field for easy testing
+                    document.getElementById('codViagemRecibo').value = data.data.cod_viagem;
                 } else {
                     result.className = 'result error';
                     result.innerHTML = `❌ ERRO NA COMPRA:\n\n${JSON.stringify(data, null, 2)}`;
@@ -501,6 +518,67 @@
         document.getElementById('placaCompra').addEventListener('input', function(e) {
             e.target.value = e.target.value.toUpperCase();
         });
+
+        // FASE 2C - Obter Recibo PDF
+        async function obterRecibo() {
+            const result = document.getElementById('resultRecibo');
+            const codViagem = document.getElementById('codViagemRecibo').value.trim();
+
+            if (!codViagem) {
+                result.innerHTML = '<div class="error">❌ ERRO: Informe o código da viagem</div>';
+                return;
+            }
+
+            result.innerHTML = '⏳ Obtendo recibo...';
+
+            try {
+                const response = await fetch(`${API_BASE}/obter-recibo`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cod_viagem: codViagem })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Convert base64 to blob and download
+                    const pdfBase64 = data.data.recibo_pdf;
+                    const pdfSizeKB = (data.data.pdf_size_bytes / 1024).toFixed(2);
+
+                    // Create blob from base64
+                    const byteCharacters = atob(pdfBase64);
+                    const byteNumbers = new Array(byteCharacters.length);
+                    for (let i = 0; i < byteCharacters.length; i++) {
+                        byteNumbers[i] = byteCharacters.charCodeAt(i);
+                    }
+                    const byteArray = new Uint8Array(byteNumbers);
+                    const blob = new Blob([byteArray], { type: 'application/pdf' });
+
+                    // Create download link
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `recibo_${codViagem}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+
+                    result.innerHTML = `
+                        <div class="success">
+                            ✅ RECIBO BAIXADO COM SUCESSO!<br>
+                            📄 Arquivo: recibo_${codViagem}.pdf<br>
+                            📦 Tamanho: ${pdfSizeKB} KB<br>
+                            📊 Status: ${data.data.status} - ${data.data.status_mensagem}
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `<div class="error">❌ ERRO: ${data.message || data.data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ ERRO: ${error.message}</div>`;
+            }
+        }
     </script>
 </body>
 </html>

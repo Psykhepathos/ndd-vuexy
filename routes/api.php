@@ -132,6 +132,10 @@ Route::middleware('api')->group(function () {
         Route::post('comprar-viagem', [SemPararController::class, 'comprarViagem'])
             ->middleware('throttle:10,1');  // 10 requests per minute (sensitive operation)
 
+        // FASE 2C - Receipt
+        Route::post('obter-recibo', [SemPararController::class, 'obterRecibo'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
         // Debug endpoints (only available in APP_DEBUG=true)
         Route::get('debug/token', [SemPararController::class, 'debugToken']);
         Route::post('debug/clear-cache', [SemPararController::class, 'clearCache']);

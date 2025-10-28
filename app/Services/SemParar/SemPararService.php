@@ -491,4 +491,124 @@ class SemPararService
             ];
         }
     }
+
+    /**
+     * Obter recibo da viagem (PDF em base64)
+     *
+     * Based on Rota.cls::obterRecibo() (line 610-649)
+     * Progress code:
+     *   RUN VALUE("obterReciboViagem") IN hPorta(
+     *     INPUT codViagem,
+     *     INPUT this-object:cToken,
+     *     OUTPUT retorno-Xml-Roteriza
+     *   )
+     *
+     * WSDL: InfoReciboViagem obterReciboViagem(string $codigo, long $sessao)
+     *
+     * Returns XML with:
+     * <obterReciboViagemReturn>
+     *   <reciboPDF>base64_encoded_pdf_content</reciboPDF>
+     *   <status>0</status>
+     *   <statusMensagem>Sucesso</statusMensagem>
+     * </obterReciboViagemReturn>
+     *
+     * @param string $codViagem Trip code (from comprarViagem)
+     * @return array Result with 'recibo_pdf' (base64), 'status', and 'status_mensagem'
+     * @throws Exception if SOAP call fails or receipt not available
+     */
+    public function obterRecibo(string $codViagem): array
+    {
+        try {
+            Log::info('[SemParar] Obtendo recibo da viagem', [
+                'cod_viagem' => $codViagem
+            ]);
+
+            // Get SOAP client and token
+            $soapClient = $this->soapClient->getSoapClient();
+            $token = $this->soapClient->getToken() ?? $this->soapClient->autenticarUsuario();
+
+            if (!$token) {
+                throw new \Exception('Falha ao obter token de autenticação');
+            }
+
+            Log::debug('[SemParar] Calling obterReciboViagem', [
+                'cod_viagem' => $codViagem,
+                'token_length' => strlen($token)
+            ]);
+
+            // Call SOAP method
+            $response = $soapClient->obterReciboViagem(
+                $codViagem,
+                $token
+            );
+
+            // Log SOAP request/response for debugging
+            Log::debug('[SemParar] SOAP Request', [
+                'request' => $soapClient->__getLastRequest()
+            ]);
+
+            Log::debug('[SemParar] SOAP Response', [
+                'response' => $soapClient->__getLastResponse()
+            ]);
+
+            // Extract data from response
+            $status = (int)($response->status ?? 999);
+            $statusMensagem = (string)($response->statusMensagem ?? 'Erro desconhecido');
+            $reciboPDF = (string)($response->reciboPDF ?? '');
+
+            // Check for errors
+            if ($status !== 0) {
+                Log::error('[SemParar] Erro ao obter recibo', [
+                    'status' => $status,
+                    'status_mensagem' => $statusMensagem
+                ]);
+
+                throw new \Exception("Erro SemParar status {$status}: {$statusMensagem}");
+            }
+
+            // Validate PDF content
+            if (empty($reciboPDF)) {
+                throw new \Exception('Recibo PDF não disponível na resposta');
+            }
+
+            Log::info('[SemParar] Recibo obtido com sucesso', [
+                'cod_viagem' => $codViagem,
+                'pdf_size_bytes' => strlen($reciboPDF),
+                'status' => $status
+            ]);
+
+            return [
+                'success' => true,
+                'recibo_pdf' => $reciboPDF,  // Base64 encoded PDF
+                'status' => $status,
+                'status_mensagem' => $statusMensagem
+            ];
+
+        } catch (\SoapFault $e) {
+            Log::error('[SemParar] SOAP Fault ao obter recibo', [
+                'error' => $e->getMessage(),
+                'faultcode' => $e->faultcode ?? 'N/A',
+                'faultstring' => $e->faultstring ?? 'N/A',
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro SOAP: ' . $e->getMessage(),
+                'recibo_pdf' => null
+            ];
+
+        } catch (Exception $e) {
+            Log::error('[SemParar] Erro ao obter recibo', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'recibo_pdf' => null
+            ];
+        }
+    }
 }

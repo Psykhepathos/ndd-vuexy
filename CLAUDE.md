@@ -559,9 +559,9 @@ LARAVEL_API=http://localhost:8002
 VUE_FRONTEND=http://localhost:5174
 ```
 
-## 🛒 Sistema de Compra de Viagem SemParar - API Backend (FASE 1A + 1B + 2A + 2B ✅)
+## 🛒 Sistema de Compra de Viagem SemParar - API Backend (FASE 1A + 1B + 2A + 2B + 2C ✅)
 
-**Status:** Backend completo e funcional. Frontend em desenvolvimento.
+**Status:** Backend completo e funcional (roteirização, compra, persistência, recibo). Frontend em desenvolvimento.
 
 **Visão Geral:**
 Sistema de compra de viagens integrado com API SOAP SemParar para gestão de pedágios e rotas de transporte. O backend está 100% funcional e testado.
@@ -718,7 +718,62 @@ curl -X POST http://localhost:8002/api/semparar/comprar-viagem \
   }'
 ```
 
-### 🧪 Teste Completo (FASE 1A → 1B → 2A → 2B)
+### FASE 2C - Recibo PDF (✅ COMPLETA)
+**Implementação:**
+- `app/Services/SemParar/SemPararService.php` - `obterRecibo()` (118 lines)
+- `app/Http/Controllers/Api/SemPararController.php` - `obterRecibo()` endpoint
+
+**Funcionalidades:**
+- ✅ Obter recibo em PDF da viagem comprada
+- ✅ PDF retornado em base64 pelo SOAP
+- ✅ Download automático no browser
+- ✅ Validação de código de viagem
+- ✅ Tratamento de erros (viagem não encontrada, recibo indisponível)
+
+**Endpoint:**
+- `POST /api/semparar/obter-recibo` - Get trip receipt PDF
+
+**Parâmetros:**
+- `cod_viagem` (string, obrigatório) - Trip code from comprarViagem()
+
+**Retorno com sucesso:**
+```json
+{
+  "success": true,
+  "message": "Recibo obtido com sucesso",
+  "data": {
+    "recibo_pdf": "JVBERi0xLjQKJe...",  // Base64 encoded PDF
+    "pdf_size_bytes": 45678,
+    "status": 0,
+    "status_mensagem": "Sucesso"
+  }
+}
+```
+
+**Status codes SemParar:**
+- `0` - Sucesso (PDF disponível)
+- `15` - Recibo não disponível (viagem antiga/usada/inválida)
+- `999` - Erro desconhecido
+
+**Exemplo de uso:**
+```bash
+curl -X POST http://localhost:8002/api/semparar/obter-recibo \
+  -H "Content-Type: application/json" \
+  -d '{"cod_viagem": "68470838"}'
+
+# Download PDF usando JavaScript no frontend
+const response = await fetch('/api/semparar/obter-recibo', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({cod_viagem: '68470838'})
+});
+const data = await response.json();
+const blob = new Blob([atob(data.data.recibo_pdf)], {type: 'application/pdf'});
+const url = window.URL.createObjectURL(blob);
+window.open(url);  // Open in new tab or download
+```
+
+### 🧪 Teste Completo (FASE 1A → 1B → 2A → 2B → 2C)
 **Interface HTML:** `public/test-semparar-fase1b.html`
 
 **Acesso:** http://localhost:8002/test-semparar-fase1b.html
@@ -727,8 +782,9 @@ curl -X POST http://localhost:8002/api/semparar/comprar-viagem \
 1. **Teste 1:** Roteirizar municípios (FASE 1B)
 2. **Teste 2:** Cadastrar rota temporária (FASE 1B)
 3. **Teste 3:** Obter custo da rota (FASE 1B)
-4. **Teste 4:** Comprar viagem (FASE 2A)
-5. **Verificar Progress:** Query `PUB.sPararViagem` (FASE 2B)
+4. **Teste 4:** Comprar viagem (FASE 2A + 2B)
+5. **Teste 5:** Baixar recibo PDF (FASE 2C) ← NOVO!
+6. **Verificar Progress:** Query `PUB.sPararViagem` (FASE 2B)
 
 **Scripts de teste:**
 - `test-fase2b-completo.ps1` - PowerShell test script (Windows)
@@ -736,7 +792,6 @@ curl -X POST http://localhost:8002/api/semparar/comprar-viagem \
 - `test-roteirizar-completo.json` - Complete route test data (4 municipalities)
 
 ### 📋 Próximas Fases (Planejadas)
-- **FASE 2C:** Obter recibo PDF da viagem
 - **FASE 3A:** Validação e pesquisa de viagens
 - **FASE 3B:** Frontend Vue.js integration (`resources/ts/pages/compra-viagem/`)
 
