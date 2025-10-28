@@ -423,7 +423,7 @@ class SemPararController extends Controller
 
             $codViagem = $request->input('cod_viagem');
             $telefone = $request->input('telefone');
-            $email = $request->input('email', '');
+            $email = $request->input('email') ?? '';  // Fix: use null coalescing
             $flgImprime = $request->input('flg_imprime', true);
 
             // Call SemParar service to generate and send receipt
