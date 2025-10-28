@@ -2194,4 +2194,116 @@ class ProgressService
             ];
         }
     }
+
+    /**
+     * Salvar viagem SemParar no Progress Database
+     *
+     * Insere registro na tabela PUB.sPararViagem após compra bem-sucedida
+     *
+     * Campos da tabela:
+     * - codpac: Código do pacote
+     * - numpla: Placa do veículo
+     * - rescompra: Responsável pela compra (usuário logado)
+     * - codrotcreatesp: Código da rota criada no SemParar
+     * - spararrotid: ID da rota SemParar
+     * - valviagem: Valor da viagem (pedágio)
+     * - codtrn: Código do transportador
+     * - nomrotsemparar: Nome da rota no SemParar
+     * - codviagem: Código da viagem retornado pelo SemParar
+     * - datacompra: Data da compra
+     * - flgcancelado: Flag de cancelamento (false por padrão)
+     * - rescancel: Responsável pelo cancelamento (vazio por padrão)
+     *
+     * @param array $dados Dados da viagem
+     * @return array Resultado da operação
+     */
+    public function salvarViagemSemParar(array $dados): array
+    {
+        try {
+            Log::info('[Progress] Salvando viagem SemParar', [
+                'codViagem' => $dados['codViagem'] ?? null,
+                'codPac' => $dados['codPac'] ?? null,
+                'placa' => $dados['placa'] ?? null
+            ]);
+
+            // Validação dos campos obrigatórios
+            $camposObrigatorios = [
+                'codViagem', 'codPac', 'placa', 'nomeRotaSemParar',
+                'codRotaCreateSp', 'sPararRotID', 'valorViagem', 'codTrn'
+            ];
+
+            foreach ($camposObrigatorios as $campo) {
+                if (!isset($dados[$campo])) {
+                    throw new Exception("Campo obrigatório ausente: {$campo}");
+                }
+            }
+
+            // Escapar strings para SQL
+            $codPac = (int)$dados['codPac'];
+            $placa = $this->escapeSqlString(strtoupper($dados['placa']));
+            $resCompra = $this->escapeSqlString($dados['resCompra'] ?? 'sistema');
+            $codRotaCreateSp = $this->escapeSqlString($dados['codRotaCreateSp']);
+            $sPararRotID = (int)$dados['sPararRotID'];
+            $valorViagem = (float)$dados['valorViagem'];
+            $codTrn = (int)$dados['codTrn'];
+            $nomeRotaSemParar = $this->escapeSqlString($dados['nomeRotaSemParar']);
+            $codViagem = $this->escapeSqlString($dados['codViagem']);
+            $dataCompra = date('Y-m-d');
+
+            // Construir SQL de INSERT
+            $sql = "INSERT INTO PUB.sPararViagem (" .
+                "codpac, numpla, rescompra, codrotcreatesp, spararrotid, " .
+                "valviagem, codtrn, nomrotsemparar, codviagem, datacompra, " .
+                "flgcancelado, rescancel" .
+                ") VALUES (" .
+                "{$codPac}, " .
+                "{$placa}, " .
+                "{$resCompra}, " .
+                "{$codRotaCreateSp}, " .
+                "{$sPararRotID}, " .
+                "{$valorViagem}, " .
+                "{$codTrn}, " .
+                "{$nomeRotaSemParar}, " .
+                "{$codViagem}, " .
+                "'{$dataCompra}', " .
+                "false, " .
+                "''" .
+                ")";
+
+            Log::debug('[Progress] SQL INSERT sPararViagem', [
+                'sql' => $sql
+            ]);
+
+            // Executar INSERT
+            $result = $this->executeUpdate($sql);
+
+            if (!$result['success']) {
+                throw new Exception($result['error'] ?? 'Erro ao executar INSERT');
+            }
+
+            Log::info('[Progress] Viagem SemParar salva com sucesso', [
+                'codViagem' => $dados['codViagem'],
+                'rowsAffected' => $result['rows_affected'] ?? 0
+            ]);
+
+            return [
+                'success' => true,
+                'message' => 'Viagem salva com sucesso',
+                'codViagem' => $dados['codViagem'],
+                'rows_affected' => $result['rows_affected'] ?? 0
+            ];
+
+        } catch (Exception $e) {
+            Log::error('[Progress] Erro ao salvar viagem SemParar', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'dados' => $dados
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao salvar viagem: ' . $e->getMessage()
+            ];
+        }
+    }
 }

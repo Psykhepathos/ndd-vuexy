@@ -4,11 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\SemParar\SemPararService;
+use App\Services\ProgressService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 /**
- * SemPararController - Test endpoints for FASE 1A
+ * SemPararController - Test endpoints for FASE 1A + 1B + 2A + 2B
  *
  * Provides test endpoints to verify SOAP integration
  * Based on SEMPARAR_IMPLEMENTATION_ROADMAP.md task 1.8
@@ -16,10 +17,14 @@ use Illuminate\Http\JsonResponse;
 class SemPararController extends Controller
 {
     protected SemPararService $semPararService;
+    protected ProgressService $progressService;
 
-    public function __construct(SemPararService $semPararService)
-    {
+    public function __construct(
+        SemPararService $semPararService,
+        ProgressService $progressService
+    ) {
         $this->semPararService = $semPararService;
+        $this->progressService = $progressService;
     }
 
     /**
@@ -293,10 +298,18 @@ class SemPararController extends Controller
             'data_fim' => 'required|date|after_or_equal:data_inicio',
             'item_fin1' => 'nullable|string|max:50',
             'item_fin2' => 'nullable|string|max:50',
-            'item_fin3' => 'nullable|string|max:50'
+            'item_fin3' => 'nullable|string|max:50',
+            // FASE 2B - Campos para salvar no Progress
+            'cod_pac' => 'nullable|integer',
+            'cod_trn' => 'nullable|integer',
+            'cod_rota_create_sp' => 'nullable|string',
+            's_parar_rot_id' => 'nullable|integer',
+            'valor_viagem' => 'nullable|numeric',
+            'res_compra' => 'nullable|string|max:50'
         ]);
 
         try {
+            // FASE 2A - Comprar viagem no SemParar
             $result = $this->semPararService->comprarViagem(
                 $request->input('nome_rota'),
                 $request->input('placa'),
@@ -307,6 +320,28 @@ class SemPararController extends Controller
                 $request->input('item_fin2') ?? '',
                 $request->input('item_fin3') ?? ''
             );
+
+            // Se compra foi bem-sucedida E temos dados para salvar no Progress
+            if ($result['success'] && $request->has('cod_pac')) {
+                // FASE 2B - Salvar viagem no Progress Database
+                $progressResult = $this->progressService->salvarViagemSemParar([
+                    'codViagem' => $result['cod_viagem'],
+                    'codPac' => $request->input('cod_pac'),
+                    'placa' => $request->input('placa'),
+                    'nomeRotaSemParar' => $request->input('nome_rota'),
+                    'codRotaCreateSp' => $request->input('cod_rota_create_sp', ''),
+                    'sPararRotID' => $request->input('s_parar_rot_id', 0),
+                    'valorViagem' => $request->input('valor_viagem', 0),
+                    'codTrn' => $request->input('cod_trn', 0),
+                    'resCompra' => $request->input('res_compra', 'sistema')
+                ]);
+
+                // Adicionar resultado da persistência ao response
+                $result['progress_saved'] = $progressResult['success'];
+                if (!$progressResult['success']) {
+                    $result['progress_error'] = $progressResult['error'];
+                }
+            }
 
             return response()->json([
                 'success' => $result['success'],

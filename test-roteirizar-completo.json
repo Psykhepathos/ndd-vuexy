@@ -1,0 +1,29 @@
+{
+  "pontos": [
+    {
+      "cod_ibge": 3118601,
+      "desc": "CONTAGEM - MG",
+      "latitude": -19.9384589,
+      "longitude": -44.0518344
+    },
+    {
+      "cod_ibge": 3136306,
+      "desc": "JOAO PINHEIRO - MG",
+      "latitude": -17.7406406,
+      "longitude": -46.1743626
+    },
+    {
+      "cod_ibge": 3147006,
+      "desc": "PARACATU - MG",
+      "latitude": -17.2250251,
+      "longitude": -46.8680057
+    },
+    {
+      "cod_ibge": 3170404,
+      "desc": "UNAI - MG",
+      "latitude": -16.3577794,
+      "longitude": -46.9062823
+    }
+  ],
+  "alternativas": false
+}
