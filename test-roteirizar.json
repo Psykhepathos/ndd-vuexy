@@ -1,0 +1,7 @@
+{
+  "pontos": [
+    {"cod_ibge": 3131901, "desc": "ITABIRITO", "latitude": -20.2481745, "longitude": -43.8043936},
+    {"cod_ibge": 3118601, "desc": "CONTAGEM", "latitude": -19.9384589, "longitude": -44.0518344}
+  ],
+  "alternativas": false
+}

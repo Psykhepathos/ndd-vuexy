@@ -373,24 +373,23 @@ class SemPararController extends Controller
 
             $codViagem = $request->input('cod_viagem');
 
-            // Call SemParar service to get receipt
+            // Call SemParar service to get receipt data
+            // NOTE: SOAP returns trip data (pracas, total, etc.), NOT PDF
             $result = $this->semPararService->obterRecibo($codViagem);
 
             if ($result['success']) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'Recibo obtido com sucesso',
-                    'data' => [
-                        'recibo_pdf' => $result['recibo_pdf'],
-                        'pdf_size_bytes' => strlen($result['recibo_pdf']),
-                        'status' => $result['status'],
-                        'status_mensagem' => $result['status_mensagem']
-                    ]
+                    'message' => 'Dados do recibo obtidos com sucesso',
+                    'data' => $result['data'],  // Full SOAP response data
+                    'status' => $result['status'],
+                    'status_mensagem' => $result['status_mensagem'],
+                    'note' => 'SOAP retorna dados da viagem, não PDF. Use /gerar-recibo para gerar PDF e enviar por WhatsApp.'
                 ], 200);
             } else {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Erro ao obter recibo',
+                    'message' => 'Erro ao obter dados do recibo',
                     'data' => $result
                 ], 400);
             }
@@ -398,7 +397,7 @@ class SemPararController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao obter recibo',
+                'message' => 'Erro ao obter dados do recibo',
                 'error' => $e->getMessage()
             ], 500);
         }

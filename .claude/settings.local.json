@@ -69,7 +69,9 @@
       "Bash(start http://localhost:8002/rotas-padrao)",
       "Bash(start:*)",
       "Bash(del:*)",
-      "Bash(move \"resources\\ts\\pages\\compra-viagem\\index.vue\" \"resources\\ts\\pages\\compra-viagem\\index-old-backup.vue\")"
+      "Bash(move \"resources\\ts\\pages\\compra-viagem\\index.vue\" \"resources\\ts\\pages\\compra-viagem\\index-old-backup.vue\")",
+      "Bash(git rm:*)",
+      "Bash(git reset:*)"
     ],
     "deny": [],
     "ask": []
