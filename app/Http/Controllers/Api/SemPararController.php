@@ -356,4 +356,51 @@ class SemPararController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Obter recibo da viagem em PDF (FASE 2C)
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function obterRecibo(Request $request): JsonResponse
+    {
+        try {
+            // Validate input
+            $request->validate([
+                'cod_viagem' => 'required|string|min:1|max:50'
+            ]);
+
+            $codViagem = $request->input('cod_viagem');
+
+            // Call SemParar service to get receipt
+            $result = $this->semPararService->obterRecibo($codViagem);
+
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Recibo obtido com sucesso',
+                    'data' => [
+                        'recibo_pdf' => $result['recibo_pdf'],
+                        'pdf_size_bytes' => strlen($result['recibo_pdf']),
+                        'status' => $result['status'],
+                        'status_mensagem' => $result['status_mensagem']
+                    ]
+                ], 200);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Erro ao obter recibo',
+                    'data' => $result
+                ], 400);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao obter recibo',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
