@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SemParar FASE 3A - Gestão de Viagens</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .test-section {
+            margin-bottom: 30px;
+            padding-bottom: 30px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .test-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .test-title {
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        input[type="date"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 10px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-right: 10px;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .success {
+            background: #d4edda;
+            border: 2px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .error {
+            background: #f8d7da;
+            border: 2px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .warning {
+            background: #fff3cd;
+            border: 2px solid #ffeaa7;
+            color: #856404;
+            margin-bottom: 15px;
+        }
+
+        pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .date-range {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .date-range {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 SemParar FASE 3A - Gestão de Viagens</h1>
+
+        <div class="card">
+            <div class="warning">
+                ⚠️ <strong>ATENÇÃO:</strong> Cancelamento e reemissão são operações <strong>irreversíveis</strong>!
+                Use apenas com viagens de teste ou certifique-se do que está fazendo.
+            </div>
+
+            <!-- Teste 1: Consultar Viagens -->
+            <div class="test-section">
+                <div class="test-title">📋 Teste 1: Consultar Viagens por Período</div>
+                <p style="color: #666; margin-bottom: 15px;">
+                    Lista todas as viagens compradas no período informado.<br>
+                    <small style="color: #e74c3c;">⚠️ Nota: Pode retornar status 999 (precisa WSDL vpextrato separado)</small>
+                </p>
+                <div class="date-range">
+                    <div class="input-group">
+                        <label>Data Início:</label>
+                        <input type="date" id="dataInicio" value="2025-10-28">
+                    </div>
+                    <div class="input-group">
+                        <label>Data Fim:</label>
+                        <input type="date" id="dataFim" value="2025-10-29">
+                    </div>
+                </div>
+                <button onclick="consultarViagens()">
+                    🔍 CONSULTAR VIAGENS
+                </button>
+                <div id="resultConsultar"></div>
+            </div>
+
+            <!-- Teste 2: Cancelar Viagem -->
+            <div class="test-section">
+                <div class="test-title">❌ Teste 2: Cancelar Viagem</div>
+                <p style="color: #666; margin-bottom: 15px;">
+                    Cancela uma viagem comprada. <strong style="color: #e74c3c;">IRREVERSÍVEL!</strong><br>
+                    <small>Use apenas viagens de teste ou que realmente precisam ser canceladas.</small>
+                </p>
+                <div class="input-group">
+                    <label>Código da Viagem:</label>
+                    <input type="text" id="codViagemCancelar" placeholder="Ex: 91154383">
+                </div>
+                <button onclick="cancelarViagem()" style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);">
+                    ⚠️ CANCELAR VIAGEM
+                </button>
+                <div id="resultCancelar"></div>
+            </div>
+
+            <!-- Teste 3: Reemitir Viagem -->
+            <div class="test-section">
+                <div class="test-title">🔄 Teste 3: Reemitir Viagem com Nova Placa</div>
+                <p style="color: #666; margin-bottom: 15px;">
+                    Reemite uma viagem existente alterando a placa do veículo.<br>
+                    <small>Útil quando o motorista troca de veículo mas mantém a mesma rota.</small>
+                </p>
+                <div class="input-group">
+                    <label>Código da Viagem:</label>
+                    <input type="text" id="codViagemReemitir" placeholder="Ex: 91154383">
+                </div>
+                <div class="input-group">
+                    <label>Nova Placa (7 caracteres):</label>
+                    <input type="text" id="placaReemitir" placeholder="Ex: ABC1234" maxlength="7" style="text-transform: uppercase;">
+                </div>
+                <button onclick="reemitirViagem()" style="background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);">
+                    🔄 REEMITIR VIAGEM
+                </button>
+                <div id="resultReemitir"></div>
+            </div>
+        </div>
+
+        <!-- Card de Informações -->
+        <div class="card" style="background: #f8f9fa;">
+            <h3 style="color: #333; margin-bottom: 15px;">ℹ️ Informações sobre os Endpoints</h3>
+            <ul style="color: #666; line-height: 2;">
+                <li><strong>Consultar Viagens:</strong> <code>POST /api/semparar/consultar-viagens</code> (60 req/min)</li>
+                <li><strong>Cancelar Viagem:</strong> <code>POST /api/semparar/cancelar-viagem</code> (20 req/min)</li>
+                <li><strong>Reemitir Viagem:</strong> <code>POST /api/semparar/reemitir-viagem</code> (20 req/min)</li>
+            </ul>
+            <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
+            <p style="color: #666;">
+                <strong>Implementado em:</strong> 2025-10-29 (FASE 3A)<br>
+                <strong>Baseado em:</strong> Progress Rota.cls (linhas 99-1017)<br>
+                <strong>Status:</strong> ✅ Implementado e testado
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8002/api/semparar';
+
+        // Auto-uppercase plate input
+        document.getElementById('placaReemitir').addEventListener('input', function(e) {
+            e.target.value = e.target.value.toUpperCase();
+        });
+
+        // Teste 1: Consultar Viagens
+        async function consultarViagens() {
+            const result = document.getElementById('resultConsultar');
+            const dataInicio = document.getElementById('dataInicio').value;
+            const dataFim = document.getElementById('dataFim').value;
+
+            if (!dataInicio || !dataFim) {
+                result.innerHTML = '<div class="error">❌ ERRO: Informe as datas de início e fim</div>';
+                return;
+            }
+
+            result.innerHTML = '⏳ Consultando viagens...';
+
+            try {
+                const response = await fetch(`${API_BASE}/consultar-viagens`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        data_inicio: dataInicio,
+                        data_fim: dataFim
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const viagens = data.data.viagens || [];
+                    const viagensValidas = viagens.filter(v => v.numeroViagem && v.numeroViagem > 0);
+
+                    result.innerHTML = `
+                        <div class="success">
+                            ✅ CONSULTA CONCLUÍDA!<br>
+                            📅 Período: ${dataInicio} até ${dataFim}<br>
+                            📊 Total de registros: ${viagens.length}<br>
+                            ✅ Viagens válidas: ${viagensValidas.length}<br>
+                            ${viagens[0]?.status === 999 ? '<br>⚠️ Status 999: Pode precisar WSDL vpextrato separado' : ''}
+                            <hr style="margin: 10px 0;">
+                            <strong>Dados completos:</strong>
+                            <pre>${JSON.stringify(data.data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `<div class="error">❌ ERRO: ${data.message}<br><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ ERRO: ${error.message}</div>`;
+            }
+        }
+
+        // Teste 2: Cancelar Viagem
+        async function cancelarViagem() {
+            const result = document.getElementById('resultCancelar');
+            const codViagem = document.getElementById('codViagemCancelar').value.trim();
+
+            if (!codViagem) {
+                result.innerHTML = '<div class="error">❌ ERRO: Informe o código da viagem</div>';
+                return;
+            }
+
+            // Confirmação dupla para operação irreversível
+            if (!confirm(`⚠️ ATENÇÃO!\n\nVocê está prestes a CANCELAR a viagem ${codViagem}.\n\nEsta operação é IRREVERSÍVEL!\n\nTem certeza que deseja continuar?`)) {
+                result.innerHTML = '<div class="warning">⚠️ Operação cancelada pelo usuário.</div>';
+                return;
+            }
+
+            result.innerHTML = '⏳ Cancelando viagem...';
+
+            try {
+                const response = await fetch(`${API_BASE}/cancelar-viagem`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        cod_viagem: codViagem
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    result.innerHTML = `
+                        <div class="success">
+                            ✅ VIAGEM CANCELADA COM SUCESSO!<br>
+                            🔢 Código: ${codViagem}<br>
+                            📊 Status: ${data.data.status} - ${data.data.status_mensagem}<br>
+                            <hr style="margin: 10px 0;">
+                            <pre>${JSON.stringify(data.data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `<div class="error">❌ ERRO: ${data.message}<br><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ ERRO: ${error.message}</div>`;
+            }
+        }
+
+        // Teste 3: Reemitir Viagem
+        async function reemitirViagem() {
+            const result = document.getElementById('resultReemitir');
+            const codViagem = document.getElementById('codViagemReemitir').value.trim();
+            const placa = document.getElementById('placaReemitir').value.trim().toUpperCase();
+
+            if (!codViagem || !placa) {
+                result.innerHTML = '<div class="error">❌ ERRO: Informe o código da viagem e a nova placa</div>';
+                return;
+            }
+
+            if (placa.length !== 7) {
+                result.innerHTML = '<div class="error">❌ ERRO: A placa deve ter exatamente 7 caracteres (ex: ABC1234)</div>';
+                return;
+            }
+
+            // Confirmação
+            if (!confirm(`⚠️ Reemitir viagem ${codViagem} com nova placa ${placa}?\n\nEsta operação irá gerar um novo vale-pedágio.`)) {
+                result.innerHTML = '<div class="warning">⚠️ Operação cancelada pelo usuário.</div>';
+                return;
+            }
+
+            result.innerHTML = '⏳ Reemitindo viagem...';
+
+            try {
+                const response = await fetch(`${API_BASE}/reemitir-viagem`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        cod_viagem: codViagem,
+                        placa: placa
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    result.innerHTML = `
+                        <div class="success">
+                            ✅ VIAGEM REEMITIDA COM SUCESSO!<br>
+                            🔢 Código: ${codViagem}<br>
+                            🚗 Nova Placa: ${placa}<br>
+                            📊 Status: ${data.data.status} - ${data.data.status_mensagem}<br>
+                            <hr style="margin: 10px 0;">
+                            <pre>${JSON.stringify(data.data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `<div class="error">❌ ERRO: ${data.message}<br><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ ERRO: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>
