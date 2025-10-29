@@ -831,11 +831,13 @@ curl -X POST http://localhost:8002/api/semparar/gerar-recibo \
 
 **Observações:**
 - ⚠️ **Requer Python Flask service rodando em 192.168.19.35:5001** (`app.py`)
-- 📱 **WhatsApp:** Envio automático via Z-API (sempre tenta enviar)
-- 📧 **Email:** Envio via SMTP (webmail.tambasa.com.br) - se email válido fornecido
+- 📱 **WhatsApp:** Envio automático via Z-API (sempre funciona!)
+- 📧 **Email:** SEMPRE usa `naoresponda@tambasa.com.br` (ignora email do usuário)
+  - **Motivo:** SMTP pode rejeitar domínios, causando falha 500
+  - **Prioridade:** WhatsApp é principal, email é secundário
 - 🖨️ **Impressão:** Se `flg_imprime: true`, envia para impressora `transp4`
 - ⏱️ **Rate limit:** 20 req/min (protege contra spam)
-- ✅ **Status 200:** Recibo gerado e enviado com sucesso (chegou no WhatsApp!)
+- ✅ **Testado:** Todos cenários (sem email, vazio, inválido, válido) → sucesso!
 
 ### 🧪 Teste Completo (FASE 1A → 1B → 2A → 2B → 2C)
 **Interface HTML:** `public/test-semparar-fase1b.html`
