@@ -799,8 +799,9 @@ class SemPararService
                 'data_fim' => $dataFim
             ]);
 
-            // Get SOAP client and token
-            $soapClient = $this->soapClient->getSoapClient();
+            // Get SOAP EXTRATO client (vpextrato WSDL) and token
+            // Progress uses separate WSDL for this method (Rota.cls line 971)
+            $soapExtratoClient = $this->soapClient->getSoapExtratoClient();
             $token = $this->soapClient->getToken() ?? $this->soapClient->autenticarUsuario();
 
             if (!$token) {
@@ -811,16 +812,16 @@ class SemPararService
             $dataInicioISO = $dataInicio . 'T00:00:00Z';
             $dataFimISO = $dataFim . 'T23:59:59Z';
 
-            Log::debug('[SemParar] Calling obterExtratoCreditos', [
+            Log::debug('[SemParar] Calling obterExtratoCreditos (vpextrato WSDL)', [
                 'data_inicio_iso' => $dataInicioISO,
                 'data_fim_iso' => $dataFimISO,
-                'token_length' => strlen($token)
+                'token_length' => strlen($token),
+                'wsdl' => 'vpextrato'
             ]);
 
-            // Call SOAP method
-            // Note: This method uses a different WSDL (vpextrato) in Progress
-            // but we'll try with the same client first
-            $response = $soapClient->obterExtratoCreditos(
+            // Call SOAP method using vpextrato WSDL
+            // Progress: RUN VALUE("obterExtratoCreditos") IN hport(input inicio, input fim, input this-object:cToken, ...)
+            $response = $soapExtratoClient->obterExtratoCreditos(
                 $dataInicioISO,
                 $dataFimISO,
                 $token
@@ -828,11 +829,11 @@ class SemPararService
 
             // Log SOAP request/response for debugging
             Log::debug('[SemParar] SOAP Request', [
-                'request' => $soapClient->__getLastRequest()
+                'request' => $soapExtratoClient->__getLastRequest()
             ]);
 
             Log::debug('[SemParar] SOAP Response', [
-                'response' => $soapClient->__getLastResponse()
+                'response' => $soapExtratoClient->__getLastResponse()
             ]);
 
             // Convert response to array

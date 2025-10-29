@@ -17,9 +17,14 @@ use Exception;
 class SemPararSoapClient
 {
     /**
-     * PHP SoapClient instance
+     * PHP SoapClient instance (main WSDL - wsvp)
      */
     protected ?SoapClient $soapClient = null;
+
+    /**
+     * PHP SoapClient instance for extratoCreditos (vpextrato WSDL)
+     */
+    protected ?SoapClient $soapExtratoClient = null;
 
     /**
      * Current session token (cached)
@@ -27,9 +32,14 @@ class SemPararSoapClient
     protected ?string $cToken = null;
 
     /**
-     * WSDL URL
+     * WSDL URL (main - wsvp)
      */
     protected string $wsdlUrl;
+
+    /**
+     * WSDL URL for extratoCreditos (vpextrato)
+     */
+    protected string $wsdlExtratoUrl;
 
     /**
      * SOAP client options
@@ -54,6 +64,7 @@ class SemPararSoapClient
     public function __construct()
     {
         $this->wsdlUrl = config('semparar.wsdl_url');
+        $this->wsdlExtratoUrl = config('semparar.wsdl_extrato_url');
         $this->cnpj = config('semparar.cnpj');
         $this->user = config('semparar.user');
         $this->password = config('semparar.password');
@@ -322,6 +333,36 @@ class SemPararSoapClient
     public function getSoapClient(): SoapClient
     {
         return $this->soapClient;
+    }
+
+    /**
+     * Get SOAP Extrato client instance (vpextrato WSDL)
+     * Used for obterExtratoCreditos method
+     *
+     * @return SoapClient
+     * @throws Exception if connection fails
+     */
+    public function getSoapExtratoClient(): SoapClient
+    {
+        // Lazy initialization - only connect when needed
+        if ($this->soapExtratoClient === null) {
+            try {
+                $this->soapExtratoClient = new SoapClient($this->wsdlExtratoUrl, $this->soapOptions);
+
+                Log::info('[SemParar SOAP] Connected to Extrato WSDL', [
+                    'url' => $this->wsdlExtratoUrl,
+                    'functions' => count($this->soapExtratoClient->__getFunctions())
+                ]);
+            } catch (SoapFault $e) {
+                Log::error('[SemParar SOAP] Extrato WSDL connection failed', [
+                    'error' => $e->getMessage(),
+                    'wsdl' => $this->wsdlExtratoUrl
+                ]);
+                throw new Exception("Failed to connect to SemParar Extrato WSDL: {$e->getMessage()}", 0, $e);
+            }
+        }
+
+        return $this->soapExtratoClient;
     }
 
     /**

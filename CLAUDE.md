@@ -967,6 +967,15 @@ curl -X POST http://localhost:8002/api/semparar/reemitir-viagem \
 - 📝 **Status codes:** 0 = sucesso, 999 = erro desconhecido ou sem dados
 - 🔄 **Implementação:** Baseada em Rota.cls linhas 99-1017
 
+**🧪 Interface de Teste FASE 3A:**
+- **URL:** http://localhost:8002/test-semparar-fase3a.html
+- **Recursos:**
+  - ✅ Formulários interativos para todos os 3 endpoints
+  - ✅ Validação de campos e placa brasileira
+  - ✅ Confirmações duplas para operações irreversíveis
+  - ✅ Display de JSON formatado com syntax highlighting
+  - ⚠️ Avisos de segurança para cancelamento/reemissão
+
 ---
 
 ### 🧪 Teste Completo (FASE 1A → 1B → 2A → 2B → 2C + 3A)
