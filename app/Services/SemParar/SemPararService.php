@@ -780,4 +780,303 @@ class SemPararService
             ];
         }
     }
+
+    /**
+     * Consultar viagens por período (FASE 3A)
+     *
+     * Based on Rota.cls::extratoRota() (line 968-1017)
+     * SOAP method: obterExtratoCreditos
+     *
+     * @param string $dataInicio Data início (YYYY-MM-DD)
+     * @param string $dataFim Data fim (YYYY-MM-DD)
+     * @return array Success/error with trip list
+     */
+    public function consultarViagens(string $dataInicio, string $dataFim): array
+    {
+        try {
+            Log::info('[SemParar] Consultando viagens por período', [
+                'data_inicio' => $dataInicio,
+                'data_fim' => $dataFim
+            ]);
+
+            // Get SOAP client and token
+            $soapClient = $this->soapClient->getSoapClient();
+            $token = $this->soapClient->getToken() ?? $this->soapClient->autenticarUsuario();
+
+            if (!$token) {
+                throw new \Exception('Falha ao obter token de autenticação');
+            }
+
+            // Format dates to ISO format with timezone (as Progress does)
+            $dataInicioISO = $dataInicio . 'T00:00:00Z';
+            $dataFimISO = $dataFim . 'T23:59:59Z';
+
+            Log::debug('[SemParar] Calling obterExtratoCreditos', [
+                'data_inicio_iso' => $dataInicioISO,
+                'data_fim_iso' => $dataFimISO,
+                'token_length' => strlen($token)
+            ]);
+
+            // Call SOAP method
+            // Note: This method uses a different WSDL (vpextrato) in Progress
+            // but we'll try with the same client first
+            $response = $soapClient->obterExtratoCreditos(
+                $dataInicioISO,
+                $dataFimISO,
+                $token
+            );
+
+            // Log SOAP request/response for debugging
+            Log::debug('[SemParar] SOAP Request', [
+                'request' => $soapClient->__getLastRequest()
+            ]);
+
+            Log::debug('[SemParar] SOAP Response', [
+                'response' => $soapClient->__getLastResponse()
+            ]);
+
+            // Convert response to array
+            $responseData = json_decode(json_encode($response), true);
+
+            Log::info('[SemParar] Viagens consultadas com sucesso', [
+                'total_viagens' => is_array($responseData) ? count($responseData) : 0
+            ]);
+
+            return [
+                'success' => true,
+                'viagens' => $responseData,
+                'periodo' => [
+                    'inicio' => $dataInicio,
+                    'fim' => $dataFim
+                ]
+            ];
+
+        } catch (\SoapFault $e) {
+            Log::error('[SemParar] SOAP Fault ao consultar viagens', [
+                'error' => $e->getMessage(),
+                'faultcode' => $e->faultcode ?? 'N/A',
+                'faultstring' => $e->faultstring ?? 'N/A',
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro SOAP: ' . $e->getMessage()
+            ];
+
+        } catch (Exception $e) {
+            Log::error('[SemParar] Erro ao consultar viagens', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Cancelar viagem (FASE 3A)
+     *
+     * Based on Rota.cls::cancelaViagem() (line 99-105)
+     * SOAP method: cancelarViagem
+     *
+     * @param string $codViagem Trip code to cancel
+     * @return array Success/error message
+     */
+    public function cancelarViagem(string $codViagem): array
+    {
+        try {
+            Log::info('[SemParar] Cancelando viagem', [
+                'cod_viagem' => $codViagem
+            ]);
+
+            // Get SOAP client and token
+            $soapClient = $this->soapClient->getSoapClient();
+            $token = $this->soapClient->getToken() ?? $this->soapClient->autenticarUsuario();
+
+            if (!$token) {
+                throw new \Exception('Falha ao obter token de autenticação');
+            }
+
+            Log::debug('[SemParar] Calling cancelarViagem', [
+                'cod_viagem' => $codViagem,
+                'token_length' => strlen($token)
+            ]);
+
+            // Call SOAP method
+            $response = $soapClient->cancelarViagem(
+                $codViagem,
+                $token
+            );
+
+            // Log SOAP request/response for debugging
+            Log::debug('[SemParar] SOAP Request', [
+                'request' => $soapClient->__getLastRequest()
+            ]);
+
+            Log::debug('[SemParar] SOAP Response', [
+                'response' => $soapClient->__getLastResponse()
+            ]);
+
+            // Extract status
+            $status = (int)($response->status ?? 999);
+            $statusMensagem = (string)($response->statusMensagem ?? 'Erro desconhecido');
+
+            if ($status !== 0) {
+                Log::error('[SemParar] Erro ao cancelar viagem', [
+                    'status' => $status,
+                    'status_mensagem' => $statusMensagem
+                ]);
+
+                throw new \Exception("Erro SemParar status {$status}: {$statusMensagem}");
+            }
+
+            Log::info('[SemParar] Viagem cancelada com sucesso', [
+                'cod_viagem' => $codViagem
+            ]);
+
+            return [
+                'success' => true,
+                'message' => 'Viagem cancelada com sucesso',
+                'cod_viagem' => $codViagem,
+                'status' => $status,
+                'status_mensagem' => $statusMensagem
+            ];
+
+        } catch (\SoapFault $e) {
+            Log::error('[SemParar] SOAP Fault ao cancelar viagem', [
+                'error' => $e->getMessage(),
+                'faultcode' => $e->faultcode ?? 'N/A',
+                'faultstring' => $e->faultstring ?? 'N/A',
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro SOAP: ' . $e->getMessage()
+            ];
+
+        } catch (Exception $e) {
+            Log::error('[SemParar] Erro ao cancelar viagem', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Reemitir viagem com nova placa (FASE 3A)
+     *
+     * Based on Rota.cls::reemiteViagem() (line 108-158)
+     * SOAP method: reemitirViagem
+     *
+     * @param string $codViagem Trip code to reissue
+     * @param string $placa New license plate
+     * @return array Success/error message
+     */
+    public function reemitirViagem(string $codViagem, string $placa): array
+    {
+        try {
+            Log::info('[SemParar] Reemitindo viagem', [
+                'cod_viagem' => $codViagem,
+                'placa' => $placa
+            ]);
+
+            // Get SOAP client and token
+            $soapClient = $this->soapClient->getSoapClient();
+            $token = $this->soapClient->getToken() ?? $this->soapClient->autenticarUsuario();
+
+            if (!$token) {
+                throw new \Exception('Falha ao obter token de autenticação');
+            }
+
+            // Progress builds pracas string from database (e.g., "1-2-3-4-5-6")
+            // For now, we'll use "all" or empty string to reemit all toll plazas
+            // TODO: Query database to get exact toll plaza sequence if needed
+            $pracas = '';  // Empty means reemit all plazas
+
+            Log::debug('[SemParar] Calling reemitirViagem', [
+                'cod_viagem' => $codViagem,
+                'placa' => $placa,
+                'pracas' => $pracas,
+                'token_length' => strlen($token)
+            ]);
+
+            // Call SOAP method
+            $response = $soapClient->reemitirViagem(
+                $codViagem,
+                $placa,
+                $pracas,
+                $token
+            );
+
+            // Log SOAP request/response for debugging
+            Log::debug('[SemParar] SOAP Request', [
+                'request' => $soapClient->__getLastRequest()
+            ]);
+
+            Log::debug('[SemParar] SOAP Response', [
+                'response' => $soapClient->__getLastResponse()
+            ]);
+
+            // Extract status
+            $status = (int)($response->status ?? 999);
+            $statusMensagem = (string)($response->statusMensagem ?? 'Erro desconhecido');
+
+            if ($status !== 0) {
+                Log::error('[SemParar] Erro ao reemitir viagem', [
+                    'status' => $status,
+                    'status_mensagem' => $statusMensagem
+                ]);
+
+                throw new \Exception("Erro SemParar status {$status}: {$statusMensagem}");
+            }
+
+            Log::info('[SemParar] Viagem reemitida com sucesso', [
+                'cod_viagem' => $codViagem,
+                'placa' => $placa
+            ]);
+
+            return [
+                'success' => true,
+                'message' => 'Viagem reemitida com sucesso',
+                'cod_viagem' => $codViagem,
+                'placa' => $placa,
+                'status' => $status,
+                'status_mensagem' => $statusMensagem
+            ];
+
+        } catch (\SoapFault $e) {
+            Log::error('[SemParar] SOAP Fault ao reemitir viagem', [
+                'error' => $e->getMessage(),
+                'faultcode' => $e->faultcode ?? 'N/A',
+                'faultstring' => $e->faultstring ?? 'N/A',
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro SOAP: ' . $e->getMessage()
+            ];
+
+        } catch (Exception $e) {
+            Log::error('[SemParar] Erro ao reemitir viagem', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
 }

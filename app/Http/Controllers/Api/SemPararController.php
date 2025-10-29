@@ -455,4 +455,134 @@ class SemPararController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Consultar viagens por período (FASE 3A)
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function consultarViagens(Request $request): JsonResponse
+    {
+        try {
+            // Validate input
+            $request->validate([
+                'data_inicio' => 'required|date|date_format:Y-m-d',
+                'data_fim' => 'required|date|date_format:Y-m-d|after_or_equal:data_inicio'
+            ]);
+
+            $dataInicio = $request->input('data_inicio');
+            $dataFim = $request->input('data_fim');
+
+            // Call SemParar service
+            $result = $this->semPararService->consultarViagens($dataInicio, $dataFim);
+
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Viagens consultadas com sucesso',
+                    'data' => $result
+                ], 200);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Erro ao consultar viagens',
+                    'data' => $result
+                ], 400);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao consultar viagens',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Cancelar viagem (FASE 3A)
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function cancelarViagem(Request $request): JsonResponse
+    {
+        try {
+            // Validate input
+            $request->validate([
+                'cod_viagem' => 'required|string|min:1|max:50'
+            ]);
+
+            $codViagem = $request->input('cod_viagem');
+
+            // Call SemParar service
+            $result = $this->semPararService->cancelarViagem($codViagem);
+
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Viagem cancelada com sucesso',
+                    'data' => $result
+                ], 200);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Erro ao cancelar viagem',
+                    'data' => $result
+                ], 400);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao cancelar viagem',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Reemitir viagem com nova placa (FASE 3A)
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function reemitirViagem(Request $request): JsonResponse
+    {
+        try {
+            // Validate input
+            $request->validate([
+                'cod_viagem' => 'required|string|min:1|max:50',
+                'placa' => 'required|string|size:7' // Brazilian license plate format: ABC1234
+            ]);
+
+            $codViagem = $request->input('cod_viagem');
+            $placa = strtoupper($request->input('placa')); // Uppercase plate
+
+            // Call SemParar service
+            $result = $this->semPararService->reemitirViagem($codViagem, $placa);
+
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Viagem reemitida com sucesso',
+                    'data' => $result
+                ], 200);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Erro ao reemitir viagem',
+                    'data' => $result
+                ], 400);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao reemitir viagem',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
