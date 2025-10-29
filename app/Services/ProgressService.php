@@ -1125,7 +1125,8 @@ class ProgressService
             ]);
 
             // Query base com JOIN para pegar nome do transportador
-            $sql = "SELECT v.codViagem, v.codPac, v.numPla, v.nomRotSemParar, v.valViagem, v.codtrn, v.codRotCreateSP, v.sPararRotID, v.resCompra, v.dataCompra, v.flgCancelado, v.resCancel, t.nomtrn as transportador FROM PUB.sPararViagem v LEFT JOIN PUB.transporte t ON v.codtrn = t.codtrn WHERE 1=1";
+            // IMPORTANTE: Usar SUBSTRING para evitar erro de "value exceeding max length"
+            $sql = "SELECT v.codViagem, v.codPac, v.numPla, SUBSTRING(v.nomRotSemParar, 1, 200) as nomRotSemParar, v.valViagem, v.codtrn, SUBSTRING(v.codRotCreateSP, 1, 50) as codRotCreateSP, v.sPararRotID, SUBSTRING(v.resCompra, 1, 50) as resCompra, v.dataCompra, v.flgCancelado, SUBSTRING(v.resCancel, 1, 50) as resCancel, SUBSTRING(t.nomtrn, 1, 100) as transportador FROM PUB.sPararViagem v LEFT JOIN PUB.transporte t ON v.codtrn = t.codtrn WHERE 1=1";
 
             // Filtro de data (obrigatório)
             $sql .= " AND v.dataCompra >= '" . $dataInicio . "'";
