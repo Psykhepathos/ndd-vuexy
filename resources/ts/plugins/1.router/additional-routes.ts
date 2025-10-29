@@ -74,29 +74,6 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/dashboards/ecommerce.vue'),
   },
 
-  // Compra de Viagem SemParar
-  {
-    path: '/compra-viagem',
-    name: 'compra-viagem',
-    component: () => import('@/pages/compra-viagem/index.vue'),
-    meta: {
-      layoutWrapperClasses: 'layout-content-height-fixed',
-    },
-  },
-  {
-    path: '/compra-viagem/nova',
-    name: 'compra-viagem-nova',
-    component: () => import('@/pages/compra-viagem/nova.vue'),
-    meta: {
-      layoutWrapperClasses: 'layout-content-height-fixed',
-    },
-  },
-  {
-    path: '/compra-viagem/:id',
-    name: 'compra-viagem-detalhes',
-    component: () => import('@/pages/compra-viagem/[id].vue'),
-    meta: {
-      layoutWrapperClasses: 'layout-content-height-fixed',
-    },
-  },
+  // Compra de Viagem SemParar - REMOVIDO: Usando file-based routing
+  // Os arquivos em /pages/compra-viagem/ são automaticamente roteados
 ]

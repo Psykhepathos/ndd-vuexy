@@ -3,6 +3,12 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { API_BASE_URL } from '@/config/api'
 
+definePage({
+  meta: {
+    layoutWrapperClasses: 'layout-content-height-fixed',
+  },
+})
+
 // ============================================================================
 // TIPOS E INTERFACES
 // ============================================================================
@@ -419,9 +425,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div>
-    <!-- Header -->
-    <VCard class="mb-6">
+  <VRow>
+    <VCol cols="12">
+      <!-- Header -->
+      <VCard class="mb-6">
       <VCardText>
         <div class="d-flex align-center justify-space-between flex-wrap gap-4">
           <div>
@@ -905,15 +912,16 @@ onMounted(() => {
       </VCardText>
     </VCard>
 
-    <!-- Snackbar -->
-    <VSnackbar
-      v-model="snackbar"
-      :color="snackbarColor"
-      location="top end"
-      variant="flat"
-      :timeout="4000"
-    >
-      {{ snackbarText }}
-    </VSnackbar>
-  </div>
+      <!-- Snackbar -->
+      <VSnackbar
+        v-model="snackbar"
+        :color="snackbarColor"
+        location="top end"
+        variant="flat"
+        :timeout="4000"
+      >
+        {{ snackbarText }}
+      </VSnackbar>
+    </VCol>
+  </VRow>
 </template>
