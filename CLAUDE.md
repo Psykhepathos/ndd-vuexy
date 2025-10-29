@@ -839,7 +839,137 @@ curl -X POST http://localhost:8002/api/semparar/gerar-recibo \
 - ⏱️ **Rate limit:** 20 req/min (protege contra spam)
 - ✅ **Testado:** Todos cenários (sem email, vazio, inválido, válido) → sucesso!
 
-### 🧪 Teste Completo (FASE 1A → 1B → 2A → 2B → 2C)
+---
+
+### ✅ FASE 3A: Trip Query & Management - COMPLETA (2025-10-29)
+
+**Status:** Consulta e gerenciamento de viagens funcional
+
+**Implementado:**
+- ✅ `consultarViagens()` - Lista viagens por período (obterExtratoCreditos)
+- ✅ `cancelarViagem()` - Cancela uma viagem comprada
+- ✅ `reemitirViagem()` - Reemite viagem com nova placa
+- ✅ 3 endpoints REST com validação e rate limiting
+
+**Métodos SOAP identificados:**
+1. **`obterExtratoCreditos(inicio, fim, token)`** - Lista viagens por período
+   - ⚠️ Funciona mas retorna status 999 (pode precisar WSDL `vpextrato` conforme Progress)
+   - Progress usa: `https://app.viafacil.com.br/vpextrato/ValePedagio?wsdl`
+   - Nosso código usa: `https://app.viafacil.com.br/wsvp/ValePedagio?wsdl`
+2. **`cancelarViagem(codViagem, token)`** - Cancela viagem
+3. **`reemitirViagem(codViagem, placa, pracas, token)`** - Reemite com nova placa
+
+**Endpoints:**
+
+#### 1. Consultar Viagens por Período
+- `POST /api/semparar/consultar-viagens`
+
+**Parâmetros:**
+```json
+{
+  "data_inicio": "2025-10-01",  // YYYY-MM-DD
+  "data_fim": "2025-10-31"      // YYYY-MM-DD
+}
+```
+
+**Retorno:**
+```json
+{
+  "success": true,
+  "message": "Viagens consultadas com sucesso",
+  "data": {
+    "viagens": [...],
+    "periodo": {
+      "inicio": "2025-10-01",
+      "fim": "2025-10-31"
+    }
+  }
+}
+```
+
+**Exemplo:**
+```bash
+curl -X POST http://localhost:8002/api/semparar/consultar-viagens \
+  -H "Content-Type: application/json" \
+  -d '{"data_inicio":"2025-10-28","data_fim":"2025-10-28"}'
+```
+
+#### 2. Cancelar Viagem
+- `POST /api/semparar/cancelar-viagem`
+
+**Parâmetros:**
+```json
+{
+  "cod_viagem": "91154383"
+}
+```
+
+**Retorno:**
+```json
+{
+  "success": true,
+  "message": "Viagem cancelada com sucesso",
+  "data": {
+    "cod_viagem": "91154383",
+    "status": 0,
+    "status_mensagem": "Sucesso"
+  }
+}
+```
+
+**Exemplo:**
+```bash
+curl -X POST http://localhost:8002/api/semparar/cancelar-viagem \
+  -H "Content-Type: application/json" \
+  -d '{"cod_viagem":"91154383"}'
+```
+
+**⚠️ ATENÇÃO:** Operação irreversível! Use com cuidado.
+
+#### 3. Reemitir Viagem com Nova Placa
+- `POST /api/semparar/reemitir-viagem`
+
+**Parâmetros:**
+```json
+{
+  "cod_viagem": "91154383",
+  "placa": "ABC1234"  // Nova placa (7 caracteres)
+}
+```
+
+**Retorno:**
+```json
+{
+  "success": true,
+  "message": "Viagem reemitida com sucesso",
+  "data": {
+    "cod_viagem": "91154383",
+    "placa": "ABC1234",
+    "status": 0,
+    "status_mensagem": "Sucesso"
+  }
+}
+```
+
+**Exemplo:**
+```bash
+curl -X POST http://localhost:8002/api/semparar/reemitir-viagem \
+  -H "Content-Type: application/json" \
+  -d '{"cod_viagem":"91154383","placa":"XYZ5678"}'
+```
+
+**Observações:**
+- ⏱️ **Rate limits:**
+  - `consultar-viagens`: 60 req/min
+  - `cancelar-viagem`: 20 req/min (operação sensível)
+  - `reemitir-viagem`: 20 req/min (operação sensível)
+- ⚠️ **consultarViagens:** Pode precisar de WSDL `vpextrato` separado para retornar dados reais
+- 📝 **Status codes:** 0 = sucesso, 999 = erro desconhecido ou sem dados
+- 🔄 **Implementação:** Baseada em Rota.cls linhas 99-1017
+
+---
+
+### 🧪 Teste Completo (FASE 1A → 1B → 2A → 2B → 2C + 3A)
 **Interface HTML:** `public/test-semparar-fase1b.html`
 
 **Acesso:** http://localhost:8002/test-semparar-fase1b.html
