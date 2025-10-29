@@ -69,8 +69,8 @@ const fetchViagem = async () => {
   try {
     // Busca últimos 3 meses para garantir que encontraremos a viagem
     const hoje = new Date()
-    const tresM​esesAtras = new Date()
-    tresM​esesAtras.setMonth(tresM​esesAtras.getMonth() - 3)
+    const tresMesesAtras = new Date()
+    tresMesesAtras.setMonth(tresMesesAtras.getMonth() - 3)
 
     const response = await fetch(`${API_BASE_URL}/api/compra-viagem/viagens`, {
       method: 'POST',
@@ -78,7 +78,7 @@ const fetchViagem = async () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        data_inicio: tresM​esesAtras.toISOString().split('T')[0],
+        data_inicio: tresMesesAtras.toISOString().split('T')[0],
         data_fim: hoje.toISOString().split('T')[0],
       }),
     })
