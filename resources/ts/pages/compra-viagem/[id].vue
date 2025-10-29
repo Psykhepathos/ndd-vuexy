@@ -62,26 +62,23 @@ const showToast = (message: string, color: 'success' | 'error' | 'warning' | 'in
 // ============================================================================
 
 /**
- * Busca detalhes da viagem
- * (Simulado - já que consultarViagens retorna lista)
+ * Busca detalhes da viagem do Progress database
  */
 const fetchViagem = async () => {
   loading.value = true
   try {
-    // Como a API SOAP não tem endpoint específico para 1 viagem,
-    // vamos buscar no período e filtrar pelo código
-    // TODO: Backend deve implementar endpoint específico
+    // Busca últimos 3 meses para garantir que encontraremos a viagem
     const hoje = new Date()
-    const mesPassado = new Date()
-    mesPassado.setMonth(mesPassado.getMonth() - 1)
+    const tresM​esesAtras = new Date()
+    tresM​esesAtras.setMonth(tresM​esesAtras.getMonth() - 3)
 
-    const response = await fetch(`${API_BASE_URL}/api/semparar/consultar-viagens`, {
+    const response = await fetch(`${API_BASE_URL}/api/compra-viagem/viagens`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        data_inicio: mesPassado.toISOString().split('T')[0],
+        data_inicio: tresM​esesAtras.toISOString().split('T')[0],
         data_fim: hoje.toISOString().split('T')[0],
       }),
     })
@@ -93,9 +90,9 @@ const fetchViagem = async () => {
       return
     }
 
-    // Procura viagem específica
-    const viagemEncontrada = (data.data.viagens || []).find(
-      (v: any) => (v.codViagem || v.cod_viagem) === codViagem.value
+    // Procura viagem específica pelo código
+    const viagemEncontrada = (data.data || []).find(
+      (v: any) => v.cod_viagem === codViagem.value
     )
 
     if (!viagemEncontrada) {
@@ -105,18 +102,14 @@ const fetchViagem = async () => {
     }
 
     viagem.value = {
-      cod_viagem: viagemEncontrada.codViagem || viagemEncontrada.cod_viagem,
-      data_compra: viagemEncontrada.dataEmissao || viagemEncontrada.data_compra || '-',
-      placa: viagemEncontrada.placa || '-',
-      rota_nome: viagemEncontrada.nomeRota || viagemEncontrada.rota_nome || '-',
-      valor: parseFloat(viagemEncontrada.valor || viagemEncontrada.valorTotal || 0),
-      eixos: viagemEncontrada.eixos || undefined,
-      data_inicio: viagemEncontrada.dataInicio || viagemEncontrada.data_inicio,
-      data_fim: viagemEncontrada.dataFim || viagemEncontrada.data_fim,
-      cod_pac: viagemEncontrada.codPacote || viagemEncontrada.cod_pac,
+      cod_viagem: viagemEncontrada.cod_viagem,
+      data_compra: viagemEncontrada.data_compra,
+      placa: viagemEncontrada.placa,
+      rota_nome: viagemEncontrada.rota_nome,
+      valor: viagemEncontrada.valor,
+      cod_pac: viagemEncontrada.cod_pac,
       transportador: viagemEncontrada.transportador,
-      status: viagemEncontrada.status,
-      cancelado: viagemEncontrada.cancelado || false,
+      cancelado: viagemEncontrada.cancelado,
     }
   } catch (error: any) {
     console.error('Erro ao buscar viagem:', error)

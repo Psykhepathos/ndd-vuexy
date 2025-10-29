@@ -158,6 +158,9 @@ Route::middleware('api')->group(function () {
         Route::get('statistics', [CompraViagemController::class, 'statistics']);
         Route::get('health', [CompraViagemController::class, 'health']);
 
+        // LISTAGEM: Busca viagens do Progress (tabela PUB.sPararViagem)
+        Route::post('viagens', [CompraViagemController::class, 'listarViagens']);
+
         // FASE 2: Validação de pacote
         Route::post('validar-pacote', [CompraViagemController::class, 'validarPacote']);
 

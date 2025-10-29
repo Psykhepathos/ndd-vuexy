@@ -1110,6 +1110,93 @@ class ProgressService
     }
 
     /**
+     * Lista viagens compradas do Progress
+     * Busca na tabela PUB.sPararViagem com filtros opcionais
+     * Seguindo fluxo de consultaViagem.p
+     */
+    public function getViagensCompradas(string $dataInicio, string $dataFim, ?int $codPac = null, ?string $placa = null): array
+    {
+        try {
+            Log::info('Buscando viagens compradas do Progress', [
+                'data_inicio' => $dataInicio,
+                'data_fim' => $dataFim,
+                'cod_pac' => $codPac,
+                'placa' => $placa
+            ]);
+
+            // Query base com JOIN para pegar nome do transportador
+            $sql = "SELECT v.codViagem, v.codPac, v.numPla, v.nomRotSemParar, v.valViagem, v.codtrn, v.codRotCreateSP, v.sPararRotID, v.resCompra, v.dataCompra, v.flgCancelado, v.resCancel, t.nomtrn as transportador FROM PUB.sPararViagem v LEFT JOIN PUB.transporte t ON v.codtrn = t.codtrn WHERE 1=1";
+
+            // Filtro de data (obrigatório)
+            $sql .= " AND v.dataCompra >= '" . $dataInicio . "'";
+            $sql .= " AND v.dataCompra <= '" . $dataFim . "'";
+
+            // Filtro de pacote (opcional)
+            if ($codPac !== null) {
+                $sql .= " AND v.codPac = " . intval($codPac);
+            }
+
+            // Filtro de placa (opcional)
+            if ($placa !== null && trim($placa) !== '') {
+                $placaUpper = strtoupper(trim($placa));
+                $sql .= " AND UPPER(v.numPla) = '" . $placaUpper . "'";
+            }
+
+            // Ordenar por data mais recente primeiro
+            $sql .= " ORDER BY v.dataCompra DESC";
+
+            Log::info('Query viagens:', ['sql' => $sql]);
+
+            $result = $this->executeCustomQuery($sql);
+
+            if (!$result['success']) {
+                return $result;
+            }
+
+            $viagens = $result['data']['results'] ?? [];
+
+            // Formata datas para frontend
+            $viagensFormatadas = array_map(function($viagem) {
+                return [
+                    'cod_viagem' => $viagem['codviagem'] ?? $viagem['codViagem'] ?? '-',
+                    'cod_pac' => $viagem['codpac'] ?? $viagem['codPac'] ?? null,
+                    'placa' => $viagem['numpla'] ?? $viagem['numPla'] ?? '-',
+                    'rota_nome' => $viagem['nomrotsemparar'] ?? $viagem['nomRotSemParar'] ?? '-',
+                    'valor' => floatval($viagem['valviagem'] ?? $viagem['valViagem'] ?? 0),
+                    'transportador' => $viagem['transportador'] ?? null,
+                    'data_compra' => $viagem['datacompra'] ?? $viagem['dataCompra'] ?? '-',
+                    'cancelado' => ($viagem['flgcancelado'] ?? $viagem['flgCancelado'] ?? false) === true || ($viagem['flgcancelado'] ?? $viagem['flgCancelado'] ?? 0) === 1,
+                    'responsavel_compra' => $viagem['rescompra'] ?? $viagem['resCompra'] ?? null,
+                    'responsavel_cancelamento' => $viagem['rescancel'] ?? $viagem['resCancel'] ?? null,
+                    's_parar_rot_id' => $viagem['spararrotid'] ?? $viagem['sPararRotID'] ?? null,
+                    'cod_rota_create_sp' => $viagem['codrotcreatesp'] ?? $viagem['codRotCreateSP'] ?? null,
+                ];
+            }, $viagens);
+
+            Log::info('Viagens encontradas', [
+                'total' => count($viagensFormatadas)
+            ]);
+
+            return [
+                'success' => true,
+                'data' => $viagensFormatadas
+            ];
+
+        } catch (Exception $e) {
+            Log::error('Erro ao buscar viagens compradas', [
+                'error' => $e->getMessage(),
+                'data_inicio' => $dataInicio,
+                'data_fim' => $dataFim
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Erro ao buscar viagens: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
      * Busca uma rota SemParar específica com seus municípios
      */
     public function getSemPararRota($rotaId): array

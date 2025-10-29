@@ -577,6 +577,64 @@ class CompraViagemController extends Controller
     }
 
     /**
+     * Lista viagens compradas do Progress
+     * Busca na tabela PUB.sPararViagem
+     */
+    public function listarViagens(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'data_inicio' => 'required|date',
+                'data_fim' => 'required|date|after_or_equal:data_inicio',
+                'cod_pac' => 'nullable|integer',
+                'placa' => 'nullable|string|max:10'
+            ]);
+
+            Log::info('API: Listando viagens do Progress', $validated);
+
+            $result = $this->progressService->getViagensCompradas(
+                $validated['data_inicio'],
+                $validated['data_fim'],
+                $validated['cod_pac'] ?? null,
+                $validated['placa'] ?? null
+            );
+
+            if (!$result['success']) {
+                return response()->json($result, 400);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $result['data'],
+                'total' => count($result['data']),
+                'periodo' => [
+                    'inicio' => $validated['data_inicio'],
+                    'fim' => $validated['data_fim']
+                ]
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Dados inválidos',
+                'errors' => $e->errors()
+            ], 422);
+
+        } catch (\Exception $e) {
+            Log::error('Erro ao listar viagens', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao listar viagens',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * FASE 6: Compra de viagem SemParar
      * Progress: compraRota.p linha 827-995
      *
