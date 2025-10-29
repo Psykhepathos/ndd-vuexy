@@ -405,15 +405,18 @@ const formatarData = (data: string) => {
 onMounted(() => {
   console.log('🚀 Componente compra-viagem montado!')
 
-  // Define período padrão: ÚLTIMO ANO
+  // Define período padrão: 2 ANOS (1 ano atrás até 1 ano à frente)
+  // Isso captura dados de teste que podem estar com datas futuras
   const hoje = new Date()
   const umAnoAtras = new Date()
   umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1)
+  const umAnoFrente = new Date()
+  umAnoFrente.setFullYear(umAnoFrente.getFullYear() + 1)
 
   dataInicio.value = umAnoAtras.toISOString().split('T')[0]
-  dataFim.value = hoje.toISOString().split('T')[0]
+  dataFim.value = umAnoFrente.toISOString().split('T')[0]
 
-  console.log('📅 Período padrão definido:', {
+  console.log('📅 Período padrão definido (2 anos):', {
     inicio: dataInicio.value,
     fim: dataFim.value
   })
