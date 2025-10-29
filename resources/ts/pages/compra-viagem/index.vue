@@ -44,6 +44,17 @@ const router = useRouter()
 const viagens = ref<Viagem[]>([])
 const loading = ref(false)
 
+// Paginação (padrão Vuexy)
+const pagination = ref({
+  current_page: 1,
+  last_page: 1,
+  per_page: 15,
+  total: 0,
+  from: 1,
+  to: 15,
+  has_more_pages: false
+})
+
 // Filtros
 const dataInicio = ref('')
 const dataFim = ref('')
@@ -190,6 +201,8 @@ const fetchViagens = async () => {
   loading.value = true
   try {
     const payload: any = {
+      page: pagination.value.current_page,
+      per_page: pagination.value.per_page,
       data_inicio: dataInicio.value,
       data_fim: dataFim.value,
     }
@@ -226,13 +239,36 @@ const fetchViagens = async () => {
     }
 
     viagens.value = data.data || []
-    showToast(`${viagens.value.length} viagens encontradas`, 'success')
+
+    // Atualizar paginação
+    if (data.pagination) {
+      pagination.value = data.pagination
+    }
+
+    showToast(`${pagination.value.total} viagens encontradas`, 'success')
   } catch (error: any) {
     console.error('💥 ERRO ao buscar viagens:', error)
     showToast(error.message || 'Erro ao buscar viagens', 'error')
   } finally {
     loading.value = false
   }
+}
+
+/**
+ * Handler para mudança de página (padrão Vuexy)
+ */
+const handlePageChange = (page: number) => {
+  pagination.value.current_page = page
+  fetchViagens()
+}
+
+/**
+ * Handler para mudança de items per page
+ */
+const handleItemsPerPageChange = (itemsPerPage: number) => {
+  pagination.value.per_page = itemsPerPage
+  pagination.value.current_page = 1  // Reset para primeira página
+  fetchViagens()
 }
 
 /**
@@ -246,6 +282,9 @@ const limparFiltros = () => {
   rotaSearch.value = ''
   transportadorSearch.value = ''
   viagens.value = []
+
+  // Reset paginação
+  pagination.value.current_page = 1
 
   // Mantém o período de 1 ano
   const hoje = new Date()
@@ -668,12 +707,19 @@ onMounted(() => {
     <!-- Tabela -->
     <VCard>
       <VCardText class="pa-0">
-        <VDataTable
+        <VDataTableServer
+          v-model:items-per-page="pagination.per_page"
           :headers="headers"
           :items="viagens"
+          :items-length="pagination.total"
           :loading="loading"
-          :items-per-page="15"
+          :page="pagination.current_page"
+          @update:page="handlePageChange"
+          @update:items-per-page="handleItemsPerPageChange"
           class="text-no-wrap"
+          hover
+          loading-text="Carregando viagens..."
+          no-data-text="Nenhuma viagem encontrada"
         >
           <!-- Código da viagem -->
           <template #item.cod_viagem="{ item }">
@@ -891,7 +937,7 @@ onMounted(() => {
               color="primary"
             />
           </template>
-        </VDataTable>
+        </VDataTableServer>
       </VCardText>
 
       <!-- Footer -->
