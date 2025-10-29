@@ -500,6 +500,7 @@ onMounted(() => {
           <!-- Período -->
           <VCol
             cols="12"
+            sm="6"
             md="3"
           >
             <VTextField
@@ -513,6 +514,7 @@ onMounted(() => {
           </VCol>
           <VCol
             cols="12"
+            sm="6"
             md="3"
           >
             <VTextField
@@ -528,7 +530,8 @@ onMounted(() => {
           <!-- Rota -->
           <VCol
             cols="12"
-            md="6"
+            sm="6"
+            md="3"
           >
             <VAutocomplete
               v-model="rotaSelecionada"
@@ -558,6 +561,7 @@ onMounted(() => {
           <!-- Placa -->
           <VCol
             cols="12"
+            sm="6"
             md="3"
           >
             <VTextField
@@ -576,7 +580,8 @@ onMounted(() => {
           <!-- Transportador -->
           <VCol
             cols="12"
-            md="5"
+            sm="6"
+            md="6"
           >
             <VAutocomplete
               v-model="transportadorFiltro"
@@ -606,7 +611,8 @@ onMounted(() => {
           <!-- Pacote -->
           <VCol
             cols="12"
-            md="2"
+            sm="6"
+            md="3"
           >
             <VTextField
               v-model.number="pacoteFiltro"
@@ -623,20 +629,31 @@ onMounted(() => {
           <!-- Botões -->
           <VCol
             cols="12"
-            md="2"
+            sm="6"
+            md="3"
             class="d-flex gap-2"
           >
             <VBtn
               color="primary"
               :loading="loading"
               @click="fetchViagens"
-              block
             >
               <VIcon
                 icon="tabler-search"
                 start
               />
               Buscar
+            </VBtn>
+            <VBtn
+              variant="tonal"
+              color="secondary"
+              @click="limparFiltros"
+            >
+              <VIcon
+                icon="tabler-x"
+                start
+              />
+              Limpar
             </VBtn>
           </VCol>
         </VRow>
@@ -707,20 +724,21 @@ onMounted(() => {
     <!-- Tabela -->
     <VCard>
       <VCardText class="pa-0">
-        <VDataTableServer
-          v-model:items-per-page="pagination.per_page"
-          :headers="headers"
-          :items="viagens"
-          :items-length="pagination.total"
-          :loading="loading"
-          :page="pagination.current_page"
-          @update:page="handlePageChange"
-          @update:items-per-page="handleItemsPerPageChange"
-          class="text-no-wrap"
-          hover
-          loading-text="Carregando viagens..."
-          no-data-text="Nenhuma viagem encontrada"
-        >
+        <div class="table-responsive">
+          <VDataTableServer
+            v-model:items-per-page="pagination.per_page"
+            :headers="headers"
+            :items="viagens"
+            :items-length="pagination.total"
+            :loading="loading"
+            :page="pagination.current_page"
+            @update:page="handlePageChange"
+            @update:items-per-page="handleItemsPerPageChange"
+            class="text-no-wrap"
+            hover
+            loading-text="Carregando viagens..."
+            no-data-text="Nenhuma viagem encontrada"
+          >
           <!-- Código da viagem -->
           <template #item.cod_viagem="{ item }">
             <div class="d-flex align-center gap-2">
@@ -938,6 +956,7 @@ onMounted(() => {
             />
           </template>
         </VDataTableServer>
+        </div>
       </VCardText>
 
       <!-- Footer -->
