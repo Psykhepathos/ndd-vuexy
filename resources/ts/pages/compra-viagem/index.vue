@@ -2,6 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { API_BASE_URL } from '@/config/api'
+import AppTextField from '@/@core/components/app-form-elements/AppTextField.vue'
+import AppSelect from '@/@core/components/app-form-elements/AppSelect.vue'
 
 definePage({
   meta: {
@@ -467,264 +469,112 @@ onMounted(() => {
 </script>
 
 <template>
-  <VRow>
-    <VCol cols="12">
-      <!-- Header -->
-      <VCard class="mb-6">
-      <VCardText>
-        <div class="d-flex align-center justify-space-between flex-wrap gap-4">
-          <div>
-            <h4 class="text-h4 mb-1">
-              Consulta de Viagens SemParar
-            </h4>
-            <p class="text-body-1 mb-0">
-              Gerencie e consulte viagens de pedágio com filtros avançados
-            </p>
-          </div>
+  <div>
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-space-between align-center mb-6">
+      <div>
+        <h4 class="text-h4 font-weight-medium mb-1">
+          Consulta de Viagens SemParar
+        </h4>
+        <div class="d-flex align-center flex-wrap gap-3">
+          <span class="text-body-1">Sistema de gestão de vale-pedágio</span>
+          <VChip
+            v-if="pagination.total > 0"
+            size="small"
+            color="primary"
+            variant="tonal"
+          >
+            {{ pagination.total }} Total
+          </VChip>
+        </div>
+      </div>
 
+      <VBtn
+        color="primary"
+        prepend-icon="tabler-plus"
+        @click="irParaNovaCompra"
+      >
+        Nova Compra
+      </VBtn>
+    </div>
+
+    <!-- Card Principal -->
+    <VCard>
+      <!-- Controles superiores -->
+      <VCardText class="d-flex flex-wrap gap-4">
+        <!-- Items per page -->
+        <AppSelect
+          :model-value="pagination.per_page"
+          :items="[
+            { value: 10, title: '10' },
+            { value: 15, title: '15' },
+            { value: 25, title: '25' },
+            { value: 50, title: '50' }
+          ]"
+          style="inline-size: 5rem;"
+          @update:model-value="handleItemsPerPageChange(parseInt($event, 10))"
+        />
+
+        <!-- Período -->
+        <AppTextField
+          v-model="dataInicio"
+          type="date"
+          placeholder="Data Início"
+          prepend-inner-icon="tabler-calendar"
+          style="inline-size: 10rem;"
+        />
+        <AppTextField
+          v-model="dataFim"
+          type="date"
+          placeholder="Data Fim"
+          prepend-inner-icon="tabler-calendar"
+          style="inline-size: 10rem;"
+        />
+
+        <VSpacer />
+
+        <div class="d-flex align-center flex-wrap gap-4">
+          <!-- Busca -->
+          <AppTextField
+            v-model="placaFiltro"
+            placeholder="Placa (opcional)"
+            prepend-inner-icon="tabler-car"
+            style="inline-size: 10rem;"
+            @update:model-value="placaFiltro = placaFiltro.toUpperCase()"
+          />
+
+          <!-- Botões de Ação -->
           <VBtn
             color="primary"
-            prepend-icon="tabler-plus"
-            @click="irParaNovaCompra"
+            prepend-icon="tabler-search"
+            @click="fetchViagens"
+            :loading="loading"
           >
-            Nova Compra
+            Buscar
+          </VBtn>
+
+          <VBtn
+            variant="tonal"
+            color="secondary"
+            prepend-icon="tabler-x"
+            @click="limparFiltros"
+          >
+            Limpar
+          </VBtn>
+
+          <VBtn
+            prepend-icon="tabler-refresh"
+            @click="fetchViagens"
+            :loading="loading"
+          >
+            Atualizar
           </VBtn>
         </div>
       </VCardText>
-    </VCard>
 
-    <!-- Filtros -->
-    <VCard class="mb-6">
-      <VCardText>
-        <VRow>
-          <!-- Período -->
-          <VCol
-            cols="12"
-            sm="6"
-            md="3"
-          >
-            <VTextField
-              v-model="dataInicio"
-              label="Data Início"
-              type="date"
-              variant="outlined"
-              density="comfortable"
-              prepend-inner-icon="tabler-calendar"
-            />
-          </VCol>
-          <VCol
-            cols="12"
-            sm="6"
-            md="3"
-          >
-            <VTextField
-              v-model="dataFim"
-              label="Data Fim"
-              type="date"
-              variant="outlined"
-              density="comfortable"
-              prepend-inner-icon="tabler-calendar"
-            />
-          </VCol>
+      <VDivider />
 
-          <!-- Rota -->
-          <VCol
-            cols="12"
-            sm="6"
-            md="3"
-          >
-            <VAutocomplete
-              v-model="rotaSelecionada"
-              v-model:search="rotaSearch"
-              :items="rotas"
-              :loading="rotasLoading"
-              label="Rota SemParar (opcional)"
-              placeholder="Digite para buscar..."
-              variant="outlined"
-              density="comfortable"
-              prepend-inner-icon="tabler-route"
-              item-title="nome"
-              item-value="id"
-              clearable
-              no-data-text="Digite para buscar rotas"
-              @update:search="buscarRotas"
-            >
-              <template #item="{ props: itemProps, item }">
-                <VListItem
-                  v-bind="itemProps"
-                  :title="`#${item.raw.id} - ${item.raw.nome}`"
-                />
-              </template>
-            </VAutocomplete>
-          </VCol>
-
-          <!-- Placa -->
-          <VCol
-            cols="12"
-            sm="6"
-            md="3"
-          >
-            <VTextField
-              v-model="placaFiltro"
-              label="Placa (opcional)"
-              placeholder="ABC1234"
-              variant="outlined"
-              density="comfortable"
-              prepend-inner-icon="tabler-car"
-              maxlength="7"
-              clearable
-              @update:model-value="placaFiltro = placaFiltro.toUpperCase()"
-            />
-          </VCol>
-
-          <!-- Transportador -->
-          <VCol
-            cols="12"
-            sm="6"
-            md="6"
-          >
-            <VAutocomplete
-              v-model="transportadorFiltro"
-              v-model:search="transportadorSearch"
-              :items="transportadores"
-              :loading="transportadoresLoading"
-              label="Transportador (opcional)"
-              placeholder="Digite para buscar..."
-              variant="outlined"
-              density="comfortable"
-              prepend-inner-icon="tabler-truck"
-              item-title="nomtrn"
-              item-value="codtrn"
-              clearable
-              no-data-text="Digite para buscar transportadores"
-              @update:search="buscarTransportadores"
-            >
-              <template #item="{ props: itemProps, item }">
-                <VListItem
-                  v-bind="itemProps"
-                  :title="`#${item.raw.codtrn} - ${item.raw.nomtrn}`"
-                />
-              </template>
-            </VAutocomplete>
-          </VCol>
-
-          <!-- Pacote -->
-          <VCol
-            cols="12"
-            sm="6"
-            md="3"
-          >
-            <VTextField
-              v-model.number="pacoteFiltro"
-              label="Pacote (opcional)"
-              type="number"
-              placeholder="Ex: 3043824"
-              variant="outlined"
-              density="comfortable"
-              prepend-inner-icon="tabler-package"
-              clearable
-            />
-          </VCol>
-
-          <!-- Botões -->
-          <VCol
-            cols="12"
-            sm="6"
-            md="3"
-            class="d-flex gap-2"
-          >
-            <VBtn
-              color="primary"
-              :loading="loading"
-              @click="fetchViagens"
-            >
-              <VIcon
-                icon="tabler-search"
-                start
-              />
-              Buscar
-            </VBtn>
-            <VBtn
-              variant="tonal"
-              color="secondary"
-              @click="limparFiltros"
-            >
-              <VIcon
-                icon="tabler-x"
-                start
-              />
-              Limpar
-            </VBtn>
-          </VCol>
-        </VRow>
-
-        <!-- Filtros ativos -->
-        <VRow v-if="filtrosAtivos > 0">
-          <VCol cols="12">
-            <div class="d-flex align-center gap-2 flex-wrap">
-              <span class="text-sm text-medium-emphasis">Filtros ativos:</span>
-
-              <VChip
-                v-if="rotaSelecionada"
-                color="primary"
-                variant="tonal"
-                size="small"
-                closable
-                @click:close="rotaSelecionada = null"
-              >
-                Rota: {{ rotaAtualNome }}
-              </VChip>
-
-              <VChip
-                v-if="placaFiltro"
-                color="secondary"
-                variant="tonal"
-                size="small"
-                closable
-                @click:close="placaFiltro = ''"
-              >
-                Placa: {{ placaFiltro }}
-              </VChip>
-
-              <VChip
-                v-if="transportadorFiltro"
-                color="info"
-                variant="tonal"
-                size="small"
-                closable
-                @click:close="transportadorFiltro = null"
-              >
-                Transportador: {{ transportadorAtualNome }}
-              </VChip>
-
-              <VChip
-                v-if="pacoteFiltro"
-                color="warning"
-                variant="tonal"
-                size="small"
-                closable
-                @click:close="pacoteFiltro = null"
-              >
-                Pacote: {{ pacoteFiltro }}
-              </VChip>
-
-              <VBtn
-                variant="text"
-                size="small"
-                @click="limparFiltros"
-              >
-                Limpar todos
-              </VBtn>
-            </div>
-          </VCol>
-        </VRow>
-      </VCardText>
-    </VCard>
-
-    <!-- Tabela -->
-    <VCard>
-      <VCardText class="pa-0">
-        <div class="table-responsive">
+      <!-- Tabela -->
           <VDataTableServer
             v-model:items-per-page="pagination.per_page"
             :headers="headers"
@@ -956,39 +806,17 @@ onMounted(() => {
             />
           </template>
         </VDataTableServer>
-        </div>
-      </VCardText>
-
-      <!-- Footer -->
-      <VDivider />
-      <VCardText class="d-flex align-center justify-space-between flex-wrap gap-3 pa-4">
-        <p class="text-body-2 mb-0">
-          <span class="font-weight-medium">{{ viagens.length }}</span>
-          {{ viagens.length === 1 ? 'viagem encontrada' : 'viagens encontradas' }}
-        </p>
-        <p
-          v-if="filtrosAtivos > 0"
-          class="text-body-2 text-info mb-0"
-        >
-          <VIcon
-            icon="tabler-filter"
-            size="18"
-          />
-          {{ filtrosAtivos }} {{ filtrosAtivos === 1 ? 'filtro ativo' : 'filtros ativos' }}
-        </p>
-      </VCardText>
     </VCard>
 
-      <!-- Snackbar -->
-      <VSnackbar
-        v-model="snackbar"
-        :color="snackbarColor"
-        location="top end"
-        variant="flat"
-        :timeout="4000"
-      >
-        {{ snackbarText }}
-      </VSnackbar>
-    </VCol>
-  </VRow>
+    <!-- Snackbar -->
+    <VSnackbar
+      v-model="snackbar"
+      :color="snackbarColor"
+      location="top end"
+      variant="flat"
+      :timeout="4000"
+    >
+      {{ snackbarText }}
+    </VSnackbar>
+  </div>
 </template>
