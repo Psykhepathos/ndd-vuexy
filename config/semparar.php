@@ -13,6 +13,9 @@ return [
 
     'wsdl_url' => env('SEMPARAR_WSDL_URL', 'https://app.viafacil.com.br/wsvp/ValePedagio?wsdl'),
 
+    // Separate WSDL for trip history/consultation (obterExtratoCreditos)
+    'wsdl_extrato_url' => env('SEMPARAR_WSDL_EXTRATO_URL', 'https://app.viafacil.com.br/vpextrato/ValePedagio?wsdl'),
+
     'cnpj' => env('SEMPARAR_CNPJ', '2024209702'),
 
     'user' => env('SEMPARAR_USER', 'CORPORATIVO'),
