@@ -78,42 +78,64 @@ const totalPagesComputed = computed(() => pagination.value.last_page)
  * Busca viagens do período (Progress database - PUB.sPararViagem)
  */
 const fetchViagens = async () => {
+  console.log('🔍 fetchViagens CHAMADO!')
+  console.log('📅 Datas:', {
+    dataInicio: dataInicio.value,
+    dataFim: dataFim.value,
+  })
+
   if (!dataInicio.value || !dataFim.value) {
+    console.warn('⚠️ Datas vazias!')
     showToast('Selecione um período de busca', 'warning')
     return
   }
 
+  const url = `${API_BASE_URL}/api/compra-viagem/viagens`
+  const payload = {
+    data_inicio: dataInicio.value,
+    data_fim: dataFim.value,
+  }
+
+  console.log('🌐 Fazendo request para:', url)
+  console.log('📦 Payload:', payload)
+
   loading.value = true
   try {
-    const response = await fetch(`${API_BASE_URL}/api/compra-viagem/viagens`, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        data_inicio: dataInicio.value,
-        data_fim: dataFim.value,
-      }),
+      body: JSON.stringify(payload),
     })
 
+    console.log('📥 Response status:', response.status)
+    console.log('📥 Response ok:', response.ok)
+
     const data = await response.json()
+    console.log('📦 Data recebida:', data)
 
     if (!data.success) {
+      console.error('❌ Backend retornou erro:', data.message)
       showToast(data.message || 'Erro ao buscar viagens', 'error')
       return
     }
 
     // Viagens já vêm formatadas do backend
     viagens.value = data.data || []
+    console.log('✅ Viagens atribuídas:', viagens.value.length, 'registros')
+    console.log('📋 Primeira viagem (se houver):', viagens.value[0])
 
     pagination.value.total = viagens.value.length
     pagination.value.last_page = Math.ceil(viagens.value.length / pagination.value.per_page)
 
     showToast(`${viagens.value.length} viagens encontradas`, 'success')
   } catch (error: any) {
-    console.error('Erro ao buscar viagens:', error)
+    console.error('💥 ERRO ao buscar viagens:', error)
+    console.error('💥 Stack:', error.stack)
     showToast(error.message || 'Erro ao buscar viagens', 'error')
   } finally {
+    console.log('🏁 fetchViagens FINALIZADO')
     loading.value = false
   }
 }
@@ -265,13 +287,25 @@ const formatarData = (data: string) => {
 // INICIALIZAÇÃO
 // ============================================================================
 onMounted(() => {
-  // Define período padrão (último mês até hoje)
-  const hoje = new Date()
-  const umMesAtras = new Date()
-  umMesAtras.setMonth(umMesAtras.getMonth() - 1)
+  console.log('🚀 Componente montado! Inicializando datas...')
 
-  dataInicio.value = umMesAtras.toISOString().split('T')[0]
+  // Define período padrão: ÚLTIMO ANO (para capturar todos os dados)
+  const hoje = new Date()
+  const umAnoAtras = new Date()
+  umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1)
+
+  dataInicio.value = umAnoAtras.toISOString().split('T')[0]
   dataFim.value = hoje.toISOString().split('T')[0]
+
+  console.log('📅 Datas padrão definidas (último ano):', {
+    dataInicio: dataInicio.value,
+    dataFim: dataFim.value,
+  })
+  console.log('🌐 API_BASE_URL:', API_BASE_URL)
+
+  // Busca automaticamente ao montar
+  console.log('🔄 Buscando viagens automaticamente...')
+  fetchViagens()
 })
 </script>
 
