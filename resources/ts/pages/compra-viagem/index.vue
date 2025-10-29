@@ -75,7 +75,7 @@ const totalPagesComputed = computed(() => pagination.value.last_page)
 // ============================================================================
 
 /**
- * Busca viagens do período
+ * Busca viagens do período (Progress database - PUB.sPararViagem)
  */
 const fetchViagens = async () => {
   if (!dataInicio.value || !dataFim.value) {
@@ -85,7 +85,7 @@ const fetchViagens = async () => {
 
   loading.value = true
   try {
-    const response = await fetch(`${API_BASE_URL}/api/semparar/consultar-viagens`, {
+    const response = await fetch(`${API_BASE_URL}/api/compra-viagem/viagens`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -103,17 +103,8 @@ const fetchViagens = async () => {
       return
     }
 
-    // Mapeia viagens retornadas da API SOAP
-    viagens.value = (data.data.viagens || []).map((v: any) => ({
-      cod_viagem: v.codViagem || v.cod_viagem || '-',
-      data_compra: v.dataEmissao || v.data_compra || '-',
-      placa: v.placa || '-',
-      rota_nome: v.nomeRota || v.rota_nome || '-',
-      valor: parseFloat(v.valor || v.valorTotal || 0),
-      status: v.status || null,
-      cod_pac: v.codPacote || v.cod_pac || null,
-      transportador: v.transportador || null,
-    }))
+    // Viagens já vêm formatadas do backend
+    viagens.value = data.data || []
 
     pagination.value.total = viagens.value.length
     pagination.value.last_page = Math.ceil(viagens.value.length / pagination.value.per_page)
