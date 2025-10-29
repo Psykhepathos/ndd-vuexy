@@ -673,7 +673,6 @@ onMounted(() => {
           :items="viagens"
           :loading="loading"
           :items-per-page="15"
-          hide-default-footer
           class="text-no-wrap"
         >
           <!-- Código da viagem -->
