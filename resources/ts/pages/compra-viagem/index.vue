@@ -265,9 +265,12 @@ const formatarData = (data: string) => {
 // INICIALIZAÇÃO
 // ============================================================================
 onMounted(() => {
-  // Define período padrão (hoje)
+  // Define período padrão (último mês até hoje)
   const hoje = new Date()
-  dataInicio.value = hoje.toISOString().split('T')[0]
+  const umMesAtras = new Date()
+  umMesAtras.setMonth(umMesAtras.getMonth() - 1)
+
+  dataInicio.value = umMesAtras.toISOString().split('T')[0]
   dataFim.value = hoje.toISOString().split('T')[0]
 })
 </script>
