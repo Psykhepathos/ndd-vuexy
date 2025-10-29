@@ -578,7 +578,8 @@ class CompraViagemController extends Controller
 
     /**
      * Lista viagens compradas do Progress
-     * Busca na tabela PUB.sPararViagem
+     * Busca na tabela PUB.sPararViagem com filtros opcionais
+     * Segue fluxo de consultaViagem.p
      */
     public function listarViagens(Request $request): JsonResponse
     {
@@ -587,16 +588,20 @@ class CompraViagemController extends Controller
                 'data_inicio' => 'required|date',
                 'data_fim' => 'required|date|after_or_equal:data_inicio',
                 'cod_pac' => 'nullable|integer',
-                'placa' => 'nullable|string|max:10'
+                'placa' => 'nullable|string|max:10',
+                's_parar_rot_id' => 'nullable|integer',
+                'cod_trn' => 'nullable|integer'
             ]);
 
-            Log::info('API: Listando viagens do Progress', $validated);
+            Log::info('API: Listando viagens do Progress com filtros', $validated);
 
             $result = $this->progressService->getViagensCompradas(
                 $validated['data_inicio'],
                 $validated['data_fim'],
                 $validated['cod_pac'] ?? null,
-                $validated['placa'] ?? null
+                $validated['placa'] ?? null,
+                $validated['s_parar_rot_id'] ?? null,
+                $validated['cod_trn'] ?? null
             );
 
             if (!$result['success']) {
@@ -610,6 +615,12 @@ class CompraViagemController extends Controller
                 'periodo' => [
                     'inicio' => $validated['data_inicio'],
                     'fim' => $validated['data_fim']
+                ],
+                'filtros' => [
+                    'rota_id' => $validated['s_parar_rot_id'] ?? null,
+                    'transportador' => $validated['cod_trn'] ?? null,
+                    'placa' => $validated['placa'] ?? null,
+                    'pacote' => $validated['cod_pac'] ?? null
                 ]
             ]);
 

@@ -15,13 +15,20 @@ interface Viagem {
   status: string | null
   cod_pac: number | null
   transportador: string | null
+  cancelado: boolean
+  cod_rota_create_sp: string | null
+  responsavel_compra: string | null
+  s_parar_rot_id: number | null
 }
 
-interface Pagination {
-  current_page: number
-  last_page: number
-  per_page: number
-  total: number
+interface RotaSemParar {
+  id: number
+  nome: string
+}
+
+interface Transportador {
+  codtrn: number
+  nomtrn: string
 }
 
 // ============================================================================
@@ -30,16 +37,23 @@ interface Pagination {
 const router = useRouter()
 const viagens = ref<Viagem[]>([])
 const loading = ref(false)
-const pagination = ref<Pagination>({
-  current_page: 1,
-  last_page: 1,
-  per_page: 15,
-  total: 0
-})
 
 // Filtros
 const dataInicio = ref('')
 const dataFim = ref('')
+const rotaSelecionada = ref<number | null>(null)
+const placaFiltro = ref('')
+const transportadorFiltro = ref<number | null>(null)
+const pacoteFiltro = ref<number | null>(null)
+
+// Autocompletes
+const rotas = ref<RotaSemParar[]>([])
+const rotasLoading = ref(false)
+const rotaSearch = ref('')
+
+const transportadores = ref<Transportador[]>([])
+const transportadoresLoading = ref(false)
+const transportadorSearch = ref('')
 
 // Snackbar
 const snackbar = ref(false)
@@ -56,52 +70,141 @@ const showToast = (message: string, color: 'success' | 'error' | 'warning' | 'in
 // CONFIGURAÇÃO DA TABELA
 // ============================================================================
 const headers = [
-  { title: 'CÓDIGO VIAGEM', key: 'cod_viagem', sortable: false, width: '140px' },
-  { title: 'DATA COMPRA', key: 'data_compra', sortable: true, width: '120px' },
-  { title: 'PLACA', key: 'placa', sortable: false, width: '100px' },
-  { title: 'ROTA', key: 'rota_nome', sortable: false, width: '250px' },
-  { title: 'PACOTE', key: 'cod_pac', sortable: false, width: '100px', class: 'd-none d-lg-table-cell' },
-  { title: 'VALOR', key: 'valor', sortable: false, width: '120px' },
-  { title: 'AÇÕES', key: 'actions', sortable: false, width: '180px' }
+  { title: 'COD. VIAGEM', key: 'cod_viagem', sortable: false, width: '120px' },
+  { title: 'PACOTE', key: 'cod_pac', sortable: false, width: '90px' },
+  { title: 'CANCEL', key: 'cancelado', sortable: false, width: '80px' },
+  { title: 'PLACA', key: 'placa', sortable: false, width: '90px' },
+  { title: 'VALOR', key: 'valor', sortable: false, width: '100px' },
+  { title: 'ROTA', key: 'rota_nome', sortable: false, width: '280px' },
+  { title: 'TRSP', key: 'transportador', sortable: false, width: '150px', class: 'd-none d-lg-table-cell' },
+  { title: 'DATA COMPRA', key: 'data_compra', sortable: true, width: '110px' },
+  { title: 'COD ROT SP', key: 'cod_rota_create_sp', sortable: false, width: '100px', class: 'd-none d-xl-table-cell' },
+  { title: 'RESP', key: 'responsavel_compra', sortable: false, width: '90px', class: 'd-none d-xl-table-cell' },
+  { title: 'AÇÕES', key: 'actions', sortable: false, width: '200px' }
 ]
 
 // ============================================================================
 // COMPUTED
 // ============================================================================
-const totalPagesComputed = computed(() => pagination.value.last_page)
+const filtrosAtivos = computed(() => {
+  let count = 0
+  if (rotaSelecionada.value) count++
+  if (placaFiltro.value) count++
+  if (transportadorFiltro.value) count++
+  if (pacoteFiltro.value) count++
+  return count
+})
+
+const rotaAtualNome = computed(() => {
+  if (!rotaSelecionada.value) return ''
+  const rota = rotas.value.find(r => r.id === rotaSelecionada.value)
+  return rota ? rota.nome : ''
+})
+
+const transportadorAtualNome = computed(() => {
+  if (!transportadorFiltro.value) return ''
+  const transp = transportadores.value.find(t => t.codtrn === transportadorFiltro.value)
+  return transp ? transp.nomtrn : ''
+})
 
 // ============================================================================
-// MÉTODOS
+// MÉTODOS - AUTOCOMPLETE
 // ============================================================================
 
 /**
- * Busca viagens do período (Progress database - PUB.sPararViagem)
+ * Busca rotas SemParar para autocomplete
+ */
+const buscarRotas = async (search: string) => {
+  if (!search || search.length < 2) {
+    rotas.value = []
+    return
+  }
+
+  rotasLoading.value = true
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/semparar-rotas/municipios?search=${encodeURIComponent(search)}`
+    )
+    const data = await response.json()
+
+    // Mapeia para formato RotaSemParar
+    rotas.value = data.data?.map((item: any) => ({
+      id: item.id,
+      nome: item.nome
+    })) || []
+  } catch (error) {
+    console.error('Erro ao buscar rotas:', error)
+    rotas.value = []
+  } finally {
+    rotasLoading.value = false
+  }
+}
+
+/**
+ * Busca transportadores para autocomplete
+ */
+const buscarTransportadores = async (search: string) => {
+  if (!search || search.length < 2) {
+    transportadores.value = []
+    return
+  }
+
+  transportadoresLoading.value = true
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/transportes?search=${encodeURIComponent(search)}&per_page=20`
+    )
+    const data = await response.json()
+
+    transportadores.value = data.data?.map((item: any) => ({
+      codtrn: item.codtrn,
+      nomtrn: item.nomtrn
+    })) || []
+  } catch (error) {
+    console.error('Erro ao buscar transportadores:', error)
+    transportadores.value = []
+  } finally {
+    transportadoresLoading.value = false
+  }
+}
+
+// ============================================================================
+// MÉTODOS - BUSCA E FILTROS
+// ============================================================================
+
+/**
+ * Busca viagens com filtros (Progress database - PUB.sPararViagem)
  */
 const fetchViagens = async () => {
-  console.log('🔍 fetchViagens CHAMADO!')
-  console.log('📅 Datas:', {
-    dataInicio: dataInicio.value,
-    dataFim: dataFim.value,
-  })
-
   if (!dataInicio.value || !dataFim.value) {
-    console.warn('⚠️ Datas vazias!')
     showToast('Selecione um período de busca', 'warning')
     return
   }
 
-  const url = `${API_BASE_URL}/api/compra-viagem/viagens`
-  const payload = {
-    data_inicio: dataInicio.value,
-    data_fim: dataFim.value,
-  }
-
-  console.log('🌐 Fazendo request para:', url)
-  console.log('📦 Payload:', payload)
-
   loading.value = true
   try {
-    const response = await fetch(url, {
+    const payload: any = {
+      data_inicio: dataInicio.value,
+      data_fim: dataFim.value,
+    }
+
+    // Adiciona filtros opcionais
+    if (rotaSelecionada.value) {
+      payload.s_parar_rot_id = rotaSelecionada.value
+    }
+    if (placaFiltro.value) {
+      payload.placa = placaFiltro.value.toUpperCase()
+    }
+    if (transportadorFiltro.value) {
+      payload.cod_trn = transportadorFiltro.value
+    }
+    if (pacoteFiltro.value) {
+      payload.cod_pac = pacoteFiltro.value
+    }
+
+    console.log('🔍 Buscando viagens com filtros:', payload)
+
+    const response = await fetch(`${API_BASE_URL}/api/compra-viagem/viagens`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -109,36 +212,46 @@ const fetchViagens = async () => {
       body: JSON.stringify(payload),
     })
 
-    console.log('📥 Response status:', response.status)
-    console.log('📥 Response ok:', response.ok)
-
     const data = await response.json()
-    console.log('📦 Data recebida:', data)
 
     if (!data.success) {
-      console.error('❌ Backend retornou erro:', data.message)
       showToast(data.message || 'Erro ao buscar viagens', 'error')
       return
     }
 
-    // Viagens já vêm formatadas do backend
     viagens.value = data.data || []
-    console.log('✅ Viagens atribuídas:', viagens.value.length, 'registros')
-    console.log('📋 Primeira viagem (se houver):', viagens.value[0])
-
-    pagination.value.total = viagens.value.length
-    pagination.value.last_page = Math.ceil(viagens.value.length / pagination.value.per_page)
-
     showToast(`${viagens.value.length} viagens encontradas`, 'success')
   } catch (error: any) {
     console.error('💥 ERRO ao buscar viagens:', error)
-    console.error('💥 Stack:', error.stack)
     showToast(error.message || 'Erro ao buscar viagens', 'error')
   } finally {
-    console.log('🏁 fetchViagens FINALIZADO')
     loading.value = false
   }
 }
+
+/**
+ * Limpa todos os filtros
+ */
+const limparFiltros = () => {
+  rotaSelecionada.value = null
+  placaFiltro.value = ''
+  transportadorFiltro.value = null
+  pacoteFiltro.value = null
+  rotaSearch.value = ''
+  transportadorSearch.value = ''
+  viagens.value = []
+
+  // Mantém o período de 1 ano
+  const hoje = new Date()
+  const umAnoAtras = new Date()
+  umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1)
+  dataInicio.value = umAnoAtras.toISOString().split('T')[0]
+  dataFim.value = hoje.toISOString().split('T')[0]
+}
+
+// ============================================================================
+// MÉTODOS - NAVEGAÇÃO E AÇÕES
+// ============================================================================
 
 /**
  * Navega para página de nova compra
@@ -159,7 +272,6 @@ const verDetalhes = (codViagem: string) => {
  */
 const baixarRecibo = async (codViagem: string) => {
   try {
-    // TODO: Implementar modal para pedir telefone/email
     const telefone = prompt('Digite o número com DDD (ex: 31988887777)')
     if (!telefone) return
 
@@ -211,7 +323,6 @@ const cancelarViagem = async (codViagem: string) => {
 
     if (data.success) {
       showToast('Viagem cancelada com sucesso', 'success')
-      // Recarrega lista
       await fetchViagens()
     } else {
       showToast(data.message || 'Erro ao cancelar viagem', 'error')
@@ -248,7 +359,6 @@ const reemitirViagem = async (codViagem: string) => {
 
     if (data.success) {
       showToast('Viagem reemitida com sucesso', 'success')
-      // Recarrega lista
       await fetchViagens()
     } else {
       showToast(data.message || 'Erro ao reemitir viagem', 'error')
@@ -258,6 +368,10 @@ const reemitirViagem = async (codViagem: string) => {
     showToast(error.message || 'Erro ao reemitir viagem', 'error')
   }
 }
+
+// ============================================================================
+// MÉTODOS - FORMATAÇÃO
+// ============================================================================
 
 /**
  * Formata valor para BRL
@@ -274,11 +388,7 @@ const formatarValor = (valor: number) => {
  */
 const formatarData = (data: string) => {
   if (!data || data === '-') return '-'
-
-  // Se já está em formato DD/MM/YYYY, retorna
   if (data.includes('/')) return data
-
-  // Se está em formato ISO (YYYY-MM-DD), converte
   const [ano, mes, dia] = data.split('-')
   return `${dia}/${mes}/${ano}`
 }
@@ -287,9 +397,7 @@ const formatarData = (data: string) => {
 // INICIALIZAÇÃO
 // ============================================================================
 onMounted(() => {
-  console.log('🚀 Componente montado! Inicializando datas...')
-
-  // Define período padrão: ÚLTIMO ANO (para capturar todos os dados)
+  // Define período padrão: ÚLTIMO ANO
   const hoje = new Date()
   const umAnoAtras = new Date()
   umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1)
@@ -297,30 +405,23 @@ onMounted(() => {
   dataInicio.value = umAnoAtras.toISOString().split('T')[0]
   dataFim.value = hoje.toISOString().split('T')[0]
 
-  console.log('📅 Datas padrão definidas (último ano):', {
-    dataInicio: dataInicio.value,
-    dataFim: dataFim.value,
-  })
-  console.log('🌐 API_BASE_URL:', API_BASE_URL)
-
-  // Busca automaticamente ao montar
-  console.log('🔄 Buscando viagens automaticamente...')
+  // Busca automaticamente
   fetchViagens()
 })
 </script>
 
 <template>
   <div>
-    <!-- Header com título e ações -->
+    <!-- Header -->
     <VCard class="mb-6">
       <VCardText>
         <div class="d-flex align-center justify-space-between flex-wrap gap-4">
           <div>
             <h4 class="text-h4 mb-1">
-              Viagens SemParar
+              Consulta de Viagens SemParar
             </h4>
             <p class="text-body-1 mb-0">
-              Consulte e gerencie suas viagens de pedágio
+              Gerencie e consulte viagens de pedágio com filtros avançados
             </p>
           </div>
 
@@ -339,9 +440,10 @@ onMounted(() => {
     <VCard class="mb-6">
       <VCardText>
         <VRow>
+          <!-- Período -->
           <VCol
             cols="12"
-            md="4"
+            md="3"
           >
             <VTextField
               v-model="dataInicio"
@@ -349,11 +451,12 @@ onMounted(() => {
               type="date"
               variant="outlined"
               density="comfortable"
+              prepend-inner-icon="tabler-calendar"
             />
           </VCol>
           <VCol
             cols="12"
-            md="4"
+            md="3"
           >
             <VTextField
               v-model="dataFim"
@@ -361,22 +464,184 @@ onMounted(() => {
               type="date"
               variant="outlined"
               density="comfortable"
+              prepend-inner-icon="tabler-calendar"
             />
           </VCol>
+
+          <!-- Rota -->
           <VCol
             cols="12"
-            md="4"
-            class="d-flex align-center"
+            md="6"
+          >
+            <VAutocomplete
+              v-model="rotaSelecionada"
+              v-model:search="rotaSearch"
+              :items="rotas"
+              :loading="rotasLoading"
+              label="Rota SemParar (opcional)"
+              placeholder="Digite para buscar..."
+              variant="outlined"
+              density="comfortable"
+              prepend-inner-icon="tabler-route"
+              item-title="nome"
+              item-value="id"
+              clearable
+              no-data-text="Digite para buscar rotas"
+              @update:search="buscarRotas"
+            >
+              <template #item="{ props: itemProps, item }">
+                <VListItem
+                  v-bind="itemProps"
+                  :title="`#${item.raw.id} - ${item.raw.nome}`"
+                />
+              </template>
+            </VAutocomplete>
+          </VCol>
+
+          <!-- Placa -->
+          <VCol
+            cols="12"
+            md="3"
+          >
+            <VTextField
+              v-model="placaFiltro"
+              label="Placa (opcional)"
+              placeholder="ABC1234"
+              variant="outlined"
+              density="comfortable"
+              prepend-inner-icon="tabler-car"
+              maxlength="7"
+              clearable
+              @update:model-value="placaFiltro = placaFiltro.toUpperCase()"
+            />
+          </VCol>
+
+          <!-- Transportador -->
+          <VCol
+            cols="12"
+            md="5"
+          >
+            <VAutocomplete
+              v-model="transportadorFiltro"
+              v-model:search="transportadorSearch"
+              :items="transportadores"
+              :loading="transportadoresLoading"
+              label="Transportador (opcional)"
+              placeholder="Digite para buscar..."
+              variant="outlined"
+              density="comfortable"
+              prepend-inner-icon="tabler-truck"
+              item-title="nomtrn"
+              item-value="codtrn"
+              clearable
+              no-data-text="Digite para buscar transportadores"
+              @update:search="buscarTransportadores"
+            >
+              <template #item="{ props: itemProps, item }">
+                <VListItem
+                  v-bind="itemProps"
+                  :title="`#${item.raw.codtrn} - ${item.raw.nomtrn}`"
+                />
+              </template>
+            </VAutocomplete>
+          </VCol>
+
+          <!-- Pacote -->
+          <VCol
+            cols="12"
+            md="2"
+          >
+            <VTextField
+              v-model.number="pacoteFiltro"
+              label="Pacote (opcional)"
+              type="number"
+              placeholder="Ex: 3043824"
+              variant="outlined"
+              density="comfortable"
+              prepend-inner-icon="tabler-package"
+              clearable
+            />
+          </VCol>
+
+          <!-- Botões -->
+          <VCol
+            cols="12"
+            md="2"
+            class="d-flex gap-2"
           >
             <VBtn
               color="primary"
-              prepend-icon="tabler-search"
               :loading="loading"
               @click="fetchViagens"
               block
             >
+              <VIcon
+                icon="tabler-search"
+                start
+              />
               Buscar
             </VBtn>
+          </VCol>
+        </VRow>
+
+        <!-- Filtros ativos -->
+        <VRow v-if="filtrosAtivos > 0">
+          <VCol cols="12">
+            <div class="d-flex align-center gap-2 flex-wrap">
+              <span class="text-sm text-medium-emphasis">Filtros ativos:</span>
+
+              <VChip
+                v-if="rotaSelecionada"
+                color="primary"
+                variant="tonal"
+                size="small"
+                closable
+                @click:close="rotaSelecionada = null"
+              >
+                Rota: {{ rotaAtualNome }}
+              </VChip>
+
+              <VChip
+                v-if="placaFiltro"
+                color="secondary"
+                variant="tonal"
+                size="small"
+                closable
+                @click:close="placaFiltro = ''"
+              >
+                Placa: {{ placaFiltro }}
+              </VChip>
+
+              <VChip
+                v-if="transportadorFiltro"
+                color="info"
+                variant="tonal"
+                size="small"
+                closable
+                @click:close="transportadorFiltro = null"
+              >
+                Transportador: {{ transportadorAtualNome }}
+              </VChip>
+
+              <VChip
+                v-if="pacoteFiltro"
+                color="warning"
+                variant="tonal"
+                size="small"
+                closable
+                @click:close="pacoteFiltro = null"
+              >
+                Pacote: {{ pacoteFiltro }}
+              </VChip>
+
+              <VBtn
+                variant="text"
+                size="small"
+                @click="limparFiltros"
+              >
+                Limpar todos
+              </VBtn>
+            </div>
           </VCol>
         </VRow>
       </VCardText>
@@ -389,7 +654,7 @@ onMounted(() => {
           :headers="headers"
           :items="viagens"
           :loading="loading"
-          :items-per-page="pagination.per_page"
+          :items-per-page="15"
           hide-default-footer
           class="text-no-wrap"
         >
@@ -414,31 +679,6 @@ onMounted(() => {
             </div>
           </template>
 
-          <!-- Data -->
-          <template #item.data_compra="{ item }">
-            <div class="text-body-2">
-              {{ formatarData(item.data_compra) }}
-            </div>
-          </template>
-
-          <!-- Placa -->
-          <template #item.placa="{ item }">
-            <VChip
-              color="secondary"
-              variant="tonal"
-              size="small"
-            >
-              {{ item.placa }}
-            </VChip>
-          </template>
-
-          <!-- Rota -->
-          <template #item.rota_nome="{ item }">
-            <div class="text-body-2">
-              {{ item.rota_nome }}
-            </div>
-          </template>
-
           <!-- Pacote -->
           <template #item.cod_pac="{ item }">
             <VChip
@@ -457,10 +697,67 @@ onMounted(() => {
             </span>
           </template>
 
+          <!-- Cancelado -->
+          <template #item.cancelado="{ item }">
+            <VChip
+              :color="item.cancelado ? 'error' : 'success'"
+              variant="tonal"
+              size="small"
+            >
+              {{ item.cancelado ? 'SIM' : 'NÃO' }}
+            </VChip>
+          </template>
+
+          <!-- Placa -->
+          <template #item.placa="{ item }">
+            <VChip
+              color="secondary"
+              variant="tonal"
+              size="small"
+            >
+              {{ item.placa }}
+            </VChip>
+          </template>
+
           <!-- Valor -->
           <template #item.valor="{ item }">
             <div class="text-body-1 font-weight-semibold text-success">
               {{ formatarValor(item.valor) }}
+            </div>
+          </template>
+
+          <!-- Rota -->
+          <template #item.rota_nome="{ item }">
+            <div class="text-body-2">
+              {{ item.rota_nome }}
+            </div>
+          </template>
+
+          <!-- Transportador -->
+          <template #item.transportador="{ item }">
+            <div class="text-body-2">
+              {{ item.transportador || '-' }}
+            </div>
+          </template>
+
+          <!-- Data -->
+          <template #item.data_compra="{ item }">
+            <div class="text-body-2">
+              {{ formatarData(item.data_compra) }}
+            </div>
+          </template>
+
+          <!-- Código Rota SP -->
+          <template #item.cod_rota_create_sp="{ item }">
+            <div class="text-body-2 text-disabled">
+              {{ item.cod_rota_create_sp || '-' }}
+            </div>
+          </template>
+
+          <!-- Responsável -->
+          <template #item.responsavel_compra="{ item }">
+            <div class="text-body-2">
+              {{ item.responsavel_compra || '-' }}
             </div>
           </template>
 
@@ -490,6 +787,7 @@ onMounted(() => {
                 variant="text"
                 color="primary"
                 size="small"
+                :disabled="item.cancelado"
                 @click="baixarRecibo(item.cod_viagem)"
               >
                 <VIcon icon="tabler-download" />
@@ -507,6 +805,7 @@ onMounted(() => {
                 variant="text"
                 color="warning"
                 size="small"
+                :disabled="item.cancelado"
                 @click="reemitirViagem(item.cod_viagem)"
               >
                 <VIcon icon="tabler-refresh" />
@@ -524,6 +823,7 @@ onMounted(() => {
                 variant="text"
                 color="error"
                 size="small"
+                :disabled="item.cancelado"
                 @click="cancelarViagem(item.cod_viagem)"
               >
                 <VIcon icon="tabler-x" />
@@ -550,7 +850,7 @@ onMounted(() => {
                 Nenhuma viagem encontrada
               </p>
               <p class="text-body-2 text-disabled mb-4">
-                Selecione um período e clique em "Buscar"
+                {{ filtrosAtivos > 0 ? 'Tente ajustar os filtros' : 'Selecione um período e clique em "Buscar"' }}
               </p>
             </div>
           </template>
@@ -565,12 +865,22 @@ onMounted(() => {
         </VDataTable>
       </VCardText>
 
-      <!-- Footer com info -->
+      <!-- Footer -->
       <VDivider />
       <VCardText class="d-flex align-center justify-space-between flex-wrap gap-3 pa-4">
         <p class="text-body-2 mb-0">
           <span class="font-weight-medium">{{ viagens.length }}</span>
           {{ viagens.length === 1 ? 'viagem encontrada' : 'viagens encontradas' }}
+        </p>
+        <p
+          v-if="filtrosAtivos > 0"
+          class="text-body-2 text-info mb-0"
+        >
+          <VIcon
+            icon="tabler-filter"
+            size="18"
+          />
+          {{ filtrosAtivos }} {{ filtrosAtivos === 1 ? 'filtro ativo' : 'filtros ativos' }}
         </p>
       </VCardText>
     </VCard>
