@@ -73,4 +73,21 @@ export const routes: RouteRecordRaw[] = [
     name: 'apps-ecommerce-dashboard',
     component: () => import('@/pages/dashboards/ecommerce.vue'),
   },
+
+  // Compra de Viagem SemParar
+  {
+    path: '/compra-viagem',
+    name: 'compra-viagem',
+    component: () => import('@/pages/compra-viagem/index.vue'),
+  },
+  {
+    path: '/compra-viagem/nova',
+    name: 'compra-viagem-nova',
+    component: () => import('@/pages/compra-viagem/nova.vue'),
+  },
+  {
+    path: '/compra-viagem/:id',
+    name: 'compra-viagem-detalhes',
+    component: () => import('@/pages/compra-viagem/[id].vue'),
+  },
 ]
