@@ -1120,7 +1120,9 @@ class ProgressService
         ?int $codPac = null,
         ?string $placa = null,
         ?int $sPararRotId = null,
-        ?int $codTrn = null
+        ?int $codTrn = null,
+        int $page = 1,
+        int $perPage = 15
     ): array
     {
         try {
@@ -1130,7 +1132,9 @@ class ProgressService
                 'cod_pac' => $codPac,
                 'placa' => $placa,
                 's_parar_rot_id' => $sPararRotId,
-                'cod_trn' => $codTrn
+                'cod_trn' => $codTrn,
+                'page' => $page,
+                'per_page' => $perPage
             ]);
 
             // Query base com JOIN para pegar nome do transportador
@@ -1198,13 +1202,35 @@ class ProgressService
                 ];
             }, $viagens);
 
+            // Calcular paginação em memória (Progress não tem OFFSET nativo)
+            $total = count($viagensFormatadas);
+            $lastPage = (int) ceil($total / $perPage);
+            $from = ($page - 1) * $perPage;
+            $to = min($from + $perPage, $total);
+
+            // Slice array para paginação
+            $viagensPaginadas = array_slice($viagensFormatadas, $from, $perPage);
+
             Log::info('Viagens encontradas', [
-                'total' => count($viagensFormatadas)
+                'total' => $total,
+                'page' => $page,
+                'per_page' => $perPage,
+                'last_page' => $lastPage,
+                'items_in_page' => count($viagensPaginadas)
             ]);
 
             return [
                 'success' => true,
-                'data' => $viagensFormatadas
+                'data' => $viagensPaginadas,
+                'pagination' => [
+                    'current_page' => $page,
+                    'last_page' => $lastPage,
+                    'per_page' => $perPage,
+                    'total' => $total,
+                    'from' => $from + 1,  // +1 porque contagem começa em 1, não 0
+                    'to' => $to,
+                    'has_more_pages' => $page < $lastPage
+                ]
             ];
 
         } catch (Exception $e) {

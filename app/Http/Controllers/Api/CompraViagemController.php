@@ -580,11 +580,14 @@ class CompraViagemController extends Controller
      * Lista viagens compradas do Progress
      * Busca na tabela PUB.sPararViagem com filtros opcionais
      * Segue fluxo de consultaViagem.p
+     * Suporta paginação server-side
      */
     public function listarViagens(Request $request): JsonResponse
     {
         try {
             $validated = $request->validate([
+                'page' => 'integer|min:1',
+                'per_page' => 'integer|min:5|max:100',
                 'data_inicio' => 'required|date',
                 'data_fim' => 'required|date|after_or_equal:data_inicio',
                 'cod_pac' => 'nullable|integer',
@@ -592,6 +595,9 @@ class CompraViagemController extends Controller
                 's_parar_rot_id' => 'nullable|integer',
                 'cod_trn' => 'nullable|integer'
             ]);
+
+            $page = (int) $request->get('page', 1);
+            $perPage = (int) $request->get('per_page', 15);
 
             Log::info('API: Listando viagens do Progress com filtros', $validated);
 
@@ -601,7 +607,9 @@ class CompraViagemController extends Controller
                 $validated['cod_pac'] ?? null,
                 $validated['placa'] ?? null,
                 $validated['s_parar_rot_id'] ?? null,
-                $validated['cod_trn'] ?? null
+                $validated['cod_trn'] ?? null,
+                $page,
+                $perPage
             );
 
             if (!$result['success']) {
@@ -611,7 +619,7 @@ class CompraViagemController extends Controller
             return response()->json([
                 'success' => true,
                 'data' => $result['data'],
-                'total' => count($result['data']),
+                'pagination' => $result['pagination'],
                 'periodo' => [
                     'inicio' => $validated['data_inicio'],
                     'fim' => $validated['data_fim']
