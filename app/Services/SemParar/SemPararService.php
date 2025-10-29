@@ -660,18 +660,37 @@ class SemPararService
                 ];
             }
 
-            // Step 2: Prepare payload for Node.js service
-            // Progress DATASET has parent-child tables: obterReciboViagemReturn (parent) + pracas (child)
-            // Extract pracas array from main data and create as separate table
+            // Step 2: Prepare payload for Python Flask service (app.py)
+            // Python expects: info["pracastwo"][0]["pracas"] (line 132 of app.py)
+            // Structure: obterReciboViagemReturn -> pracastwo -> pracas
             $mainData = $reciboData['data'];
             $pracasArray = $mainData['pracas'] ?? [];
             unset($mainData['pracas']);  // Remove pracas from main record
 
+            // Convert numeric strings to float for Python formatar_reais() function
+            if (isset($mainData['total'])) {
+                $mainData['total'] = floatval($mainData['total']);
+            }
+
+            // Convert tarifa strings to float in each praca
+            foreach ($pracasArray as &$praca) {
+                if (isset($praca['tarifa'])) {
+                    $praca['tarifa'] = floatval($praca['tarifa']);
+                }
+            }
+            unset($praca);  // Break reference
+
+            // Wrap pracas in pracastwo structure as Python expects
+            $mainData['pracastwo'] = [
+                [
+                    'pracas' => $pracasArray
+                ]
+            ];
+
             $payload = [
                 'data' => [
                     'obterReciboViagemReturnDset' => [
-                        'obterReciboViagemReturn' => [$mainData],  // Main record without pracas
-                        'pracas' => $pracasArray  // Separate child table
+                        'obterReciboViagemReturn' => [$mainData]
                     ]
                 ],
                 'telefone' => $telefone,
@@ -679,14 +698,11 @@ class SemPararService
                 'flgImprime' => $flgImprime
             ];
 
-            Log::debug('[SemParar] Calling Node.js PDF service', [
+            Log::debug('[SemParar] Calling Python Flask PDF service', [
                 'url' => 'http://192.168.19.35:5001/gerar-vale-pedagio',
                 'telefone' => $telefone,
                 'has_email' => !empty($email),
-                'dataset_keys' => array_keys($payload['data']['obterReciboViagemReturnDset'] ?? []),
-                'main_record_keys' => array_keys($mainData),
-                'pracas_count' => count($pracasArray),
-                'full_payload_json' => json_encode($payload, JSON_PRETTY_PRINT)
+                'pracas_count' => count($pracasArray)
             ]);
 
             // Step 3: Call Node.js service to generate and send PDF
