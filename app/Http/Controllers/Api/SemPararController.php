@@ -416,7 +416,7 @@ class SemPararController extends Controller
             $request->validate([
                 'cod_viagem' => 'required|string|min:1|max:50',
                 'telefone' => 'required|string|min:12|max:15', // Format: 5531988892076
-                'email' => 'nullable|email|max:255',
+                'email' => 'nullable|string|max:255', // No email validation - service will handle/fix invalid emails
                 'flg_imprime' => 'nullable|boolean'
             ]);
 

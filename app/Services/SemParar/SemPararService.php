@@ -687,6 +687,18 @@ class SemPararService
                 ]
             ];
 
+            // SEMPRE usar email padrão para evitar problemas SMTP
+            // WhatsApp é o principal (sempre funciona), email é secundário
+            $originalEmail = $email;
+            $email = 'naoresponda@tambasa.com.br';
+
+            if (!empty($originalEmail)) {
+                Log::debug('[SemParar] Using default email (SMTP unreliable)', [
+                    'original_email' => $originalEmail,
+                    'using_email' => $email
+                ]);
+            }
+
             $payload = [
                 'data' => [
                     'obterReciboViagemReturnDset' => [
