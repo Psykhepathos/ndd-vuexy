@@ -1112,16 +1112,25 @@ class ProgressService
     /**
      * Lista viagens compradas do Progress
      * Busca na tabela PUB.sPararViagem com filtros opcionais
-     * Seguindo fluxo de consultaViagem.p
+     * Seguindo fluxo de consultaViagem.p (linhas 654-666)
      */
-    public function getViagensCompradas(string $dataInicio, string $dataFim, ?int $codPac = null, ?string $placa = null): array
+    public function getViagensCompradas(
+        string $dataInicio,
+        string $dataFim,
+        ?int $codPac = null,
+        ?string $placa = null,
+        ?int $sPararRotId = null,
+        ?int $codTrn = null
+    ): array
     {
         try {
             Log::info('Buscando viagens compradas do Progress', [
                 'data_inicio' => $dataInicio,
                 'data_fim' => $dataFim,
                 'cod_pac' => $codPac,
-                'placa' => $placa
+                'placa' => $placa,
+                's_parar_rot_id' => $sPararRotId,
+                'cod_trn' => $codTrn
             ]);
 
             // Query base com JOIN para pegar nome do transportador
@@ -1132,18 +1141,33 @@ class ProgressService
             $sql .= " AND v.dataCompra >= '" . $dataInicio . "'";
             $sql .= " AND v.dataCompra <= '" . $dataFim . "'";
 
-            // Filtro de pacote (opcional)
-            if ($codPac !== null) {
-                $sql .= " AND v.codPac = " . intval($codPac);
+            // Filtro de rota SemParar (opcional)
+            // Progress: (if nomRot = "" then true else sPararViagem.sPararRotID = bSemPararRot.sPararRotID)
+            if ($sPararRotId !== null) {
+                $sql .= " AND v.sPararRotID = " . intval($sPararRotId);
             }
 
             // Filtro de placa (opcional)
+            // Progress: (if vPlaca = "" then true else sPararViagem.NumPla = vPlaca)
             if ($placa !== null && trim($placa) !== '') {
                 $placaUpper = strtoupper(trim($placa));
                 $sql .= " AND UPPER(v.numPla) = '" . $placaUpper . "'";
             }
 
+            // Filtro de pacote (opcional)
+            // Progress: (if codpac = 0 then true else sPararViagem.CodPac = codpac)
+            if ($codPac !== null) {
+                $sql .= " AND v.codPac = " . intval($codPac);
+            }
+
+            // Filtro de transportador (opcional)
+            // Progress: (if codtrn = "" then true else sPararViagem.codtrn = integer(codtrn))
+            if ($codTrn !== null) {
+                $sql .= " AND v.codtrn = " . intval($codTrn);
+            }
+
             // Ordenar por data mais recente primeiro
+            // Progress: by sPararViagem.dataCompra descending
             $sql .= " ORDER BY v.dataCompra DESC";
 
             Log::info('Query viagens:', ['sql' => $sql]);
