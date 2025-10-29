@@ -718,37 +718,59 @@ curl -X POST http://localhost:8002/api/semparar/comprar-viagem \
   }'
 ```
 
-### FASE 2C - Recibo PDF (✅ COMPLETA + Envio WhatsApp)
-**Implementação:**
-- `app/Services/SemParar/SemPararService.php` - `obterRecibo()` (118 lines) + `gerarRecibo()` (130 lines)
-- `app/Http/Controllers/Api/SemPararController.php` - `obterRecibo()` + `gerarRecibo()` endpoints
+### ✅ FASE 2C: Receipt Generation & WhatsApp - COMPLETA (2025-10-28)
 
-**Funcionalidades:**
-- ✅ Obter recibo em PDF da viagem comprada (base64)
-- ✅ Gerar recibo e enviar por WhatsApp/Email (via serviço Node.js)
-- ✅ Download automático no browser
-- ✅ Validação de código de viagem e telefone
-- ✅ Tratamento de erros (viagem não encontrada, recibo indisponível, serviço offline)
+**Status:** Geração de recibo PDF + envio por WhatsApp funcional
+
+**Implementado:**
+- ✅ `obterRecibo()` - Obtém dados do recibo via SOAP (não retorna PDF diretamente)
+- ✅ `gerarRecibo()` - Gera PDF e envia por WhatsApp/Email via Python Flask service
+- ✅ Estrutura de payload compatível com `app.py` (Python service)
+- ✅ Conversão de valores numéricos string→float para formatação Python
+- ✅ Wrapper `pracastwo` para estrutura DATASET Progress
+
+**Descoberta importante:**
+```php
+// ❌ ERRADO - SOAP NÃO retorna PDF, retorna dados da viagem
+$reciboPDF = $response->reciboPDF;  // Este campo não existe!
+
+// ✅ CORRETO - SOAP retorna trip data (pracas, total, viagem, etc.)
+$responseData = json_decode(json_encode($response), true);
+// Contém: catVeiculo, cnpjEmissor, pracas[], total, viagem, etc.
+```
+
+**Integração Python Flask:**
+```php
+// Python app.py (linha 132) espera: info["pracastwo"][0]["pracas"]
+$mainData['pracastwo'] = [
+    [
+        'pracas' => $pracasArray  // Array de praças de pedágio
+    ]
+];
+
+// Converter strings para float (formatar_reais do Python)
+$mainData['total'] = floatval($mainData['total']);
+foreach ($pracasArray as &$praca) {
+    $praca['tarifa'] = floatval($praca['tarifa']);
+}
+```
 
 **Endpoints:**
 
-#### 1. Obter Recibo PDF (download direto)
-- `POST /api/semparar/obter-recibo` - Get trip receipt PDF in base64
+#### 1. Obter Dados do Recibo (uso interno)
+- `POST /api/semparar/obter-recibo` - Get trip receipt data from SOAP
 
-**Parâmetros:**
-- `cod_viagem` (string, obrigatório) - Trip code from comprarViagem()
-
-**Retorno com sucesso:**
+**Retorno:**
 ```json
 {
   "success": true,
-  "message": "Recibo obtido com sucesso",
+  "message": "Dados do recibo obtidos com sucesso",
   "data": {
-    "recibo_pdf": "JVBERi0xLjQKJe...",  // Base64 encoded PDF
-    "pdf_size_bytes": 45678,
-    "status": 0,
-    "status_mensagem": "Sucesso"
-  }
+    "catVeiculo": "02 EIXOS ROD DUPLA",
+    "total": "131.46",
+    "pracas": [...]
+  },
+  "note": "SOAP retorna dados, não PDF. Use /gerar-recibo para PDF+WhatsApp"
 }
 ```
 
@@ -789,27 +811,31 @@ curl -X POST http://localhost:8002/api/semparar/obter-recibo \
 ```
 
 **Fluxo interno (seguindo Progress):**
-1. Chama SOAP `obterReciboViagem()` para pegar dados
-2. Envia para Node.js service (`http://192.168.19.35:5001/gerar-vale-pedagio`)
-3. Service gera PDF e envia por WhatsApp/Email
+1. PHP chama SOAP `obterReciboViagem()` para pegar dados da viagem
+2. PHP formata payload com estrutura `pracastwo` + conversão float
+3. PHP envia para Python Flask service (`http://192.168.19.35:5001/gerar-vale-pedagio`)
+4. Python gera PDF usando ReportLab e envia por WhatsApp (Z-API) + Email (SMTP)
 
 **Exemplo de uso:**
 ```bash
+# Teste com viagem 91154383 (comprada em 2025-10-28)
 curl -X POST http://localhost:8002/api/semparar/gerar-recibo \
   -H "Content-Type: application/json" \
   -d '{
-    "cod_viagem": "68470838",
+    "cod_viagem": "91154383",
     "telefone": "5531988892076",
-    "email": "usuario@example.com",
-    "flg_imprime": true
+    "email": "usuario@tambasa.com.br",
+    "flg_imprime": false
   }'
 ```
 
 **Observações:**
-- ⚠️ Requer serviço Node.js rodando em 192.168.19.35:5001
-- 📱 WhatsApp recebe PDF automaticamente
-- 📧 Email opcional (se fornecido, também envia por email)
-- ⏱️ Rate limit: 20 req/min (protege contra spam)
+- ⚠️ **Requer Python Flask service rodando em 192.168.19.35:5001** (`app.py`)
+- 📱 **WhatsApp:** Envio automático via Z-API (sempre tenta enviar)
+- 📧 **Email:** Envio via SMTP (webmail.tambasa.com.br) - se email válido fornecido
+- 🖨️ **Impressão:** Se `flg_imprime: true`, envia para impressora `transp4`
+- ⏱️ **Rate limit:** 20 req/min (protege contra spam)
+- ✅ **Status 200:** Recibo gerado e enviado com sucesso (chegou no WhatsApp!)
 
 ### 🧪 Teste Completo (FASE 1A → 1B → 2A → 2B → 2C)
 **Interface HTML:** `public/test-semparar-fase1b.html`
