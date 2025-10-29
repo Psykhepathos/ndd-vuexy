@@ -963,9 +963,35 @@ curl -X POST http://localhost:8002/api/semparar/reemitir-viagem \
   - `consultar-viagens`: 60 req/min
   - `cancelar-viagem`: 20 req/min (operação sensível)
   - `reemitir-viagem`: 20 req/min (operação sensível)
-- ⚠️ **consultarViagens:** Pode precisar de WSDL `vpextrato` separado para retornar dados reais
-- 📝 **Status codes:** 0 = sucesso, 999 = erro desconhecido ou sem dados
+- ✅ **consultarViagens:** Usa WSDL `vpextrato` separado (lazy-loaded)
+- 📝 **Status codes:** 0 = sucesso, null = normal para consultas
 - 🔄 **Implementação:** Baseada em Rota.cls linhas 99-1017
+
+**🔧 Solução Técnica - Dual WSDL:**
+
+Progress usa **2 WSDLs separados** para diferentes operações:
+- **`wsvp/ValePedagio`** - Compra, cancelamento, reemissão, recibos
+- **`vpextrato/ValePedagio`** - Consulta de viagens e extratos
+
+**Implementação PHP:**
+```php
+// SemPararSoapClient.php
+protected ?SoapClient $soapClient = null;         // Main WSDL (wsvp)
+protected ?SoapClient $soapExtratoClient = null;  // Extrato WSDL (vpextrato)
+
+// Lazy-load extrato client quando necessário
+public function getSoapExtratoClient(): SoapClient {
+    if ($this->soapExtratoClient === null) {
+        $this->soapExtratoClient = new SoapClient(
+            'https://app.viafacil.com.br/vpextrato/ValePedagio?wsdl',
+            $this->soapOptions
+        );
+    }
+    return $this->soapExtratoClient;
+}
+```
+
+**Resultado:** `consultarViagens` agora retorna **37+ viagens reais** com todos os campos preenchidos!
 
 **🧪 Interface de Teste FASE 3A:**
 - **URL:** http://localhost:8002/test-semparar-fase3a.html
