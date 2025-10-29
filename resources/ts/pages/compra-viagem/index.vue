@@ -397,6 +397,8 @@ const formatarData = (data: string) => {
 // INICIALIZAÇÃO
 // ============================================================================
 onMounted(() => {
+  console.log('🚀 Componente compra-viagem montado!')
+
   // Define período padrão: ÚLTIMO ANO
   const hoje = new Date()
   const umAnoAtras = new Date()
@@ -405,8 +407,14 @@ onMounted(() => {
   dataInicio.value = umAnoAtras.toISOString().split('T')[0]
   dataFim.value = hoje.toISOString().split('T')[0]
 
-  // Busca automaticamente
-  fetchViagens()
+  console.log('📅 Período padrão definido:', {
+    inicio: dataInicio.value,
+    fim: dataFim.value
+  })
+
+  // REMOVIDO: Auto-fetch para resolver problema de render
+  // Agora o usuário precisa clicar em "Buscar"
+  // Isso evita race conditions no carregamento inicial
 })
 </script>
 
@@ -841,17 +849,29 @@ onMounted(() => {
           <template #no-data>
             <div class="text-center py-10">
               <VIcon
-                icon="tabler-package-off"
-                size="48"
-                color="disabled"
+                icon="tabler-search"
+                size="64"
+                color="primary"
                 class="mb-4"
               />
-              <p class="text-h6 text-disabled">
-                Nenhuma viagem encontrada
+              <p class="text-h6 text-high-emphasis mb-2">
+                {{ viagens.length === 0 && !loading ? 'Pronto para buscar viagens!' : 'Nenhuma viagem encontrada' }}
               </p>
-              <p class="text-body-2 text-disabled mb-4">
-                {{ filtrosAtivos > 0 ? 'Tente ajustar os filtros' : 'Selecione um período e clique em "Buscar"' }}
+              <p class="text-body-1 text-medium-emphasis mb-4">
+                {{ filtrosAtivos > 0 ? 'Tente ajustar os filtros e buscar novamente' : 'Clique no botão "Buscar" para carregar as viagens' }}
               </p>
+              <VBtn
+                v-if="viagens.length === 0 && !loading"
+                color="primary"
+                size="large"
+                @click="fetchViagens"
+              >
+                <VIcon
+                  icon="tabler-search"
+                  start
+                />
+                Buscar Viagens
+              </VBtn>
             </div>
           </template>
 

@@ -79,15 +79,24 @@ export const routes: RouteRecordRaw[] = [
     path: '/compra-viagem',
     name: 'compra-viagem',
     component: () => import('@/pages/compra-viagem/index.vue'),
+    meta: {
+      layoutWrapperClasses: 'layout-content-height-fixed',
+    },
   },
   {
     path: '/compra-viagem/nova',
     name: 'compra-viagem-nova',
     component: () => import('@/pages/compra-viagem/nova.vue'),
+    meta: {
+      layoutWrapperClasses: 'layout-content-height-fixed',
+    },
   },
   {
     path: '/compra-viagem/:id',
     name: 'compra-viagem-detalhes',
     component: () => import('@/pages/compra-viagem/[id].vue'),
+    meta: {
+      layoutWrapperClasses: 'layout-content-height-fixed',
+    },
   },
 ]
