@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { watchDebounced } from '@vueuse/core'
 import { API_BASE_URL } from '@/config/api'
 
 definePage({
@@ -293,6 +294,51 @@ const limparFiltros = () => {
   dataInicio.value = umAnoAtras.toISOString().split('T')[0]
   dataFim.value = hoje.toISOString().split('T')[0]
 }
+
+// ============================================================================
+// WATCHERS - AUTO-BUSCA QUANDO FILTROS MUDAM
+// ============================================================================
+
+/**
+ * Watcher para datas - dispara busca quando ambas as datas estão preenchidas
+ */
+watch([dataInicio, dataFim], ([novoInicio, novoFim]) => {
+  if (novoInicio && novoFim) {
+    console.log('📅 Datas mudaram, disparando busca automática')
+    pagination.value.current_page = 1
+    fetchViagens()
+  }
+})
+
+/**
+ * Watchers para filtros opcionais com debounce (300ms)
+ * Dispara busca automática apenas se houver período válido
+ */
+watchDebounced(
+  [rotaSelecionada, placaFiltro, transportadorFiltro, pacoteFiltro],
+  ([novaRota, novaPlaca, novoTransp, novoPacote], [rotaAnt, placaAnt, transpAnt, pacoteAnt]) => {
+    if (
+      novaRota !== rotaAnt ||
+      novaPlaca !== placaAnt ||
+      novoTransp !== transpAnt ||
+      novoPacote !== pacoteAnt
+    ) {
+      console.log('🔧 Filtros opcionais mudaram:', {
+        rota: `${rotaAnt} → ${novaRota}`,
+        placa: `${placaAnt} → ${novaPlaca}`,
+        transportador: `${transpAnt} → ${novoTransp}`,
+        pacote: `${pacoteAnt} → ${novoPacote}`
+      })
+
+      // Só dispara busca se tiver período válido
+      if (dataInicio.value && dataFim.value) {
+        pagination.value.current_page = 1
+        fetchViagens()
+      }
+    }
+  },
+  { debounce: 300 }
+)
 
 // ============================================================================
 // MÉTODOS - NAVEGAÇÃO E AÇÕES
