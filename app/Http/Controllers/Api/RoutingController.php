@@ -72,6 +72,41 @@ class RoutingController extends Controller
 
     /**
      * Buscar rota real usando APIs externas via proxy Laravel
+     *
+     * 🚨 IMPORTANTE: Use este endpoint no frontend SEMPRE que precisar de routing!
+     *
+     * ❌ NÃO use leaflet-routing-machine chamando OSRM diretamente do frontend!
+     *    Motivo: CORS, timeouts, rate limiting em servidores OSRM públicos
+     *
+     * ✅ Use este proxy Laravel que contorna esses problemas:
+     *    - Tenta 3 servidores OSRM diferentes
+     *    - Retry automático com timeout de 15s
+     *    - Fallback inteligente se todos falharem
+     *    - Sem problemas de CORS
+     *
+     * @param Request $request
+     *   - start: array [lng, lat] (longitude, latitude) - Ponto inicial
+     *   - end: array [lng, lat] (longitude, latitude) - Ponto final
+     *
+     * @return JsonResponse
+     *   Success: { success: true, coordinates: [[lat,lng],...], distance_km: 123.4, api_used: "osrm" }
+     *   Fallback: { success: false, error: "...", fallback: "usar_linha_reta" }
+     *
+     * @example Frontend (Vue/TypeScript)
+     * ```typescript
+     * const response = await fetch('http://localhost:8002/api/routing/route', {
+     *   method: 'POST',
+     *   body: JSON.stringify({
+     *     start: [-46.63, -23.55], // [lng, lat] São Paulo
+     *     end: [-43.17, -22.91]    // [lng, lat] Rio de Janeiro
+     *   })
+     * })
+     * const data = await response.json()
+     * // data.coordinates = [[-23.55, -46.63], [-23.56, -46.62], ...]
+     * L.polyline(data.coordinates, { color: 'blue' }).addTo(map)
+     * ```
+     *
+     * @see resources/ts/pages/rotas-padrao/mapa/[id].vue (linhas 470-610) - Exemplo completo
      */
     public function getRoute(Request $request): JsonResponse
     {
