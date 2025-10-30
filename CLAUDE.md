@@ -2,6 +2,61 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚡ Quick Reference
+
+| Task | Command/Location |
+|------|------------------|
+| **Start dev servers** | `php artisan serve --port=8002` + `pnpm run dev` |
+| **Access system** | http://localhost:8002 (NOT port 5174!) |
+| **Test Progress connection** | `curl http://localhost:8002/api/progress/test-connection` |
+| **TypeScript check** | `pnpm run typecheck` |
+| **Vuexy templates** | `resources/ts/pages/apps/` |
+| **Progress Service** | `app/Services/ProgressService.php` |
+| **API routes** | `routes/api.php` |
+| **Git user** | `git config --global user.name "Psykhepathos"` |
+
+## 🚨 ALERTA CRÍTICO - OSRM Routing (LEIA ISTO ANTES DE TRABALHAR COM MAPAS!)
+
+**❌ NUNCA use `leaflet-routing-machine` chamando OSRM diretamente do frontend!**
+
+**Problema:** Servidores OSRM públicos bloqueiam requisições diretas (CORS, timeouts, rate limiting)
+
+**✅ SOLUÇÃO CORRETA:** Use o proxy Laravel que JÁ EXISTE no projeto!
+
+```typescript
+// ❌ ERRADO - Não fazer isso!
+import 'leaflet-routing-machine'
+const osrmRouter = L.Routing.osrmv1({
+  serviceUrl: 'https://routing.openstreetmap.de/...'
+})
+L.Routing.control({ router: osrmRouter, ... })
+
+// ✅ CORRETO - Usar proxy Laravel!
+// Calcular rota segmento por segmento
+for (let i = 0; i < waypoints.length - 1; i++) {
+  const response = await fetch('http://localhost:8002/api/routing/route', {
+    method: 'POST',
+    body: JSON.stringify({
+      start: [waypoints[i].lng, waypoints[i].lat],
+      end: [waypoints[i+1].lng, waypoints[i+1].lat]
+    })
+  })
+  const data = await response.json()
+  // data.coordinates = [[lat, lng], ...]
+  // Desenhar com L.polyline(data.coordinates, {...})
+}
+```
+
+**Backend Proxy:**
+- **Controller:** `app/Http/Controllers/Api/RoutingController.php`
+- **Endpoint:** `POST /api/routing/route` (2 pontos) ou `POST /api/routing/calculate` (múltiplos)
+- **Features:** Retry em 3 servidores OSRM, fallback inteligente, sem CORS
+- **Formato retorno:** `{ success: true, coordinates: [[lat,lng],...], distance_km: 123.4 }`
+
+**Referência funcional:** `resources/ts/pages/rotas-padrao/mapa/[id].vue` (linhas 449-595)
+
+---
+
 ## Quick Start
 
 **Laravel + Vue.js unified transport management system using Vuexy template, connected to Progress OpenEdge via ODBC.**
@@ -129,8 +184,6 @@ POST /api/semparar/comprar-viagem
 **⚠️ ATENÇÃO:** Esta operação EFETIVA a compra no SemParar! Use com cuidado.
 
 **Página de teste:** http://localhost:8002/test-semparar-fase1b.html
-
-**Próxima fase:** FASE 2B - Integração com Progress (salvar viagens no banco)
 
 ---
 
@@ -1023,8 +1076,8 @@ public function getSoapExtratoClient(): SoapClient {
 - `test-roteirizar-completo.json` - Complete route test data (4 municipalities)
 
 ### 📋 Próximas Fases (Planejadas)
-- **FASE 3A:** Validação e pesquisa de viagens
 - **FASE 3B:** Frontend Vue.js integration (`resources/ts/pages/compra-viagem/`)
+- **FASE 4:** Advanced trip management (bulk operations, reports)
 
 ### 🔗 Documentação Adicional
 - `SEMPARAR_IMPLEMENTATION_ROADMAP.md` - Complete implementation plan
@@ -1272,17 +1325,56 @@ INSERT INTO PUB.semPararRotMu VALUES (...);  // ❌ Falha
 - **Always test functionality before committing**
 - **Use Progress API endpoints for schema exploration, not tinker**
 
+## OSRM Routing Proxy (100% FREE!)
+
+**🎯 Sistema de routing GRATUITO via proxy Laravel + OSRM público**
+
+**❌ NÃO use leaflet-routing-machine direto no frontend!**
+- Servidores OSRM bloqueiam requisições diretas (CORS/timeouts)
+- Use o proxy Laravel que JÁ EXISTE no projeto
+
+**✅ Proxy Laravel:**
+- **Controller:** `app/Http/Controllers/Api/RoutingController.php`
+- **Endpoint:** `POST /api/routing/route` (2 pontos) ou `POST /api/routing/calculate` (múltiplos)
+- **Features:**
+  - Tenta 3 servidores OSRM diferentes
+  - Retry automático com 15s timeout
+  - Fallback inteligente se todos falharem
+  - Sem problemas de CORS
+  - 100% GRATUITO
+
+**Uso no frontend:**
+```typescript
+// Calcular rota ponto a ponto
+const response = await fetch('http://localhost:8002/api/routing/route', {
+  method: 'POST',
+  body: JSON.stringify({
+    start: [lng1, lat1], // [longitude, latitude]
+    end: [lng2, lat2]
+  })
+})
+const data = await response.json()
+// { success: true, coordinates: [[lat,lng],...], distance_km: 123.4 }
+
+// Desenhar com Leaflet
+L.polyline(data.coordinates, { color: 'blue' }).addTo(map)
+```
+
+**Referência completa:** `resources/ts/pages/rotas-padrao/mapa/[id].vue` (linhas 449-610)
+
+---
+
 ## Google Maps Integration
 
 **Cache Strategy:**
 - **Geocoding cache**: SQLite table `municipio_coordenadas` (persistent, no expiration)
-- **Routing cache**: SQLite table `route_segments` (30 days TTL, ~100m tolerance)
+- **Routing cache**: SQLite table `route_segments` (30 days TTL, ~100m tolerance) - **DEPRECATED**, use OSRM proxy
 - **Rate limiting**: 200ms delay between new Google API requests
 - **Cache hit rate**: 80%+ after first visualization of routes
 
 **Services:**
-- `GeocodingService` - Converts IBGE codes → lat/lon coordinates
-- `RoutingService` - Calculates real road routes between points
+- `GeocodingService` - Converts IBGE codes → lat/lon coordinates (ainda usado)
+- `RoutingService` - Calculates real road routes between points (**DEPRECATED**, use OSRM proxy)
 - Both services use local cache to minimize API calls
 
 **Quota monitoring:**
