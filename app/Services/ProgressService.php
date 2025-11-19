@@ -1924,16 +1924,20 @@ class ProgressService
             }
 
             // PASSO 3: Roteirizar praças de pedágio (linha 899 de Rota.cls)
-            $soapService = new \App\Services\SemPararSoapService();
+            // ✅ CORREÇÃO: Usar o service CORRETO que não aplica regras especiais
+            $soapService = new \App\Services\SemParar\SemPararService();
 
             Log::info('Chamando roteirizarPracasPedagio com pontos combinados', ['total_pontos' => count($pontos)]);
             $resultRoteirizar = $soapService->roteirizarPracasPedagio($pontos);
 
-            if (!$resultRoteirizar['success'] || empty($resultRoteirizar['pracas_ids'])) {
+            if (!$resultRoteirizar['success'] || empty($resultRoteirizar['pracas'])) {
                 throw new Exception('Erro ao roteirizar praças de pedágio: nenhuma praça retornada');
             }
 
-            $pracasIds = $resultRoteirizar['pracas_ids'];
+            // Extrair IDs das praças do formato do novo service
+            $pracasIds = array_map(function($praca) {
+                return $praca['id'];
+            }, $resultRoteirizar['pracas']);
             Log::info('Praças de pedágio calculadas', ['total_pracas' => count($pracasIds)]);
 
             // PASSO 4: Gerar nome da rota temporária (linha 943-944 de Rota.cls)
@@ -1955,31 +1959,36 @@ class ProgressService
                 throw new Exception('Erro ao cadastrar rota temporária no SemParar');
             }
 
-            $idRotaTemporaria = $resultCadastrar['id_rota'];
+            // ✅ CORREÇÃO: Novo service retorna 'cod_rota_semparar' não 'id_rota'
+            $idRotaTemporaria = $resultCadastrar['cod_rota_semparar'];
             Log::info('Rota temporária cadastrada', ['id' => $idRotaTemporaria, 'nome' => $nomeRotaTemporaria]);
 
-            // PASSO 6: Verificar preço usando nome da rota temporária (linha 673 de compraRota.p)
-            Log::info('Chamando verificarPreco com rota temporária...');
-            $priceData = $soapService->verificarPreco(
-                $nomeRotaTemporaria,  // USA O NOME, não o ID
-                $qtdEixos,
+            // PASSO 6: Verificar preço usando nome da rota temporária
+            Log::info('Chamando obterCustoRota com rota temporária...');
+            $priceResult = $soapService->obterCustoRota(
+                $nomeRotaTemporaria,
                 $placa,
+                $qtdEixos,
                 $dataInicio,
                 $dataFim
             );
 
-            $soapService->disconnect();
+            if (!$priceResult['success']) {
+                throw new Exception('Erro ao obter custo da rota: ' . ($priceResult['error'] ?? 'Erro desconhecido'));
+            }
 
             Log::info('Preço verificado com sucesso', [
-                'valor' => $priceData['valor'],
-                'numero_viagem' => $priceData['numero_viagem']
+                'valor' => $priceResult['valor'],
+                'nome_rota' => $priceResult['nome_rota']
             ]);
 
             return [
                 'success' => true,
                 'data' => [
-                    'valor' => $priceData['valor'] ?? 0.0,
-                    'numero_viagem' => $priceData['numero_viagem'] ?? '',
+                    'valor' => $priceResult['valor'] ?? 0.0,
+                    'numero_viagem' => '', // Não retorna número na verificação de preço
+                    'nome_rota' => $priceResult['nome_rota'] ?? $nomeRotaTemporaria,
+                    'cod_rota' => $idRotaTemporaria,
                     'rota_temporaria' => $nomeRotaTemporaria,
                     'id_rota_temporaria' => $idRotaTemporaria,
                     'total_pracas' => count($pracasIds),

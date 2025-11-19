@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { API_BASE_URL } from '@/config/api'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
+import { usePackageSimulation } from '@/composables/usePackageSimulation'
 
 // ============================================================================
 // SISTEMA DE DEBUG E LOGGING
@@ -126,8 +129,21 @@ const nomRotSemParar = ref('')
 const codRotaSemParar = ref('')
 const valorViagem = ref(0)
 const numeroViagem = ref('')
-const dataInicio = ref('')
-const dataFim = ref('')
+
+// Inicializar datas com valores padrão (hoje e daqui a 7 dias)
+const getDataHoje = () => {
+  const hoje = new Date()
+  return hoje.toISOString().split('T')[0]
+}
+
+const getDataFutura = (dias: number) => {
+  const futuro = new Date()
+  futuro.setDate(futuro.getDate() + dias)
+  return futuro.toISOString().split('T')[0]
+}
+
+const dataInicio = ref(getDataHoje())
+const dataFim = ref(getDataFutura(7))
 
 // Modos de operação (Progress: compraRota.p linha 176-196)
 const modoCD = ref(false) // false = Normal, true = CD (TCD)
@@ -152,6 +168,7 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null
 // Dialogs
 const showPlacaDialog = ref(false)
 const showPrecoDialog = ref(false)
+const showMapDialog = ref(false)
 
 // Snackbar/Toast (Vuexy pattern)
 const snackbar = ref(false)
@@ -173,6 +190,48 @@ const rotaDisabled = ref(true)
 const testMode = ref(false)
 
 // ============================================================================
+// ESTADO DO MAPA E COMPOSABLE DE SIMULAÇÃO
+// ============================================================================
+const mapContainer = ref<HTMLElement | null>(null)
+const map = ref<L.Map | null>(null)
+const markers = ref<L.Marker[]>([])
+const routingControl = ref<any>(null)
+const distanciaTotal = ref(0)
+const rotaMunicipios = ref<any[]>([])
+const loadingRotaMunicipios = ref(false)
+const loadingEntregas = ref(false)
+const loadingRouting = ref(false)
+
+// Estado de progresso do routing
+interface SegmentoRota {
+  index: number
+  origem: string
+  destino: string
+  status: 'pending' | 'calculating' | 'complete' | 'error'
+  cached: boolean
+  distanciaKm: number
+  tempoMs: number
+}
+
+const routingProgress = ref(0) // 0-100
+const routingSegmentos = ref<SegmentoRota[]>([])
+const routingTotalSegmentos = ref(0)
+const routingSegmentosCompletos = ref(0)
+const routingSegmentosCached = ref(0)
+
+// Lock para prevenir múltiplas atualizações simultâneas do mapa
+const isUpdatingMap = ref(false)
+
+// Composable de simulação de pacotes
+const {
+  entregas,
+  simulationActive,
+  loadPacoteEntregas,
+  stopSimulation,
+  processGpsCoordinate,
+} = usePackageSimulation()
+
+// ============================================================================
 // WATCHERS - Recarrega rotas quando modo CD muda
 // ============================================================================
 watch(modoCD, async () => {
@@ -184,22 +243,66 @@ watch(modoCD, async () => {
 })
 
 // ============================================================================
-// ETAPA ATUAL
+// WATCHERS DO MAPA - Atualizam mapa quando rota ou pacote mudam
+// ============================================================================
+
+// Watch para rotaId - carrega municípios da rota
+watch(rotaId, async (novoRotaId) => {
+  if (!novoRotaId) {
+    rotaMunicipios.value = []
+    await updateMapMarkers()
+    return
+  }
+
+  addDebugLog('info', 'WATCH', `Rota mudou para ${novoRotaId}, carregando municípios...`)
+  await carregarMunicipiosRota(novoRotaId)
+})
+
+// Watch para codpac - carrega entregas do pacote
+watch(codpac, async (novoCodpac) => {
+  if (!novoCodpac) {
+    stopSimulation()
+    await updateMapMarkers()
+    return
+  }
+
+  loadingEntregas.value = true
+  addDebugLog('info', 'WATCH', `Pacote mudou para ${novoCodpac}, carregando entregas...`)
+
+  try {
+    const success = await loadPacoteEntregas(novoCodpac)
+    if (success) {
+      simulationActive.value = true
+      addDebugLog('success', 'PACOTE', `${entregas.value.length} entregas carregadas`)
+      await updateMapMarkers()
+    } else {
+      addDebugLog('warn', 'PACOTE', 'Nenhuma entrega com GPS encontrada')
+    }
+  } catch (error: any) {
+    addDebugLog('error', 'PACOTE', `Erro ao carregar entregas: ${error.message}`)
+  } finally {
+    loadingEntregas.value = false
+  }
+})
+
+// ============================================================================
+// ETAPA ATUAL (Simplificado: 3 etapas ao invés de 5)
 // ============================================================================
 const currentStep = computed(() => {
-  if (!verificaPacote.value) return 1
-  if (!verificaPlaca.value) return 2
-  if (!verificaRota.value) return 3
-  if (!verificaValor.value) return 4
-  return 5
+  // Etapa 1: Pacote + Placa
+  if (!verificaPacote.value || !verificaPlaca.value) return 1
+
+  // Etapa 2: Rota
+  if (!verificaRota.value || !verificaValor.value) return 2
+
+  // Etapa 3: Confirmar compra
+  return 3
 })
 
 const steps = [
-  { number: 1, title: 'Pacote', icon: 'tabler-package' },
-  { number: 2, title: 'Placa', icon: 'tabler-car' },
-  { number: 3, title: 'Rota', icon: 'tabler-route' },
-  { number: 4, title: 'Preço', icon: 'tabler-currency-real' },
-  { number: 5, title: 'Confirmar', icon: 'tabler-check' },
+  { number: 1, title: 'Dados', icon: 'tabler-file-text', description: 'Pacote & Veículo' },
+  { number: 2, title: 'Rota', icon: 'tabler-route', description: 'Rota & Preço' },
+  { number: 3, title: 'Confirmar', icon: 'tabler-check', description: 'Finalizar Compra' },
 ]
 
 // ============================================================================
@@ -258,9 +361,6 @@ const validarPacote = async () => {
 
     // Carrega TODAS as rotas para o autocomplete
     await carregarTodasRotas()
-
-    // Auto-validar placa
-    setTimeout(() => validarPlaca(), 300)
   }
   catch (error: any) {
     showToast(error.message || 'Erro ao validar pacote', 'error')
@@ -396,6 +496,8 @@ const verificarPreco = async () => {
   }
 
   loadingPreco.value = true
+  addDebugLog('info', 'PRECO', 'Verificando preço da viagem...')
+
   try {
     const data = await apiFetch('/api/compra-viagem/verificar-preco', {
       method: 'POST',
@@ -410,9 +512,20 @@ const verificarPreco = async () => {
     })
 
     if (!data.success) {
-      showToast(data.error || 'Erro ao calcular preço', 'error')
+      const errorMsg = data.message || data.error || 'Erro ao calcular preço'
+      addDebugLog('error', 'PRECO', `Erro: ${errorMsg}`)
+
+      // Se houver detalhes do erro, mostrar
+      if (data.errors) {
+        console.error('Detalhes do erro:', data.errors)
+        addDebugLog('error', 'PRECO', `Detalhes: ${JSON.stringify(data.errors)}`)
+      }
+
+      showToast(errorMsg, 'error')
       return
     }
+
+    addDebugLog('success', 'PRECO', `Preço calculado: R$ ${data.data.valor}`)
 
     valorViagem.value = data.data.valor
     numeroViagem.value = data.data.numero_viagem || ''
@@ -526,10 +639,616 @@ const resetarCompleto = () => {
 
   // Mostra mensagem e foca no campo pacote
   showToast('Sistema resetado. Pronto para nova compra!', 'info')
+
+  // Limpar mapa também
+  if (map.value) {
+    markers.value.forEach(m => map.value?.removeLayer(m))
+    markers.value = []
+    if (routingControl.value) {
+      map.value.removeLayer(routingControl.value)
+      routingControl.value = null
+    }
+  }
+  rotaMunicipios.value = []
+  stopSimulation()
+}
+
+// ============================================================================
+// FUNÇÕES DO MAPA INTERATIVO
+// ============================================================================
+
+/**
+ * Inicializar mapa Leaflet + OpenStreetMap
+ */
+const initMap = async () => {
+  await nextTick()
+
+  if (!mapContainer.value) {
+    addDebugLog('error', 'MAP', 'Container do mapa não encontrado')
+    return
+  }
+
+  if (map.value) {
+    addDebugLog('warn', 'MAP', 'Mapa já existe, pulando inicialização')
+    return
+  }
+
+  addDebugLog('info', 'MAP', 'Inicializando mapa Leaflet + OpenStreetMap...')
+
+  // Criar mapa centrado no Brasil
+  map.value = L.map(mapContainer.value).setView([-14.2350, -51.9253], 4)
+
+  // Adicionar tiles OpenStreetMap (100% GRATUITO!)
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 19,
+  }).addTo(map.value)
+
+  addDebugLog('success', 'MAP', 'Mapa inicializado com sucesso')
+}
+
+/**
+ * Geocoding de município via API (IBGE code → lat/lon)
+ */
+const geocodeByIBGE = async (municipios: any[]): Promise<Record<number, { lat: number; lon: number }>> => {
+  if (municipios.length === 0) {
+    addDebugLog('warn', 'GEOCODING', 'Nenhum município para geocodificar')
+    return {}
+  }
+
+  try {
+    addDebugLog('info', 'GEOCODING', `Geocodificando ${municipios.length} municípios...`)
+    console.log('📍 Municípios para geocodificar:', municipios)
+
+    const requestBody = { municipios }
+    console.log('📍 Request body stringified:', JSON.stringify(requestBody, null, 2))
+
+    const response = await fetch(`${API_BASE_URL}/api/geocoding/lote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    })
+
+    console.log('📍 Status response:', response.status)
+    const data = await response.json()
+    console.log('📍 Data recebida:', data)
+
+    if (!data.success) {
+      console.error('❌ Geocoding falhou:', data)
+      if (data.errors) {
+        console.error('❌ Erros de validação:', JSON.stringify(data.errors, null, 2))
+      }
+      throw new Error(data.message || 'Erro ao geocodificar')
+    }
+
+    console.log('📍 data.data tipo:', typeof data.data, data.data)
+
+    const coordsMap: Record<number, { lat: number; lon: number }> = {}
+
+    if (typeof data.data === 'object' && data.data !== null) {
+      Object.entries(data.data).forEach(([ibge, coords]: [string, any]) => {
+        console.log(`📍 Processando IBGE ${ibge}:`, coords)
+        if (coords && coords.lat && coords.lon) {
+          coordsMap[parseInt(ibge)] = {
+            lat: parseFloat(coords.lat),
+            lon: parseFloat(coords.lon),
+          }
+          console.log(`✅ IBGE ${ibge} adicionado: ${coords.lat}, ${coords.lon}`)
+        } else {
+          console.warn(`⚠️ IBGE ${ibge} sem coordenadas válidas:`, coords)
+        }
+      })
+    } else {
+      console.error('❌ data.data não é um objeto:', data.data)
+    }
+
+    console.log('📍 coordsMap final:', coordsMap)
+    addDebugLog('success', 'GEOCODING', `${Object.keys(coordsMap).length}/${municipios.length} municípios geocodificados`)
+
+    return coordsMap
+  } catch (error: any) {
+    console.error('❌ Erro no geocoding:', error)
+    addDebugLog('error', 'GEOCODING', `Erro ao geocodificar: ${error.message}`)
+    return {}
+  }
+}
+
+/**
+ * Carregar municípios da rota SemParar
+ */
+const carregarMunicipiosRota = async (rotaIdValue: number) => {
+  if (!rotaIdValue) {
+    rotaMunicipios.value = []
+    return
+  }
+
+  loadingRotaMunicipios.value = true
+  try {
+    addDebugLog('info', 'ROTA', `Carregando municípios da rota ${rotaIdValue}...`)
+
+    const response = await fetch(`${API_BASE_URL}/api/semparar-rotas/${rotaIdValue}/municipios`)
+    const data = await response.json()
+
+    console.log('🗺️ Response municípios:', data)
+
+    if (!data.success) {
+      throw new Error(data.message || 'Erro ao carregar municípios')
+    }
+
+    rotaMunicipios.value = data.data.municipios || []
+    console.log('🗺️ Municípios carregados:', rotaMunicipios.value)
+
+    addDebugLog('success', 'ROTA', `${rotaMunicipios.value.length} municípios carregados`)
+
+    // Atualizar mapa
+    await updateMapMarkers()
+  } catch (error: any) {
+    console.error('❌ Erro ao carregar municípios:', error)
+    addDebugLog('error', 'ROTA', `Erro ao carregar municípios: ${error.message}`)
+    rotaMunicipios.value = []
+  } finally {
+    loadingRotaMunicipios.value = false
+  }
+}
+
+/**
+ * Agrupar entregas por proximidade geográfica (mesma cidade/região)
+ * @param entregas Array de entregas com lat/lon
+ * @param raioKm Raio em km para considerar mesma localidade (padrão: 5km)
+ * @returns Array de grupos {lat, lon, entregas[], cidade, count}
+ */
+const agruparEntregasPorProximidade = (entregas: any[], raioKm = 5) => {
+  if (entregas.length === 0) return []
+
+  const grupos: any[] = []
+  const entregasRestantes = [...entregas]
+
+  while (entregasRestantes.length > 0) {
+    const entregaBase = entregasRestantes.shift()!
+    const grupo = {
+      lat: entregaBase.lat,
+      lon: entregaBase.lon,
+      entregas: [entregaBase],
+      cidade: entregaBase.razcli || entregaBase.cidade || 'Localidade',
+      count: 1,
+    }
+
+    // Encontrar entregas próximas (dentro do raio)
+    for (let i = entregasRestantes.length - 1; i >= 0; i--) {
+      const entrega = entregasRestantes[i]
+      const distancia = calcularDistancia(
+        grupo.lat,
+        grupo.lon,
+        entrega.lat,
+        entrega.lon
+      )
+
+      if (distancia <= raioKm) {
+        grupo.entregas.push(entrega)
+        grupo.count++
+        // Recalcular centro do grupo (média das coordenadas)
+        grupo.lat = grupo.entregas.reduce((sum, e) => sum + e.lat, 0) / grupo.entregas.length
+        grupo.lon = grupo.entregas.reduce((sum, e) => sum + e.lon, 0) / grupo.entregas.length
+        entregasRestantes.splice(i, 1)
+      }
+    }
+
+    grupos.push(grupo)
+  }
+
+  addDebugLog('info', 'AGRUPAMENTO', `${entregas.length} entregas agrupadas em ${grupos.length} localidades`)
+
+  return grupos
+}
+
+/**
+ * Calcular distância entre dois pontos (Haversine formula)
+ * @returns Distância em km
+ */
+const calcularDistancia = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371 // Raio da Terra em km
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+/**
+ * Atualizar marcadores e rota no mapa
+ */
+const updateMapMarkers = async () => {
+  if (!map.value) {
+    addDebugLog('warn', 'MAP', 'Mapa não inicializado')
+    return
+  }
+
+  // Verificar lock: prevenir múltiplas execuções simultâneas
+  if (isUpdatingMap.value) {
+    addDebugLog('warn', 'MAP', 'Atualização já em andamento, pulando...')
+    return
+  }
+
+  // Ativar lock
+  isUpdatingMap.value = true
+
+  try {
+    addDebugLog('info', 'MAP', 'Atualizando marcadores...')
+
+    // Limpar marcadores anteriores
+    markers.value.forEach(m => {
+      if (map.value && map.value.hasLayer(m)) {
+        map.value.removeLayer(m)
+      }
+    })
+    markers.value = []
+
+    if (routingControl.value) {
+      if (map.value && map.value.hasLayer(routingControl.value)) {
+        map.value.removeLayer(routingControl.value)
+      }
+      routingControl.value = null
+    }
+
+  // === PARTE 1: Marcadores de municípios da rota ===
+  const waypoints: L.LatLng[] = []
+
+  if (rotaMunicipios.value.length > 0) {
+    console.log('🗺️ Iniciando geocoding de', rotaMunicipios.value.length, 'municípios')
+
+    // Preparar municípios para geocoding (garantir formato correto)
+    const municipiosFormatados = rotaMunicipios.value.map(m => ({
+      cdibge: String(m.cdibge), // ✅ Converter para string
+      desmun: String(m.desmun).trim(), // ✅ Remover espaços extras
+      desest: String(m.desest).trim(), // ✅ Remover espaços extras
+      cod_mun: m.codmun || m.cod_mun,
+      cod_est: m.codest || m.cod_est
+    }))
+
+    console.log('🗺️ Municípios formatados:', municipiosFormatados)
+
+    // Geocodificar municípios
+    const coords = await geocodeByIBGE(municipiosFormatados)
+    console.log('🗺️ Coordenadas retornadas:', coords)
+
+    let municipiosRenderizados = 0
+
+    rotaMunicipios.value.forEach((municipio, index) => {
+      console.log(`🗺️ Tentando renderizar município ${index + 1}:`, municipio)
+      const coord = coords[municipio.cdibge]
+
+      if (!coord) {
+        console.warn(`⚠️ Município ${municipio.desmun} (IBGE: ${municipio.cdibge}) sem coordenadas`)
+        return
+      }
+
+      console.log(`✅ Município ${municipio.desmun} tem coordenadas:`, coord)
+      municipiosRenderizados++
+
+      const latLng = L.latLng(coord.lat, coord.lon)
+      waypoints.push(latLng)
+
+      // Marcador azul numerado para municípios
+      const icon = L.divIcon({
+        html: `<div style="
+          background: #2196F3;
+          color: white;
+          border-radius: 50%;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: bold;
+          border: 2px solid white;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        ">${index + 1}</div>`,
+        className: '',
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+      })
+
+      const marker = L.marker(latLng, { icon })
+        .bindPopup(`<b>${municipio.desmun}</b><br>${municipio.desest}`)
+        .addTo(map.value!)
+
+      markers.value.push(marker)
+    })
+
+    console.log(`🗺️ Total de municípios renderizados: ${municipiosRenderizados}/${rotaMunicipios.value.length}`)
+    addDebugLog('success', 'MAP', `${municipiosRenderizados} municípios renderizados`)
+  }
+
+  // === PARTE 2: Marcadores de entregas do pacote (AGRUPADOS) ===
+  if (simulationActive.value && entregas.value.length > 0) {
+    const gruposEntregas = agruparEntregasPorProximidade(entregas.value, 5)
+
+    gruposEntregas.forEach((grupo, index) => {
+      const latLng = L.latLng(grupo.lat, grupo.lon)
+      waypoints.push(latLng)
+
+      // Cor baseada na posição do grupo
+      let color = '#FF9800' // Laranja (intermediário)
+      if (index === 0) color = '#4CAF50' // Verde (primeiro grupo)
+      else if (index === gruposEntregas.length - 1) color = '#F44336' // Vermelho (último grupo)
+
+      // Badge com contagem se houver múltiplas entregas
+      const badge = grupo.count > 1
+        ? `<div style="
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: #FF5252;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: bold;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+          ">${grupo.count}</div>`
+        : ''
+
+      const icon = L.divIcon({
+        html: `<div style="position: relative;">
+          <div style="
+            background: ${color};
+            color: white;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 20px;
+            border: 3px solid white;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.4);
+          ">📦</div>
+          ${badge}
+        </div>`,
+        className: '',
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+      })
+
+      // Popup detalhado com lista de entregas
+      let popupContent = `<div style="min-width: 200px;">
+        <b style="font-size: 14px;">📍 ${grupo.cidade || 'Localidade'}</b>
+        <br><small style="color: #666;">${grupo.count} entrega${grupo.count > 1 ? 's' : ''}</small>
+        <hr style="margin: 8px 0; border: none; border-top: 1px solid #ddd;">
+      `
+
+      grupo.entregas.forEach((entrega: any, i: number) => {
+        popupContent += `
+          <div style="margin: 4px 0; padding: 4px 0; ${i > 0 ? 'border-top: 1px solid #eee;' : ''}">
+            <b style="color: ${color};">Entrega ${i + 1}</b>
+            <br><small>${entrega.razcli || 'Cliente não identificado'}</small>
+          </div>
+        `
+      })
+
+      popupContent += `</div>`
+
+      const marker = L.marker(latLng, { icon })
+        .bindPopup(popupContent, { maxWidth: 300 })
+        .addTo(map.value!)
+
+      markers.value.push(marker)
+    })
+
+    addDebugLog('success', 'MAP', `${gruposEntregas.length} grupos de entregas renderizados (${entregas.value.length} entregas totais)`)
+  }
+
+  // === PARTE 3: Desenhar rota via proxy Laravel (OSRM) com cache + progress bar ===
+  if (waypoints.length > 1) {
+    // Limitar waypoints para evitar timeout (máximo 10 pontos)
+    let routeWaypoints = waypoints
+    if (waypoints.length > 10) {
+      addDebugLog('warn', 'ROUTING', `Muitos waypoints (${waypoints.length}), limitando a 10`)
+
+      // Pegar primeiro, último e interpolar os intermediários
+      const step = Math.floor((waypoints.length - 2) / 8) // 8 pontos intermediários + primeiro + último = 10
+      routeWaypoints = [
+        waypoints[0], // Primeiro
+        ...waypoints.slice(1, -1).filter((_, i) => i % step === 0).slice(0, 8), // 8 intermediários
+        waypoints[waypoints.length - 1] // Último
+      ]
+
+      addDebugLog('info', 'ROUTING', `Waypoints reduzidos para ${routeWaypoints.length}`)
+    }
+
+    addDebugLog('info', 'ROUTING', `Calculando rota com ${routeWaypoints.length} pontos via Laravel proxy`)
+    loadingRouting.value = true
+
+    // Inicializar estado de progresso
+    routingTotalSegmentos.value = routeWaypoints.length - 1
+    routingSegmentosCompletos.value = 0
+    routingSegmentosCached.value = 0
+    routingProgress.value = 0
+    routingSegmentos.value = []
+
+    // Criar estrutura de segmentos com nomes legíveis
+    const getNomePonto = (index: number): string => {
+      if (index < rotaMunicipios.value.length) {
+        return rotaMunicipios.value[index]?.desmun || `Ponto ${index + 1}`
+      } else {
+        const entregaIndex = index - rotaMunicipios.value.length
+        const gruposEntregas = agruparEntregasPorProximidade(entregas.value, 5)
+        return gruposEntregas[entregaIndex]?.cidade || `Entrega ${entregaIndex + 1}`
+      }
+    }
+
+    for (let i = 0; i < routeWaypoints.length - 1; i++) {
+      routingSegmentos.value.push({
+        index: i,
+        origem: getNomePonto(i),
+        destino: getNomePonto(i + 1),
+        status: 'pending',
+        cached: false,
+        distanciaKm: 0,
+        tempoMs: 0,
+      })
+    }
+
+    const allCoordinates: L.LatLngExpression[] = []
+    let totalDistance = 0
+    const segmentPromises: Promise<any>[] = []
+
+    // Calcular segmento por segmento (A→B, B→C, C→D)
+    for (let i = 0; i < routeWaypoints.length - 1; i++) {
+      const start = routeWaypoints[i]
+      const end = routeWaypoints[i + 1]
+
+      // Marcar segmento como "calculating"
+      routingSegmentos.value[i].status = 'calculating'
+      const startTime = Date.now()
+
+      addDebugLog('info', 'ROUTING', `Segmento ${i + 1}/${routeWaypoints.length - 1}: calculando...`)
+
+      const segmentPromise = fetch(`${API_BASE_URL}/api/routing/route`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          start: [start.lng, start.lat],
+          end: [end.lng, end.lat],
+        }),
+      })
+        .then(response => response.json())
+        .then(data => {
+          const tempoMs = Date.now() - startTime
+          const isCached = data.cached === true
+
+          addDebugLog('success', 'ROUTING', `Segmento ${i + 1} completo (${data.distance_km?.toFixed(1) || '?'} km) ${isCached ? '💾 CACHE' : '🌐 API'}`)
+
+          // Atualizar segmento
+          routingSegmentos.value[i].status = 'complete'
+          routingSegmentos.value[i].cached = isCached
+          routingSegmentos.value[i].distanciaKm = data.distance_km || 0
+          routingSegmentos.value[i].tempoMs = tempoMs
+
+          // Atualizar contadores
+          routingSegmentosCompletos.value++
+          if (isCached) routingSegmentosCached.value++
+          routingProgress.value = Math.round((routingSegmentosCompletos.value / routingTotalSegmentos.value) * 100)
+
+          if (data.success && data.coordinates && data.coordinates.length > 0) {
+            return {
+              success: true,
+              coordinates: data.coordinates,
+              distance: data.distance_km || 0,
+              index: i,
+            }
+          } else {
+            addDebugLog('warn', 'ROUTING', `Segmento ${i + 1} falhou, usando linha reta`)
+            routingSegmentos.value[i].status = 'error'
+            return {
+              success: false,
+              coordinates: [[start.lat, start.lng], [end.lat, end.lng]],
+              distance: start.distanceTo(end) / 1000,
+              index: i,
+            }
+          }
+        })
+        .catch(error => {
+          const tempoMs = Date.now() - startTime
+          addDebugLog('error', 'ROUTING', `Segmento ${i + 1} erro: ${error.message}`)
+
+          // Atualizar segmento como erro
+          routingSegmentos.value[i].status = 'error'
+          routingSegmentos.value[i].tempoMs = tempoMs
+          routingSegmentosCompletos.value++
+          routingProgress.value = Math.round((routingSegmentosCompletos.value / routingTotalSegmentos.value) * 100)
+
+          return {
+            success: false,
+            coordinates: [[start.lat, start.lng], [end.lat, end.lng]],
+            distance: start.distanceTo(end) / 1000,
+            index: i,
+          }
+        })
+
+      segmentPromises.push(segmentPromise)
+    }
+
+    // Aguardar todos os segmentos
+    Promise.all(segmentPromises)
+      .then(segments => {
+        segments.sort((a, b) => a.index - b.index)
+
+        // Combinar coordenadas
+        segments.forEach((segment, idx) => {
+          if (idx === 0) {
+            allCoordinates.push(...segment.coordinates)
+          } else {
+            allCoordinates.push(...segment.coordinates.slice(1))
+          }
+          totalDistance += segment.distance
+        })
+
+        const successCount = segments.filter(s => s.success).length
+
+        addDebugLog('success', 'ROUTING', 'Rota calculada com sucesso!', {
+          distanciaKm: totalDistance.toFixed(1),
+          pontos: allCoordinates.length,
+          segmentos: segments.length,
+          segmentosOSRM: successCount,
+          segmentosFallback: segments.length - successCount,
+        })
+
+        // Desenhar polyline rosa/roxo
+        if (routingControl.value) {
+          map.value?.removeLayer(routingControl.value)
+        }
+
+        routingControl.value = L.polyline(allCoordinates, {
+          color: '#E91E63',
+          weight: 4,
+          opacity: 0.7,
+        }).addTo(map.value!)
+
+        distanciaTotal.value = totalDistance
+
+        // Ajustar zoom para mostrar tudo (sem animação para evitar race conditions)
+        const bounds = L.latLngBounds(allCoordinates)
+        map.value!.fitBounds(bounds, { padding: [50, 50], animate: false })
+      })
+      .catch(error => {
+        addDebugLog('error', 'ROUTING', `Erro crítico ao calcular rota: ${error.message}`)
+      })
+      .finally(() => {
+        loadingRouting.value = false
+        isUpdatingMap.value = false // Liberar lock após routing completo
+      })
+  } else if (waypoints.length === 1) {
+    // Apenas 1 ponto: centralizar
+    map.value.setView(waypoints[0], 12, { animate: false })
+    isUpdatingMap.value = false // Liberar lock
+  } else {
+    // Nenhum ponto: voltar para Brasil
+    map.value.setView([-14.2350, -51.9253], 4, { animate: false })
+    isUpdatingMap.value = false // Liberar lock
+  }
+  } catch (error: any) {
+    addDebugLog('error', 'MAP', `Erro ao atualizar marcadores: ${error.message}`)
+    isUpdatingMap.value = false // Liberar lock em caso de erro
+  }
 }
 
 initialize()
 addDebugLog('info', 'SYSTEM', 'Sistema de Compra de Viagem SemParar inicializado')
+
+// Inicializar mapa após component montar
+onMounted(async () => {
+  await initMap()
+})
 </script>
 
 <template>
@@ -597,7 +1316,7 @@ addDebugLog('info', 'SYSTEM', 'Sistema de Compra de Viagem SemParar inicializado
           </div>
         </div>
 
-        <!-- Stepper visual -->
+        <!-- Stepper visual (3 etapas simplificadas) -->
         <div class="d-flex align-center justify-space-between">
           <div
             v-for="(step, index) in steps"
@@ -605,20 +1324,22 @@ addDebugLog('info', 'SYSTEM', 'Sistema de Compra de Viagem SemParar inicializado
             class="d-flex align-center"
             :style="{ flex: index < steps.length - 1 ? 1 : 0 }"
           >
-            <div class="d-flex flex-column align-center">
+            <div class="d-flex flex-column align-center" style="min-width: 120px;">
               <VAvatar
                 :color="currentStep >= step.number ? 'primary' : 'default'"
                 :variant="currentStep >= step.number ? 'tonal' : 'outlined'"
-                size="48"
+                size="56"
+                class="mb-2"
               >
-                <VIcon :icon="step.icon" />
+                <VIcon :icon="step.icon" size="28" />
               </VAvatar>
-              <span class="text-caption mt-2">{{ step.title }}</span>
+              <span class="text-body-2 font-weight-medium">{{ step.title }}</span>
+              <span class="text-caption text-medium-emphasis">{{ step.description }}</span>
             </div>
             <VDivider
               v-if="index < steps.length - 1"
               class="mx-4"
-              :thickness="2"
+              :thickness="3"
               :color="currentStep > step.number ? 'primary' : 'default'"
             />
           </div>
@@ -663,7 +1384,7 @@ addDebugLog('info', 'SYSTEM', 'Sistema de Compra de Viagem SemParar inicializado
                 </VCol>
                 <VCol
                   cols="12"
-                  sm="8"
+                  sm="6"
                 >
                   <VTextField
                     v-model="descPacote"
@@ -671,6 +1392,22 @@ addDebugLog('info', 'SYSTEM', 'Sistema de Compra de Viagem SemParar inicializado
                     readonly
                     variant="outlined"
                   />
+                </VCol>
+                <VCol
+                  cols="12"
+                  sm="2"
+                  class="d-flex align-center"
+                >
+                  <VBtn
+                    block
+                    color="primary"
+                    :disabled="!codpac || pacoteDisabled"
+                    :loading="loadingPacote"
+                    @click="validarPacote"
+                  >
+                    <VIcon icon="tabler-search" start />
+                    Buscar
+                  </VBtn>
                 </VCol>
               </VRow>
 
@@ -735,6 +1472,22 @@ addDebugLog('info', 'SYSTEM', 'Sistema de Compra de Viagem SemParar inicializado
                       />
                     </template>
                   </VTextField>
+                </VCol>
+                <VCol
+                  cols="12"
+                  sm="3"
+                  class="d-flex align-center"
+                >
+                  <VBtn
+                    block
+                    color="primary"
+                    :disabled="!placa || placaDisabled || verificaPlaca"
+                    :loading="loadingPlaca"
+                    @click="validarPlaca"
+                  >
+                    <VIcon icon="tabler-check" start />
+                    Validar
+                  </VBtn>
                 </VCol>
               </VRow>
             </div>
@@ -853,6 +1606,7 @@ addDebugLog('info', 'SYSTEM', 'Sistema de Compra de Viagem SemParar inicializado
                     v-model="dataInicio"
                     label="Data Início"
                     type="date"
+                    :disabled="!verificaRota && !rotaId"
                   />
                 </VCol>
                 <VCol
@@ -863,7 +1617,29 @@ addDebugLog('info', 'SYSTEM', 'Sistema de Compra de Viagem SemParar inicializado
                     v-model="dataFim"
                     label="Data Fim"
                     type="date"
+                    :disabled="!verificaRota && !rotaId"
                   />
+                </VCol>
+              </VRow>
+
+              <!-- Botão Calcular Preço (GRANDE e DESTACADO) -->
+              <VRow class="mt-4">
+                <VCol cols="12">
+                  <VBtn
+                    block
+                    color="success"
+                    size="x-large"
+                    :disabled="!codpac || !rotaId || !placa || verificaValor"
+                    :loading="loadingPreco"
+                    @click="verificarPreco"
+                  >
+                    <VIcon icon="tabler-calculator" start size="24" />
+                    Calcular Preço da Viagem
+                  </VBtn>
+                  <div v-if="!codpac || !rotaId || !placa" class="text-caption text-center text-medium-emphasis mt-2">
+                    <VIcon icon="tabler-info-circle" size="14" class="me-1" />
+                    Complete todos os campos acima para calcular o preço
+                  </div>
                 </VCol>
               </VRow>
             </div>
@@ -872,7 +1648,7 @@ addDebugLog('info', 'SYSTEM', 'Sistema de Compra de Viagem SemParar inicializado
           <VCardActions class="justify-end">
             <VBtn
               variant="outlined"
-              @click="resetar"
+              @click="resetarCompleto"
             >
               Limpar
             </VBtn>
@@ -935,6 +1711,29 @@ addDebugLog('info', 'SYSTEM', 'Sistema de Compra de Viagem SemParar inicializado
               </div>
             </div>
           </VCardText>
+
+          <!-- Botão Ver Mapa (só aparece quando há dados) -->
+          <VCardActions v-if="rotaMunicipios.length > 0 || entregas.length > 0">
+            <VBtn
+              block
+              color="primary"
+              variant="tonal"
+              size="large"
+              prepend-icon="tabler-map"
+              @click="showMapDialog = true"
+            >
+              Ver Mapa da Rota
+              <VChip
+                v-if="rotaMunicipios.length > 0"
+                color="primary"
+                variant="flat"
+                size="small"
+                class="ml-2"
+              >
+                {{ rotaMunicipios.length }} pontos
+              </VChip>
+            </VBtn>
+          </VCardActions>
         </VCard>
 
         <!-- Checklist de progresso -->
@@ -996,6 +1795,333 @@ addDebugLog('info', 'SYSTEM', 'Sistema de Compra de Viagem SemParar inicializado
         </VCard>
       </VCol>
     </VRow>
+
+    <!-- Dialog: Mapa Interativo (substituindo o mapa fixo gigante) -->
+    <VDialog
+      v-model="showMapDialog"
+      fullscreen
+      transition="dialog-bottom-transition"
+    >
+      <VCard>
+        <VCardTitle class="d-flex align-center justify-space-between bg-primary">
+          <div class="d-flex align-center gap-3">
+            <VIcon icon="tabler-map" size="32" />
+            <div>
+              <div class="text-h5">Visualização da Rota</div>
+              <div class="text-body-2 text-medium-emphasis">
+                Municípios e entregas no mapa interativo
+              </div>
+            </div>
+          </div>
+          <div class="d-flex gap-2 align-center">
+            <VChip
+              v-if="rotaMunicipios.length > 0"
+              color="white"
+              variant="tonal"
+              size="small"
+            >
+              <VIcon
+                icon="tabler-map-pin"
+                start
+                size="14"
+              />
+              {{ rotaMunicipios.length }} municípios
+            </VChip>
+            <VChip
+              v-if="entregas.length > 0"
+              color="success"
+              variant="tonal"
+              size="small"
+            >
+              <VIcon
+                icon="tabler-package"
+                start
+                size="14"
+              />
+              {{ entregas.length }} entregas
+            </VChip>
+            <VChip
+              v-if="distanciaTotal > 0"
+              color="warning"
+              variant="tonal"
+              size="small"
+            >
+              <VIcon
+                icon="tabler-route"
+                start
+                size="14"
+              />
+              {{ distanciaTotal.toFixed(1) }} km
+            </VChip>
+            <VBtn
+              icon="tabler-x"
+              variant="text"
+              color="white"
+              @click="showMapDialog = false"
+            />
+          </div>
+        </VCardTitle>
+
+        <VDivider />
+
+        <VCardText class="pa-0" style="position: relative;">
+          <!-- Container do mapa (altura completa da janela) -->
+          <div
+            ref="mapContainer"
+            style="height: calc(100vh - 200px); width: 100%;"
+          />
+
+          <!-- Loading overlay para o mapa com progress detalhado -->
+          <VOverlay
+            :model-value="loadingRotaMunicipios || loadingEntregas || loadingRouting"
+            contained
+            class="align-center justify-center"
+          >
+            <VCard
+              v-if="loadingRouting && routingSegmentos.length > 0"
+              class="pa-6"
+              style="min-width: 500px; max-width: 600px;"
+            >
+              <!-- Header -->
+              <div class="text-center mb-4">
+                <VIcon icon="tabler-route" size="48" color="primary" class="mb-2" />
+                <div class="text-h6">Calculando Rota</div>
+                <div class="text-body-2 text-medium-emphasis">
+                  {{ routingSegmentosCompletos }} de {{ routingTotalSegmentos }} segmentos
+                  <VChip
+                    v-if="routingSegmentosCached > 0"
+                    color="success"
+                    variant="tonal"
+                    size="small"
+                    class="ml-2"
+                  >
+                    <VIcon icon="tabler-database" start size="14" />
+                    {{ routingSegmentosCached }} em cache
+                  </VChip>
+                </div>
+              </div>
+
+              <!-- Progress Bar -->
+              <VProgressLinear
+                :model-value="routingProgress"
+                color="primary"
+                height="8"
+                rounded
+                class="mb-4"
+              />
+
+              <!-- Lista de Segmentos (scroll se muitos) -->
+              <div style="max-height: 300px; overflow-y: auto;" class="pr-2">
+                <VList density="compact" class="py-0">
+                  <VListItem
+                    v-for="segmento in routingSegmentos"
+                    :key="segmento.index"
+                    class="px-2 py-1"
+                  >
+                    <template #prepend>
+                      <!-- Ícone de status -->
+                      <VIcon
+                        v-if="segmento.status === 'complete'"
+                        icon="tabler-circle-check-filled"
+                        color="success"
+                        size="20"
+                      />
+                      <VProgressCircular
+                        v-else-if="segmento.status === 'calculating'"
+                        indeterminate
+                        size="20"
+                        width="2"
+                        color="primary"
+                      />
+                      <VIcon
+                        v-else-if="segmento.status === 'error'"
+                        icon="tabler-alert-circle"
+                        color="error"
+                        size="20"
+                      />
+                      <VIcon
+                        v-else
+                        icon="tabler-circle"
+                        color="grey"
+                        size="20"
+                      />
+                    </template>
+
+                    <VListItemTitle class="text-body-2">
+                      {{ segmento.origem }} → {{ segmento.destino }}
+                    </VListItemTitle>
+
+                    <VListItemSubtitle v-if="segmento.status === 'complete'" class="text-caption">
+                      {{ segmento.distanciaKm.toFixed(1) }} km
+                      <VChip
+                        v-if="segmento.cached"
+                        color="success"
+                        variant="text"
+                        size="x-small"
+                        class="ml-1"
+                      >
+                        💾 cache {{ segmento.tempoMs }}ms
+                      </VChip>
+                      <VChip
+                        v-else
+                        color="primary"
+                        variant="text"
+                        size="x-small"
+                        class="ml-1"
+                      >
+                        🌐 API {{ segmento.tempoMs }}ms
+                      </VChip>
+                    </VListItemSubtitle>
+                    <VListItemSubtitle v-else-if="segmento.status === 'calculating'" class="text-caption text-primary">
+                      Calculando...
+                    </VListItemSubtitle>
+                    <VListItemSubtitle v-else-if="segmento.status === 'error'" class="text-caption text-error">
+                      Erro - usando linha reta
+                    </VListItemSubtitle>
+                  </VListItem>
+                </VList>
+              </div>
+
+              <!-- Estatísticas -->
+              <VDivider class="my-3" />
+              <div class="text-center text-caption text-medium-emphasis">
+                <VIcon icon="tabler-clock" size="14" class="mr-1" />
+                Tempo total: {{ routingSegmentos.reduce((sum, s) => sum + s.tempoMs, 0) }}ms
+                <span class="mx-2">•</span>
+                <VIcon icon="tabler-zap" size="14" class="mr-1" />
+                {{ Math.round((routingSegmentosCached / Math.max(routingSegmentosCompletos, 1)) * 100) }}% cache hit
+              </div>
+            </VCard>
+
+            <!-- Loading simples para municípios e entregas -->
+            <VCard v-else class="pa-6 text-center">
+              <VProgressCircular
+                indeterminate
+                size="64"
+                color="primary"
+                class="mb-4"
+              />
+              <div class="text-h6">
+                {{ loadingRotaMunicipios ? 'Carregando municípios...' : 'Carregando entregas...' }}
+              </div>
+            </VCard>
+          </VOverlay>
+        </VCardText>
+
+        <VDivider />
+
+        <VCardText class="py-4">
+          <!-- Legenda compacta -->
+          <div class="d-flex align-center justify-center flex-wrap gap-4">
+            <div class="d-flex align-center gap-2">
+              <div
+                style="
+                  background: #2196F3;
+                  width: 24px;
+                  height: 24px;
+                  border-radius: 50%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  color: white;
+                  font-size: 11px;
+                  font-weight: bold;
+                  border: 2px solid white;
+                  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                "
+              >
+                1
+              </div>
+              <span class="text-caption">Municípios da Rota</span>
+            </div>
+
+            <VDivider vertical />
+
+            <div class="d-flex align-center gap-2">
+              <div
+                style="
+                  background: #4CAF50;
+                  width: 24px;
+                  height: 24px;
+                  border-radius: 50%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  font-size: 14px;
+                  border: 2px solid white;
+                  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                "
+              >
+                📦
+              </div>
+              <span class="text-caption">Primeira Entrega</span>
+            </div>
+
+            <div class="d-flex align-center gap-2">
+              <div
+                style="
+                  background: #FF9800;
+                  width: 24px;
+                  height: 24px;
+                  border-radius: 50%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  font-size: 14px;
+                  border: 2px solid white;
+                  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                "
+              >
+                📦
+              </div>
+              <span class="text-caption">Entregas Intermediárias</span>
+            </div>
+
+            <div class="d-flex align-center gap-2">
+              <div
+                style="
+                  background: #F44336;
+                  width: 24px;
+                  height: 24px;
+                  border-radius: 50%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  font-size: 14px;
+                  border: 2px solid white;
+                  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                "
+              >
+                📦
+              </div>
+              <span class="text-caption">Última Entrega</span>
+            </div>
+
+            <VDivider vertical />
+
+            <div class="d-flex align-center gap-2">
+              <div
+                style="
+                  width: 32px;
+                  height: 3px;
+                  background: #E91E63;
+                  border-radius: 2px;
+                "
+              />
+              <span class="text-caption">Rota (OSRM)</span>
+            </div>
+          </div>
+
+          <!-- Nota explicativa compacta -->
+          <div class="text-center mt-2">
+            <small class="text-disabled text-caption">
+              <VIcon icon="tabler-info-circle" size="12" class="me-1" />
+              Entregas na mesma região (5km) são agrupadas
+            </small>
+          </div>
+        </VCardText>
+      </VCard>
+    </VDialog>
 
     <!-- Dialog: Confirmar Placa -->
     <VDialog

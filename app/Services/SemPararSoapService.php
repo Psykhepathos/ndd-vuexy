@@ -815,16 +815,19 @@ class SemPararSoapService
                 }
             }
 
-            // REGRA 5: Geocoding reverso - Se tem IBGE, ZERA GPS (linhas 787-791)
-            if (intval($ponto['cod_ibge'] ?? 0) > 0) {
-                $ponto['latitude'] = '0';
-                $ponto['longitude'] = '0';
-
-                $this->logDebug('REGRA: Zerando GPS (tem IBGE)', [
-                    'ibge' => $ponto['cod_ibge'],
-                    'desc' => $ponto['desc']
-                ]);
-            }
+            // REGRA 5: Geocoding reverso - DESABILITADA
+            // Motivo: Já temos coordenadas do Google Geocoding API, não precisamos zerar!
+            // Progress zera porque não faz geocoding, mas nós já fizemos no ProgressService.
+            // Manter as coordenadas MELHORA a precisão do SemParar (pode usar GPS ou IBGE)
+            //
+            // if (intval($ponto['cod_ibge'] ?? 0) > 0) {
+            //     $ponto['latitude'] = '0';
+            //     $ponto['longitude'] = '0';
+            //     $this->logDebug('REGRA: Zerando GPS (tem IBGE)', [
+            //         'ibge' => $ponto['cod_ibge'],
+            //         'desc' => $ponto['desc']
+            //     ]);
+            // }
 
             $pontosProcessados[] = $ponto;
         }
