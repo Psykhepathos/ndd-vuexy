@@ -753,9 +753,13 @@ const geocodeByIBGE = async (municipios: any[]): Promise<Record<number, { lat: n
 
     const coordsMap: Record<number, { lat: number; lon: number }> = {}
 
-    if (typeof data.data === 'object' && data.data !== null) {
-      Object.entries(data.data).forEach(([ibge, coords]: [string, any]) => {
-        console.log(`📍 Processando IBGE ${ibge}:`, coords)
+    if (Array.isArray(data.data)) {
+      data.data.forEach((item: any) => {
+        console.log(`📍 Processando município:`, item)
+        const ibge = item.codigo_ibge
+        const coords = item.coordenadas
+
+        // Backend retorna {lat, lon}, NÃO {latitude, longitude}
         if (coords && coords.lat && coords.lon) {
           coordsMap[parseInt(ibge)] = {
             lat: parseFloat(coords.lat),
@@ -763,11 +767,11 @@ const geocodeByIBGE = async (municipios: any[]): Promise<Record<number, { lat: n
           }
           console.log(`✅ IBGE ${ibge} adicionado: ${coords.lat}, ${coords.lon}`)
         } else {
-          console.warn(`⚠️ IBGE ${ibge} sem coordenadas válidas:`, coords)
+          console.warn(`⚠️ IBGE ${ibge} sem coordenadas válidas:`, item)
         }
       })
     } else {
-      console.error('❌ data.data não é um objeto:', data.data)
+      console.error('❌ data.data não é um array:', data.data)
     }
 
     console.log('📍 coordsMap final:', coordsMap)
@@ -778,6 +782,76 @@ const geocodeByIBGE = async (municipios: any[]): Promise<Record<number, { lat: n
     console.error('❌ Erro no geocoding:', error)
     addDebugLog('error', 'GEOCODING', `Erro ao geocodificar: ${error.message}`)
     return {}
+  }
+}
+
+/**
+ * Calcular rota usando MapService unificado (OSRM com chunking automático)
+ * @param waypoints Array de waypoints no formato [lat, lon]
+ * @returns Coordenadas da rota, distância e informações de cache
+ */
+async function calculateRouteWithMapService(waypoints: Array<[number, number]>): Promise<{
+  coordinates: Array<[number, number]>
+  distance_km: number
+  cached: boolean
+  segments?: Array<{waypoints: number, distance_km: number}>
+  total_segments?: number
+} | null> {
+  if (waypoints.length < 2) return null
+
+  try {
+    const payload = {
+      waypoints: waypoints,
+      options: {
+        use_cache: true,
+        fallback_to_straight: true
+      }
+    }
+
+    addDebugLog('info', 'MAPSERVICE', `Calculando rota com MapService para ${waypoints.length} waypoints`)
+
+    const response = await fetch(`${API_BASE_URL}/api/map/route`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('❌ MapService retornou erro:', response.status, errorText)
+      addDebugLog('error', 'MAPSERVICE', `MapService retornou erro ${response.status}`)
+      return null
+    }
+
+    const result = await response.json()
+
+    if (result.success && result.data?.coordinates) {
+      addDebugLog('success', 'MAPSERVICE', `Rota calculada via ${result.data.provider}`, {
+        distanciaKm: result.data.distance_km,
+        pontosRota: result.data.coordinates.length,
+        cached: result.data.cached ? 'HIT' : 'MISS',
+        segments: result.data.total_segments || 1
+      })
+
+      return {
+        coordinates: result.data.coordinates,
+        distance_km: result.data.distance_km,
+        cached: result.data.cached || false,
+        segments: result.data.segments,
+        total_segments: result.data.total_segments
+      }
+    } else {
+      console.error('❌ MapService resposta inválida:', result)
+      addDebugLog('error', 'MAPSERVICE', 'Resposta inválida do MapService')
+      return null
+    }
+  } catch (error: any) {
+    console.error('❌ Erro ao chamar MapService:', error)
+    addDebugLog('error', 'MAPSERVICE', `Erro ao chamar MapService: ${error.message}`)
+    return null
   }
 }
 
@@ -1093,186 +1167,60 @@ const updateMapMarkers = async () => {
     addDebugLog('success', 'MAP', `${gruposEntregas.length} grupos de entregas renderizados (${entregas.value.length} entregas totais)`)
   }
 
-  // === PARTE 3: Desenhar rota via proxy Laravel (OSRM) com cache + progress bar ===
+  // === DEBUG: Mostrar composição final dos waypoints ===
+  console.log('═══════════════════════════════════════════════════')
+  console.log('📊 WAYPOINTS FINAIS PARA ROUTING:')
+  console.log(`   Total: ${waypoints.length} waypoints`)
+  console.log(`   Municípios na rota: ${rotaMunicipios.value.length}`)
+  console.log(`   Entregas ativas: ${simulationActive.value ? entregas.value.length : 0}`)
+  console.log('═══════════════════════════════════════════════════')
+
+  // === PARTE 3: Desenhar rota via MapService (OSRM com chunking automático) ===
   if (waypoints.length > 1) {
-    // Limitar waypoints para evitar timeout (máximo 10 pontos)
-    let routeWaypoints = waypoints
-    if (waypoints.length > 10) {
-      addDebugLog('warn', 'ROUTING', `Muitos waypoints (${waypoints.length}), limitando a 10`)
-
-      // Pegar primeiro, último e interpolar os intermediários
-      const step = Math.floor((waypoints.length - 2) / 8) // 8 pontos intermediários + primeiro + último = 10
-      routeWaypoints = [
-        waypoints[0], // Primeiro
-        ...waypoints.slice(1, -1).filter((_, i) => i % step === 0).slice(0, 8), // 8 intermediários
-        waypoints[waypoints.length - 1] // Último
-      ]
-
-      addDebugLog('info', 'ROUTING', `Waypoints reduzidos para ${routeWaypoints.length}`)
-    }
-
-    addDebugLog('info', 'ROUTING', `Calculando rota com ${routeWaypoints.length} pontos via Laravel proxy`)
+    addDebugLog('info', 'MAPSERVICE', `Calculando rota com MapService para ${waypoints.length} waypoints`)
     loadingRouting.value = true
 
-    // Inicializar estado de progresso
-    routingTotalSegmentos.value = routeWaypoints.length - 1
-    routingSegmentosCompletos.value = 0
-    routingSegmentosCached.value = 0
-    routingProgress.value = 0
-    routingSegmentos.value = []
+    // Converter waypoints L.LatLng para formato MapService [lat, lon]
+    const mapServiceWaypoints = waypoints.map(w => [w.lat, w.lng] as [number, number])
 
-    // Criar estrutura de segmentos com nomes legíveis
-    const getNomePonto = (index: number): string => {
-      if (index < rotaMunicipios.value.length) {
-        return rotaMunicipios.value[index]?.desmun || `Ponto ${index + 1}`
-      } else {
-        const entregaIndex = index - rotaMunicipios.value.length
-        const gruposEntregas = agruparEntregasPorProximidade(entregas.value, 5)
-        return gruposEntregas[entregaIndex]?.cidade || `Entrega ${entregaIndex + 1}`
+    // Calcular rota com MapService
+    const routeResult = await calculateRouteWithMapService(mapServiceWaypoints)
+
+    loadingRouting.value = false
+
+    if (routeResult && routeResult.coordinates.length > 0) {
+      // Atualizar distância total (garantir que é número)
+      distanciaTotal.value = Number(routeResult.distance_km)
+
+      // Converter coordenadas para Leaflet LatLng
+      const routeLatLngs = routeResult.coordinates.map(coord => L.latLng(coord[0], coord[1]))
+
+      // Desenhar polyline rosa/magenta (#E91E63 = compra-viagem)
+      if (routingControl.value) {
+        map.value?.removeLayer(routingControl.value)
       }
+
+      routingControl.value = L.polyline(routeLatLngs, {
+        color: '#E91E63',  // Rosa/magenta para compra-viagem
+        weight: 4,
+        opacity: 0.7,
+      }).addTo(map.value!)
+
+      addDebugLog('success', 'MAPSERVICE', 'Rota calculada via OSRM', {
+        distanciaKm: routeResult.distance_km,
+        pontosRota: routeResult.coordinates.length,
+        cached: routeResult.cached ? 'HIT' : 'MISS',
+        segments: routeResult.total_segments || 1
+      })
+
+      // Ajustar zoom para mostrar tudo
+      const bounds = L.latLngBounds(routeLatLngs)
+      map.value!.fitBounds(bounds, { padding: [50, 50], animate: false })
+    } else {
+      addDebugLog('error', 'MAPSERVICE', 'Falha ao calcular rota via MapService')
     }
 
-    for (let i = 0; i < routeWaypoints.length - 1; i++) {
-      routingSegmentos.value.push({
-        index: i,
-        origem: getNomePonto(i),
-        destino: getNomePonto(i + 1),
-        status: 'pending',
-        cached: false,
-        distanciaKm: 0,
-        tempoMs: 0,
-      })
-    }
-
-    const allCoordinates: L.LatLngExpression[] = []
-    let totalDistance = 0
-    const segmentPromises: Promise<any>[] = []
-
-    // Calcular segmento por segmento (A→B, B→C, C→D)
-    for (let i = 0; i < routeWaypoints.length - 1; i++) {
-      const start = routeWaypoints[i]
-      const end = routeWaypoints[i + 1]
-
-      // Marcar segmento como "calculating"
-      routingSegmentos.value[i].status = 'calculating'
-      const startTime = Date.now()
-
-      addDebugLog('info', 'ROUTING', `Segmento ${i + 1}/${routeWaypoints.length - 1}: calculando...`)
-
-      const segmentPromise = fetch(`${API_BASE_URL}/api/routing/route`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          start: [start.lng, start.lat],
-          end: [end.lng, end.lat],
-        }),
-      })
-        .then(response => response.json())
-        .then(data => {
-          const tempoMs = Date.now() - startTime
-          const isCached = data.cached === true
-
-          addDebugLog('success', 'ROUTING', `Segmento ${i + 1} completo (${data.distance_km?.toFixed(1) || '?'} km) ${isCached ? '💾 CACHE' : '🌐 API'}`)
-
-          // Atualizar segmento
-          routingSegmentos.value[i].status = 'complete'
-          routingSegmentos.value[i].cached = isCached
-          routingSegmentos.value[i].distanciaKm = data.distance_km || 0
-          routingSegmentos.value[i].tempoMs = tempoMs
-
-          // Atualizar contadores
-          routingSegmentosCompletos.value++
-          if (isCached) routingSegmentosCached.value++
-          routingProgress.value = Math.round((routingSegmentosCompletos.value / routingTotalSegmentos.value) * 100)
-
-          if (data.success && data.coordinates && data.coordinates.length > 0) {
-            return {
-              success: true,
-              coordinates: data.coordinates,
-              distance: data.distance_km || 0,
-              index: i,
-            }
-          } else {
-            addDebugLog('warn', 'ROUTING', `Segmento ${i + 1} falhou, usando linha reta`)
-            routingSegmentos.value[i].status = 'error'
-            return {
-              success: false,
-              coordinates: [[start.lat, start.lng], [end.lat, end.lng]],
-              distance: start.distanceTo(end) / 1000,
-              index: i,
-            }
-          }
-        })
-        .catch(error => {
-          const tempoMs = Date.now() - startTime
-          addDebugLog('error', 'ROUTING', `Segmento ${i + 1} erro: ${error.message}`)
-
-          // Atualizar segmento como erro
-          routingSegmentos.value[i].status = 'error'
-          routingSegmentos.value[i].tempoMs = tempoMs
-          routingSegmentosCompletos.value++
-          routingProgress.value = Math.round((routingSegmentosCompletos.value / routingTotalSegmentos.value) * 100)
-
-          return {
-            success: false,
-            coordinates: [[start.lat, start.lng], [end.lat, end.lng]],
-            distance: start.distanceTo(end) / 1000,
-            index: i,
-          }
-        })
-
-      segmentPromises.push(segmentPromise)
-    }
-
-    // Aguardar todos os segmentos
-    Promise.all(segmentPromises)
-      .then(segments => {
-        segments.sort((a, b) => a.index - b.index)
-
-        // Combinar coordenadas
-        segments.forEach((segment, idx) => {
-          if (idx === 0) {
-            allCoordinates.push(...segment.coordinates)
-          } else {
-            allCoordinates.push(...segment.coordinates.slice(1))
-          }
-          totalDistance += segment.distance
-        })
-
-        const successCount = segments.filter(s => s.success).length
-
-        addDebugLog('success', 'ROUTING', 'Rota calculada com sucesso!', {
-          distanciaKm: totalDistance.toFixed(1),
-          pontos: allCoordinates.length,
-          segmentos: segments.length,
-          segmentosOSRM: successCount,
-          segmentosFallback: segments.length - successCount,
-        })
-
-        // Desenhar polyline rosa/roxo
-        if (routingControl.value) {
-          map.value?.removeLayer(routingControl.value)
-        }
-
-        routingControl.value = L.polyline(allCoordinates, {
-          color: '#E91E63',
-          weight: 4,
-          opacity: 0.7,
-        }).addTo(map.value!)
-
-        distanciaTotal.value = totalDistance
-
-        // Ajustar zoom para mostrar tudo (sem animação para evitar race conditions)
-        const bounds = L.latLngBounds(allCoordinates)
-        map.value!.fitBounds(bounds, { padding: [50, 50], animate: false })
-      })
-      .catch(error => {
-        addDebugLog('error', 'ROUTING', `Erro crítico ao calcular rota: ${error.message}`)
-      })
-      .finally(() => {
-        loadingRouting.value = false
-        isUpdatingMap.value = false // Liberar lock após routing completo
-      })
+    isUpdatingMap.value = false // Liberar lock
   } else if (waypoints.length === 1) {
     // Apenas 1 ponto: centralizar
     map.value.setView(waypoints[0], 12, { animate: false })
