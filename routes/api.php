@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CompraViagemController;
 use App\Http\Controllers\Api\GeocodingController;
+use App\Http\Controllers\Api\MapController;
 use App\Http\Controllers\Api\MotoristaController;
 use App\Http\Controllers\Api\OSRMController;
 use App\Http\Controllers\Api\PacoteController;
@@ -107,6 +108,31 @@ Route::middleware('api')->group(function () {
     Route::prefix('geocoding')->group(function () {
         Route::post('ibge', [GeocodingController::class, 'getCoordenadasByIbge']);
         Route::post('lote', [GeocodingController::class, 'getCoordenadasLote']);
+    });
+
+    // Rotas para MapService unificado (FASE 1 - Backend Foundation)
+    Route::prefix('map')->group(function () {
+        // Route calculation with automatic provider selection
+        Route::post('route', [MapController::class, 'calculateRoute'])
+            ->middleware('throttle:100,1');  // 100 requests per minute
+
+        // Batch geocoding
+        Route::post('geocode-batch', [MapController::class, 'geocodeBatch'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        // Point clustering
+        Route::post('cluster-points', [MapController::class, 'clusterPoints'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        // Cache management
+        Route::get('cache-stats', [MapController::class, 'cacheStats'])
+            ->middleware('throttle:30,1');  // 30 requests per minute
+        Route::post('clear-expired-cache', [MapController::class, 'clearExpiredCache'])
+            ->middleware('throttle:5,1');   // 5 requests per minute (admin operation)
+
+        // Provider information
+        Route::get('providers', [MapController::class, 'providers'])
+            ->middleware('throttle:30,1');  // 30 requests per minute
     });
 
     // Proxy OSRM (roteamento gratuito)
