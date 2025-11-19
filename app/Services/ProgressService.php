@@ -1859,17 +1859,46 @@ class ProgressService
             // Array para pontos de parada (municípios + entregas)
             $pontos = [];
 
-            // Adiciona municípios da rota (IBGE, lat/lon = 0)
+            // PASSO 2.3: Geocodificar municípios da rota usando Google Geocoding API (em lote)
+            Log::info('Geocodificando municípios da rota SemParar em lote...');
+            $geocodingService = app(\App\Services\GeocodingService::class);
+
+            // Preparar array de municípios para geocoding em lote
+            $municipiosParaGeocoding = array_map(function($mun) {
+                return [
+                    'cdibge' => $mun['cdibge'],
+                    'desmun' => $mun['desmun'],
+                    'desest' => $mun['desest'] ?? '',
+                    'cod_mun' => $mun['codmun'] ?? null,
+                    'cod_est' => $mun['codest'] ?? null
+                ];
+            }, $resultMunicipios['data']['results']);
+
+            // Geocodificar todos de uma vez
+            try {
+                $coordsMap = $geocodingService->getCoordenadasLote($municipiosParaGeocoding);
+            } catch (\Exception $e) {
+                Log::warning('Erro ao geocodificar municípios em lote', ['error' => $e->getMessage()]);
+                $coordsMap = [];
+            }
+
+            // Adicionar municípios com coordenadas
             foreach ($resultMunicipios['data']['results'] as $mun) {
+                $cdibge = $mun['cdibge'];
+                $coords = $coordsMap[$cdibge] ?? null;
+
                 $pontos[] = [
-                    'cod_ibge' => $mun['cdibge'],
+                    'cod_ibge' => $cdibge,
                     'desc' => $mun['desmun'],
-                    'latitude' => '0',
-                    'longitude' => '0'
+                    'latitude' => $coords ? (string)$coords['lat'] : '0',
+                    'longitude' => $coords ? (string)$coords['lon'] : '0'
                 ];
             }
 
-            Log::info('Municípios da rota carregados', ['total' => count($pontos)]);
+            Log::info('Municípios da rota carregados e geocodificados', [
+                'total' => count($pontos),
+                'geocodificados' => count(array_filter($pontos, fn($p) => $p['latitude'] !== '0'))
+            ]);
 
             // PASSO 2.5: Buscar entregas do pacote com GPS (Rota.cls linha 716-797)
             // Só busca entregas se NÃO for rota CD (flgCD)
@@ -1930,7 +1959,14 @@ class ProgressService
             Log::info('Chamando roteirizarPracasPedagio com pontos combinados', ['total_pontos' => count($pontos)]);
             $resultRoteirizar = $soapService->roteirizarPracasPedagio($pontos);
 
-            if (!$resultRoteirizar['success'] || empty($resultRoteirizar['pracas'])) {
+            if (!$resultRoteirizar['success']) {
+                $errorMsg = $resultRoteirizar['error'] ?? 'Erro desconhecido ao roteirizar praças';
+                Log::error('Erro ao roteirizar praças de pedágio', ['error' => $errorMsg]);
+                throw new Exception('Erro ao roteirizar praças de pedágio: ' . $errorMsg);
+            }
+
+            if (empty($resultRoteirizar['pracas'])) {
+                Log::error('Nenhuma praça de pedágio retornada');
                 throw new Exception('Erro ao roteirizar praças de pedágio: nenhuma praça retornada');
             }
 
