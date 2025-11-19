@@ -10,7 +10,7 @@
           Rota: {{ pacoteData.rota }} • {{ pacoteData.pedidos?.length || 0 }} entregas
         </p>
       </div>
-      
+
       <VBtn
         prepend-icon="tabler-arrow-left"
         variant="outlined"
@@ -30,15 +30,15 @@
           <p class="text-body-2 mb-0 text-medium-emphasis">Entregas</p>
         </VCardText>
       </VCard>
-      
+
       <VCard class="stats-card flex-fill">
         <VCardText class="text-center pa-4">
           <VIcon icon="tabler-route" size="28" class="text-success mb-2" />
-          <div class="text-h4 font-weight-bold mb-1">{{ typeof distanciaTotal === 'number' ? distanciaTotal.toFixed(0) : '0' }}km</div>
+          <div class="text-h4 font-weight-bold mb-1">{{ distanciaTotal.toFixed(0) }}km</div>
           <p class="text-body-2 mb-0 text-medium-emphasis">Distância</p>
         </VCardText>
       </VCard>
-      
+
       <VCard class="stats-card flex-fill">
         <VCardText class="text-center pa-4">
           <VIcon icon="tabler-weight" size="28" class="text-warning mb-2" />
@@ -46,7 +46,7 @@
           <p class="text-body-2 mb-0 text-medium-emphasis">Peso Total</p>
         </VCardText>
       </VCard>
-      
+
       <VCard class="stats-card flex-fill">
         <VCardText class="text-center pa-4">
           <VIcon icon="tabler-currency-real" size="28" class="text-info mb-2" />
@@ -59,9 +59,9 @@
     <!-- Mapa -->
     <VCard class="mb-6">
       <VCardText>
-        <div 
-          ref="mapContainer" 
-          id="mapa-itinerario" 
+        <div
+          ref="mapContainer"
+          id="mapa-itinerario"
           style="height: 600px; width: 100%"
           class="rounded border"
         ></div>
@@ -75,15 +75,15 @@
           <VIcon icon="tabler-list-details" class="me-2" />
           Lista de Entregas
         </h5>
-        
+
         <div v-if="loading" class="text-center py-8">
           <VProgressCircular indeterminate color="primary" />
           <p class="text-body-2 mt-4 mb-0 text-medium-emphasis">Carregando itinerário...</p>
         </div>
-        
+
         <div v-else-if="pacoteData.pedidos?.length" class="entregas-list">
-          <div 
-            v-for="(entrega, index) in pacoteData.pedidos" 
+          <div
+            v-for="(entrega, index) in pacoteData.pedidos"
             :key="entrega.seqent"
             class="entrega-item d-flex align-start py-4"
             :class="{ 'border-b': index < pacoteData.pedidos.length - 1 }"
@@ -92,14 +92,14 @@
           >
             <!-- Número da Entrega -->
             <div class="entrega-numero me-4 flex-shrink-0">
-              <VAvatar 
+              <VAvatar
                 :color="entrega.gps_lat && entrega.gps_lon ? 'primary' : 'secondary'"
                 size="32"
               >
                 <span class="text-body-2 font-weight-semibold">{{ entrega.seqent }}</span>
               </VAvatar>
             </div>
-            
+
             <!-- Dados da Entrega -->
             <div class="flex-grow-1">
               <div class="d-flex justify-space-between align-start mb-2">
@@ -111,12 +111,12 @@
                     Cliente: {{ entrega.codcli }}
                   </p>
                 </div>
-                <VChip 
+                <VChip
                   :color="entrega.gps_lat && entrega.gps_lon ? 'success' : 'warning'"
                   size="small"
                   variant="flat"
                 >
-                  <VIcon 
+                  <VIcon
                     :icon="entrega.gps_lat && entrega.gps_lon ? 'tabler-map-pin-check' : 'tabler-map-pin-x'"
                     size="14"
                     class="me-1"
@@ -124,7 +124,7 @@
                   {{ entrega.gps_lat && entrega.gps_lon ? 'Com GPS' : 'Sem GPS' }}
                 </VChip>
               </div>
-              
+
               <div class="address-info mb-3">
                 <p class="text-body-2 mb-1">
                   <VIcon icon="tabler-map-pin" size="16" class="me-1 text-primary" />
@@ -134,7 +134,7 @@
                   {{ entrega.desbai }} • {{ entrega.desmun }} - {{ entrega.uf }}
                 </p>
               </div>
-              
+
               <div class="entrega-stats d-flex gap-4">
                 <div class="d-flex align-center">
                   <VIcon icon="tabler-currency-real" size="16" class="me-1 text-success" />
@@ -152,7 +152,7 @@
             </div>
           </div>
         </div>
-        
+
         <div v-else class="text-center py-8">
           <VIcon icon="tabler-map-off" size="48" class="text-disabled mb-4" />
           <p class="text-h6 mb-2">Nenhuma entrega encontrada</p>
@@ -176,16 +176,6 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png'
 })
-
-// Google Maps API
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-let googleMapsLoaded = false
-declare global {
-  interface Window {
-    google: any
-    initGoogleMaps: () => void
-  }
-}
 
 interface PedidoItinerario {
   seqent: number
@@ -232,28 +222,31 @@ let map: L.Map | null = null
 let markersLayer: L.LayerGroup | null = null
 let routeLayer: L.LayerGroup | null = null
 
-// Função para converter coordenadas do formato Progress para decimal
+/**
+ * Converte coordenada do formato Progress para decimal
+ * Progress: "-23,2041" ou "230876543" (implícito)
+ * Decimal: -23.2041 ou -23.0876543
+ */
 function convertCoordinate(coord: string): number {
   if (!coord) return 0
-  
-  // Formato: "-23,2041" -> -23.2041
-  const cleanCoord = coord.replace(',', '.')
-  return parseFloat(cleanCoord)
+
+  // Se contém vírgula, é formato "-23,2041"
+  if (coord.includes(',')) {
+    return parseFloat(coord.replace(',', '.'))
+  }
+
+  // Se é número puro "230876543", divide por 10^7
+  const num = parseInt(coord)
+  if (Math.abs(num) > 1000000) {
+    return num / 10000000
+  }
+
+  return parseFloat(coord)
 }
 
-// Função para calcular distância entre dois pontos (fórmula de Haversine)
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371 // Raio da Terra em km
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon/2) * Math.sin(dLon/2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
-  return R * c
-}
-
-// Função para formatar moeda
+/**
+ * Formata valores de moeda de forma compacta
+ */
 function formatCurrency(value: number): string {
   if (value >= 1000000) {
     return `R$ ${(value / 1000000).toFixed(1)}M`
@@ -264,38 +257,18 @@ function formatCurrency(value: number): string {
   }
 }
 
-// Função para calcular distância total da rota (fallback usando Haversine)
-function calculateTotalDistance() {
-  if (!pacoteData.value.pedidos?.length) return
-  
-  let total = 0
-  const entregasComGPS = pacoteData.value.pedidos.filter(p => p.gps_lat && p.gps_lon)
-  
-  for (let i = 0; i < entregasComGPS.length - 1; i++) {
-    const current = entregasComGPS[i]
-    const next = entregasComGPS[i + 1]
-    
-    const lat1 = convertCoordinate(current.gps_lat!)
-    const lon1 = convertCoordinate(current.gps_lon!)
-    const lat2 = convertCoordinate(next.gps_lat!)
-    const lon2 = convertCoordinate(next.gps_lon!)
-    
-    total += calculateDistance(lat1, lon1, lat2, lon2)
-  }
-  
-  distanciaTotal.value = Number(total) || 0
-}
-
-// Função para focar em um marcador específico
+/**
+ * Foca no marcador de uma entrega específica
+ */
 function focusOnMarker(index: number) {
   const entrega = pacoteData.value.pedidos[index]
   if (!entrega.gps_lat || !entrega.gps_lon || !map) return
-  
+
   const lat = convertCoordinate(entrega.gps_lat)
   const lng = convertCoordinate(entrega.gps_lon)
-  
+
   map.setView([lat, lng], 16)
-  
+
   // Abrir popup do marcador
   if (markersLayer) {
     markersLayer.eachLayer((layer: any) => {
@@ -306,328 +279,130 @@ function focusOnMarker(index: number) {
   }
 }
 
-// Função para carregar Google Maps API
-function loadGoogleMapsAPI(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (googleMapsLoaded) {
-      resolve()
-      return
-    }
-
-    window.initGoogleMaps = () => {
-      googleMapsLoaded = true
-      console.log('✅ Google Maps API carregada com sucesso!')
-      resolve()
-    }
-
-    const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=geometry,places&callback=initGoogleMaps`
-    script.async = true
-    script.defer = true
-    script.onerror = reject
-    document.head.appendChild(script)
-  })
-}
-
-// Função para calcular rota usando Google Maps Directions API com múltiplas chamadas
-async function getGoogleRoute(waypoints: Array<[number, number]>): Promise<L.LatLng[] | null> {
-  if (!googleMapsLoaded || waypoints.length < 2) return null
+/**
+ * Calcula rota usando MapService unificado
+ */
+async function calculateRouteWithMapService(waypoints: Array<[number, number]>): Promise<{
+  coordinates: Array<[number, number]>
+  distance_km: number
+  cached: boolean
+} | null> {
+  if (waypoints.length < 2) return null
 
   try {
-    console.log('🗺️ Calculando rota com Google Maps para', waypoints.length, 'pontos')
-    
-    const directionsService = new window.google.maps.DirectionsService()
-    const allRouteCoordinates: L.LatLng[] = []
-    
-    // Resetar distância total
-    distanciaTotal.value = 0
-    
-    // Google Maps suporta máximo 25 waypoints por request (origem + 23 intermediários + destino)
-    const MAX_WAYPOINTS_PER_REQUEST = 23
-    
-    if (waypoints.length <= MAX_WAYPOINTS_PER_REQUEST + 2) {
-      // Único request - processo normal
-      console.log('📍 Processando rota única com', waypoints.length, 'pontos')
-      return await processSingleGoogleRoute(directionsService, waypoints)
-    } else {
-      // Múltiplos requests necessários
-      console.log('📊 Dividindo', waypoints.length, 'pontos em múltiplas chamadas Google Maps')
-      
-      // Dividir waypoints em chunks
-      let currentIndex = 0
-      let segmentNumber = 1
-      
-      while (currentIndex < waypoints.length - 1) {
-        const remainingPoints = waypoints.length - currentIndex
-        const segmentSize = Math.min(MAX_WAYPOINTS_PER_REQUEST + 1, remainingPoints)
-        
-        const segmentWaypoints = waypoints.slice(currentIndex, currentIndex + segmentSize)
-        
-        console.log(`🚗 Processando segmento ${segmentNumber}: pontos ${currentIndex + 1} a ${currentIndex + segmentSize}`)
-        
-        const segmentRoute = await processSingleGoogleRoute(directionsService, segmentWaypoints)
-        
-        if (segmentRoute && segmentRoute.length > 0) {
-          // Conectar com o segmento anterior (evitar duplicação do ponto de conexão)
-          const coordsToAdd = segmentNumber === 1 ? segmentRoute : segmentRoute.slice(1)
-          allRouteCoordinates.push(...coordsToAdd)
-          
-          console.log(`✅ Segmento ${segmentNumber}: ${segmentRoute.length} pontos adicionados`)
-        } else {
-          console.warn(`⚠️ Segmento ${segmentNumber} falhou, usando linha reta`)
-          
-          // Fallback para linha reta
-          if (segmentNumber === 1) {
-            allRouteCoordinates.push(L.latLng(segmentWaypoints[0][1], segmentWaypoints[0][0]))
-          }
-          allRouteCoordinates.push(L.latLng(segmentWaypoints[segmentWaypoints.length - 1][1], segmentWaypoints[segmentWaypoints.length - 1][0]))
-        }
-        
-        // Mover para o próximo segmento (sobrepondo 1 ponto)
-        currentIndex += segmentSize - 1
-        segmentNumber++
-        
-        // Pausa entre requests para evitar rate limiting
-        if (currentIndex < waypoints.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 200))
-        }
+    const payload = {
+      waypoints: waypoints,
+      options: {
+        use_cache: true,
+        fallback_to_straight: true
       }
-      
-      console.log(`✅ Rota completa: ${allRouteCoordinates.length} pontos de ${segmentNumber - 1} segmentos`)
-      return allRouteCoordinates.length > 0 ? allRouteCoordinates : null
     }
+
+    console.log('🗺️ Calculando rota com MapService para', waypoints.length, 'waypoints')
+    console.log('📤 Payload:', JSON.stringify(payload, null, 2))
+
+    const response = await fetch('http://localhost:8002/api/map/route', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('❌ MapService retornou erro:', response.status)
+      console.error('📥 Resposta:', errorText)
+      try {
+        const errorJson = JSON.parse(errorText)
+        console.error('🔍 Erro detalhado:', errorJson)
+      } catch (e) {
+        // Não é JSON
+      }
+      return null
+    }
+
+    const result = await response.json()
+
+    if (result.success && result.data?.coordinates) {
+      console.log(`✅ Rota calculada: ${result.data.distance_km}km via ${result.data.provider}`)
+      console.log(`💾 Cache: ${result.data.cached ? 'HIT' : 'MISS'}`)
+
+      return {
+        coordinates: result.data.coordinates,
+        distance_km: result.data.distance_km,
+        cached: result.data.cached
+      }
+    }
+
+    console.warn('⚠️ MapService não retornou coordenadas válidas')
+    return null
   } catch (error) {
-    console.error('❌ Erro na requisição Google Maps:', error)
+    console.error('❌ Erro ao calcular rota com MapService:', error)
     return null
   }
 }
 
-// Função auxiliar para processar um único segmento de rota
-async function processSingleGoogleRoute(directionsService: any, waypoints: Array<[number, number]>): Promise<L.LatLng[] | null> {
-  if (waypoints.length < 2) return null
-  
-  return new Promise((resolve, reject) => {
-    const origin = new window.google.maps.LatLng(waypoints[0][1], waypoints[0][0])
-    const destination = new window.google.maps.LatLng(waypoints[waypoints.length - 1][1], waypoints[waypoints.length - 1][0])
-    
-    // Waypoints intermediários
-    const intermediateWaypoints = waypoints.slice(1, -1).map(point => ({
-      location: new window.google.maps.LatLng(point[1], point[0]),
-      stopover: true
-    }))
-
-    const request = {
-      origin,
-      destination,
-      waypoints: intermediateWaypoints,
-      travelMode: window.google.maps.TravelMode.DRIVING,
-      optimizeWaypoints: false, // Não otimizar para manter ordem
-      unitSystem: window.google.maps.UnitSystem.METRIC
-    }
-
-    directionsService.route(request, (result: any, status: any) => {
-      if (status === 'OK' && result?.routes?.[0]) {
-        const route = result.routes[0]
-        const routeCoordinates: L.LatLng[] = []
-        
-        // Usar overview_polyline para ter a rota completa
-        if (route.overview_polyline?.points) {
-          const decodedPath = window.google.maps.geometry.encoding.decodePath(route.overview_polyline.points)
-          decodedPath.forEach((point: any) => {
-            routeCoordinates.push(L.latLng(point.lat(), point.lng()))
-          })
-        } else {
-          // Fallback: usar os steps
-          route.legs.forEach((leg: any) => {
-            leg.steps.forEach((step: any) => {
-              if (step.polyline?.points) {
-                const stepPath = window.google.maps.geometry.encoding.decodePath(step.polyline.points)
-                stepPath.forEach((point: any) => {
-                  routeCoordinates.push(L.latLng(point.lat(), point.lng()))
-                })
-              }
-            })
-          })
-        }
-        
-        // Atualizar distância total
-        const segmentDistance = route.legs.reduce((total: number, leg: any) => total + leg.distance.value, 0) / 1000
-        distanciaTotal.value += Number(segmentDistance) || 0
-        
-        resolve(routeCoordinates)
-      } else {
-        console.warn('❌ Erro no Google Maps segment:', status)
-        resolve(null)
-      }
-    })
-  })
-}
-
-// Função para inicializar o mapa
+/**
+ * Inicializa o mapa Leaflet
+ */
 function initMap() {
   if (!mapContainer.value) return
-  
-  map = L.map('mapa-itinerario').setView([-23.5505, -46.6333], 10) // São Paulo como centro inicial
-  
-  // Adicionar camada do mapa
+
+  map = L.map('mapa-itinerario').setView([-14.2350, -51.9253], 4) // Brasil como centro
+
+  // Adicionar camada OpenStreetMap
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
   }).addTo(map)
-  
+
   markersLayer = L.layerGroup().addTo(map)
   routeLayer = L.layerGroup().addTo(map)
 }
 
-
-// Função principal usando Google Maps com cache
-async function fetchRealRoute(coordinates: Array<[number, number]>): Promise<L.LatLng[] | null> {
-  console.log('🛣️ Buscando rotas reais para', coordinates.length, 'pontos')
-  if (coordinates.length < 2) return null
-  
-  try {
-    // PRIMEIRO: Verificar se existe no cache
-    console.log('🔍 Verificando cache de rotas...')
-    const cachedRoute = await getCachedRoute(coordinates)
-    if (cachedRoute) {
-      console.log('✅ Rota encontrada no cache! Economizando API request')
-      return cachedRoute
-    }
-    
-    console.log('📡 Rota não encontrada no cache, usando Google Maps API...')
-    
-    // Carregar Google Maps API se necessário
-    if (!googleMapsLoaded) {
-      console.log('🌐 Carregando Google Maps API...')
-      await loadGoogleMapsAPI()
-    }
-    
-    // Usar Google Maps para calcular a rota
-    const googleRoute = await getGoogleRoute(coordinates)
-    if (googleRoute && googleRoute.length > 0) {
-      console.log('✅ Rota calculada com Google Maps!')
-      
-      // SALVAR no cache para próximas vezes
-      await saveRouteToCache(coordinates, googleRoute, distanciaTotal.value)
-      
-      return googleRoute
-    }
-    
-    console.warn('❌ Google Maps falhou, usando linhas retas')
-    return null
-  } catch (error) {
-    console.error('❌ Erro no sistema de rotas:', error)
-    return null
-  }
-}
-
-// Função para buscar rota no cache via API Laravel
-async function getCachedRoute(coordinates: Array<[number, number]>): Promise<L.LatLng[] | null> {
-  try {
-    const response = await fetch('http://localhost:8002/api/route-cache/find', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        waypoints: coordinates
-      })
-    })
-    
-    if (response.ok) {
-      const data = await response.json()
-      if (data.success && data.route) {
-        console.log(`💾 Cache hit! Rota de ${data.route.waypoints_count} pontos encontrada`)
-        
-        // Converter coordenadas do cache para Leaflet
-        const cachedCoords = data.route.coordinates.map((coord: [number, number]) => 
-          L.latLng(coord[0], coord[1])
-        )
-        
-        // Atualizar distância total
-        distanciaTotal.value = Number(data.route.total_distance) || 0
-        
-        return cachedCoords
-      }
-    }
-  } catch (error) {
-    console.warn('⚠️ Erro ao buscar cache:', error)
-  }
-  
-  return null
-}
-
-// Função para salvar rota no cache via API Laravel
-async function saveRouteToCache(
-  coordinates: Array<[number, number]>, 
-  routeCoords: L.LatLng[], 
-  totalDistance: number
-): Promise<void> {
-  try {
-    console.log('💾 Salvando rota no cache...')
-    
-    // Converter Leaflet coords para array simples
-    const coordsArray = routeCoords.map(coord => [coord.lat, coord.lng])
-    
-    const response = await fetch('http://localhost:8002/api/route-cache/save', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        waypoints: coordinates,
-        route_coordinates: coordsArray,
-        total_distance: totalDistance,
-        source: 'google_maps'
-      })
-    })
-    
-    if (response.ok) {
-      console.log('✅ Rota salva no cache com sucesso!')
-    } else {
-      console.warn('⚠️ Falha ao salvar no cache')
-    }
-  } catch (error) {
-    console.warn('⚠️ Erro ao salvar cache:', error)
-  }
-}
-
-
-// Função para adicionar marcadores e rota
+/**
+ * Adiciona marcadores e rota no mapa usando MapService
+ */
 async function addMarkersAndRoute() {
   if (!map || !markersLayer || !routeLayer) return
-  
+
   // Limpar camadas existentes
   markersLayer.clearLayers()
   routeLayer.clearLayers()
-  
+
+  // Filtrar entregas com GPS e manter índice original
   const entregasComGPS = pacoteData.value.pedidos
     .map((pedido, originalIndex) => ({ ...pedido, originalIndex }))
     .filter(p => p.gps_lat && p.gps_lon)
-  
-  if (!entregasComGPS.length) return
-  
+
+  if (!entregasComGPS.length) {
+    console.warn('⚠️ Nenhuma entrega com GPS encontrada')
+    return
+  }
+
+  console.log(`📍 Processando ${entregasComGPS.length} entregas com GPS`)
+
   const latlngs: L.LatLng[] = []
-  const routeCoordinates: Array<[number, number]> = []
-  
+  const waypoints: Array<[number, number]> = [] // [lat, lon] para MapService
+
   // Adicionar marcadores
   entregasComGPS.forEach((entrega, index) => {
     const lat = convertCoordinate(entrega.gps_lat!)
     const lng = convertCoordinate(entrega.gps_lon!)
-    
+
     if (lat && lng) {
       latlngs.push(L.latLng(lat, lng))
-      routeCoordinates.push([lng, lat]) // Para OSRM: [longitude, latitude]
-      
+      waypoints.push([lat, lng]) // MapService espera [lat, lon]
+
       // Criar ícone personalizado baseado na sequência
       const isFirst = index === 0
       const isLast = index === entregasComGPS.length - 1
-      
+
       let iconColor = '#2196F3' // Azul padrão
       if (isFirst) iconColor = '#4CAF50' // Verde para início
       if (isLast) iconColor = '#F44336' // Vermelho para fim
-      
+
       const customIcon = L.divIcon({
         html: `
           <div style="
@@ -649,10 +424,10 @@ async function addMarkersAndRoute() {
         iconSize: [30, 30],
         iconAnchor: [15, 15]
       })
-      
-      const marker = L.marker([lat, lng], { 
+
+      const marker = L.marker([lat, lng], {
         icon: customIcon,
-        entregaIndex: entrega.originalIndex 
+        entregaIndex: entrega.originalIndex
       } as any)
         .bindPopup(`
           <div style="min-width: 200px;">
@@ -666,14 +441,14 @@ async function addMarkersAndRoute() {
             <strong>Volume:</strong> ${(entrega.volume || 0).toFixed(2)}m³
           </div>
         `)
-      
+
       markersLayer.addLayer(marker)
     }
   })
-  
-  // Buscar e adicionar rota real seguindo as ruas
-  if (routeCoordinates.length > 1) {
-    // Mostrar um indicador de carregamento na rota
+
+  // Calcular e adicionar rota
+  if (waypoints.length > 1) {
+    // Mostrar linha tracejada enquanto carrega
     const loadingPolyline = L.polyline(latlngs, {
       color: '#cccccc',
       weight: 2,
@@ -681,54 +456,71 @@ async function addMarkersAndRoute() {
       dashArray: '5, 5'
     })
     routeLayer.addLayer(loadingPolyline)
-    
-    // Buscar rota real
-    const realRoute = await fetchRealRoute(routeCoordinates)
-    
-    // Remover linha temporária
+
+    // Calcular rota com MapService
+    const routeResult = await calculateRouteWithMapService(waypoints)
+
+    // Remover linha de loading
     routeLayer.removeLayer(loadingPolyline)
-    
-    if (realRoute) {
-      // Adicionar rota real seguindo as ruas
-      const realPolyline = L.polyline(realRoute, {
+
+    if (routeResult && routeResult.coordinates.length > 0) {
+      // Atualizar distância total (garantir que é número)
+      distanciaTotal.value = Number(routeResult.distance_km)
+
+      // Converter coordenadas para Leaflet LatLng
+      const routeLatLngs = routeResult.coordinates.map(coord => L.latLng(coord[0], coord[1]))
+
+      // Adicionar rota real
+      const routePolyline = L.polyline(routeLatLngs, {
         color: '#2196F3',
         weight: 5,
         opacity: 0.8,
         lineJoin: 'round',
         lineCap: 'round'
       })
-      
-      routeLayer.addLayer(realPolyline)
-      
-      // Ajustar zoom para mostrar toda a rota real
-      map.fitBounds(realPolyline.getBounds(), { padding: [20, 20] })
+
+      routeLayer.addLayer(routePolyline)
+
+      // Ajustar zoom para mostrar toda a rota
+      map.fitBounds(routePolyline.getBounds(), { padding: [50, 50] })
     } else {
-      // Fallback: usar linha reta se não conseguir buscar rota real
+      // Fallback: linha reta tracejada
+      console.warn('⚠️ Usando linha reta como fallback')
+
       const fallbackPolyline = L.polyline(latlngs, {
-        color: '#FF9800', // Laranja para indicar que é fallback
+        color: '#FF9800',
         weight: 4,
         opacity: 0.7,
         dashArray: '10, 5'
       })
-      
+
       routeLayer.addLayer(fallbackPolyline)
-      map.fitBounds(fallbackPolyline.getBounds(), { padding: [20, 20] })
-      
-      // Calcular distância usando Haversine como fallback
-      calculateTotalDistance()
+      map.fitBounds(fallbackPolyline.getBounds(), { padding: [50, 50] })
+
+      // Calcular distância aproximada (Haversine)
+      let totalDistance = 0
+      for (let i = 0; i < latlngs.length - 1; i++) {
+        const distance = latlngs[i].distanceTo(latlngs[i + 1]) / 1000 // em km
+        totalDistance += distance
+      }
+      distanciaTotal.value = totalDistance
     }
   } else if (latlngs.length === 1) {
-    // Se há apenas um ponto, centralizar nele
+    // Apenas um ponto
     map.setView(latlngs[0], 14)
   }
 }
 
-// Função para buscar dados do itinerário
+/**
+ * Busca dados do itinerário via API
+ */
 async function fetchItinerario() {
   try {
     loading.value = true
     const pacoteId = route.params.id as string
-    
+
+    console.log('📦 Buscando itinerário do pacote', pacoteId)
+
     const response = await $api('/api/pacotes/itinerario', {
       method: 'POST',
       body: {
@@ -737,17 +529,19 @@ async function fetchItinerario() {
         }
       }
     })
-    
+
     if (response.success && response.data) {
       pacoteData.value = response.data
-      
+
+      console.log(`✅ Itinerário carregado: ${response.data.pedidos.length} entregas`)
+
       await nextTick()
-      addMarkersAndRoute()
+      await addMarkersAndRoute()
     } else {
-      console.error('Erro ao buscar itinerário:', response.message)
+      console.error('❌ Erro ao buscar itinerário:', response.message)
     }
   } catch (error) {
-    console.error('Erro ao buscar itinerário:', error)
+    console.error('❌ Erro ao buscar itinerário:', error)
   } finally {
     loading.value = false
   }
@@ -819,16 +613,16 @@ onMounted(async () => {
     flex-direction: column;
     gap: 8px !important;
   }
-  
+
   #mapa-itinerario {
     height: 400px !important;
   }
-  
+
   /* Stack cards vertically on mobile */
   .d-flex.gap-4 {
     flex-direction: column !important;
   }
-  
+
   .stats-card {
     min-width: unset;
   }
