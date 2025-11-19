@@ -198,6 +198,71 @@ const fetchRota = async () => {
   }
 }
 
+/**
+ * Calcula rota usando MapService unificado (OSRM-only)
+ */
+async function calculateRouteWithMapService(waypoints: Array<[number, number]>): Promise<{
+  coordinates: Array<[number, number]>
+  distance_km: number
+  cached: boolean
+  segments?: Array<{waypoints: number, distance_km: number}>
+  total_segments?: number
+} | null> {
+  if (waypoints.length < 2) return null
+
+  try {
+    const payload = {
+      waypoints: waypoints,
+      options: {
+        use_cache: true,
+        fallback_to_straight: true
+      }
+    }
+
+    addDebugLog('info', 'MAPSERVICE', `Calculando rota com MapService para ${waypoints.length} waypoints`)
+
+    const response = await fetch('http://localhost:8002/api/map/route', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      addDebugLog('error', 'MAPSERVICE', `Erro HTTP ${response.status}`, errorText)
+      return null
+    }
+
+    const result = await response.json()
+
+    if (result.success && result.data?.coordinates) {
+      addDebugLog('success', 'MAPSERVICE', `Rota calculada via ${result.data.provider}`, {
+        distanciaKm: result.data.distance_km,
+        pontosRota: result.data.coordinates.length,
+        cached: result.data.cached ? 'HIT' : 'MISS',
+        segments: result.data.total_segments || 1
+      })
+
+      return {
+        coordinates: result.data.coordinates,
+        distance_km: result.data.distance_km,
+        cached: result.data.cached,
+        segments: result.data.segments,
+        total_segments: result.data.total_segments
+      }
+    }
+
+    addDebugLog('warn', 'MAPSERVICE', 'Resposta sem coordenadas válidas')
+    return null
+  } catch (error) {
+    addDebugLog('error', 'MAPSERVICE', 'Erro ao calcular rota', error)
+    return null
+  }
+}
+
 // Buscar municípios para autocomplete
 const fetchMunicipios = async (search: string = '') => {
   if (search.length < 2 && search !== '') return
@@ -447,165 +512,90 @@ const updateMapMarkersInternal = async () => {
     })
 
     // ============================================================================
-    // ROUTING VIA LARAVEL PROXY (NÃO usar leaflet-routing-machine direto!)
+    // ROUTING VIA MAPSERVICE UNIFICADO (OSRM-only com chunking automático)
     // ============================================================================
     //
-    // ❌ PROBLEMA: leaflet-routing-machine chamando OSRM diretamente FALHA
-    //    - Servidores OSRM públicos bloqueiam requisições do frontend (CORS)
-    //    - Timeouts frequentes (30s+)
-    //    - Rate limiting agressivo
-    //
-    // ✅ SOLUÇÃO: Usar proxy Laravel que JÁ EXISTE no projeto!
-    //    - Controller: app/Http/Controllers/Api/RoutingController.php
-    //    - Endpoint: POST /api/routing/route
-    //    - Features: Retry em 3 servidores OSRM, fallback inteligente
+    // ✅ SOLUÇÃO: MapService unificado com OSRM + cache + chunking automático
+    //    - Service: app/Services/Map/MapService.php
+    //    - Endpoint: POST /api/map/route
+    //    - Features:
+    //      * Chunking automático para rotas >10 waypoints
+    //      * Cache unificado (30 dias TTL)
+    //      * Fallback inteligente
+    //      * 100% gratuito (OSRM público)
     //
     // FORMATO DO ENDPOINT:
-    //   Request:  { start: [lng, lat], end: [lng, lat] }
-    //   Response: { success: true, coordinates: [[lat,lng],...], distance_km: 123 }
-    //
-    // ESTRATÉGIA: Calcular segmento por segmento (A→B, B→C, C→D) e combinar
+    //   Request:  { waypoints: [[lat,lon], ...], options: {use_cache, fallback_to_straight} }
+    //   Response: { success: true, data: {coordinates, distance_km, cached, segments} }
     // ============================================================================
 
-    // Calcular rota real usando backend proxy Laravel + OSRM
+    // Calcular rota usando MapService
     if (waypoints.length > 1) {
-      addDebugLog('info', 'ROUTING', `Calculando rota com ${waypoints.length} waypoints via Laravel proxy`)
-
       // Cor da rota baseado no modo
       let routeColor = '#2196F3' // Azul padrão
       if (editMode.value) routeColor = '#FF9800' // Laranja em modo edição
 
-      // Calcular rota segmento por segmento (ponto a ponto)
-      const allCoordinates: L.LatLngExpression[] = []
-      let totalDistance = 0
-      let segmentPromises: Promise<any>[] = []
+      // Converter waypoints para formato MapService [lat, lon]
+      const mapServiceWaypoints = waypoints.map(w => [w.lat, w.lng] as [number, number])
 
-      // Criar promises para cada segmento
-      for (let i = 0; i < waypoints.length - 1; i++) {
-        const start = waypoints[i]
-        const end = waypoints[i + 1]
+      // Calcular rota com MapService
+      const routeResult = await calculateRouteWithMapService(mapServiceWaypoints)
 
-        const segmentPromise = fetch('http://localhost:8002/api/routing/route', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            start: [start.lng, start.lat], // OSRM usa [lng, lat]
-            end: [end.lng, end.lat]
-          })
-        })
-          .then(response => response.json())
-          .then(data => {
-            if (data.success && data.coordinates && data.coordinates.length > 0) {
-              return {
-                success: true,
-                coordinates: data.coordinates, // Já vem em [lat, lng]
-                distance: data.distance_km || 0,
-                index: i
-              }
-            } else {
-              // Fallback: linha reta para este segmento
-              return {
-                success: false,
-                coordinates: [[start.lat, start.lng], [end.lat, end.lng]],
-                distance: start.distanceTo(end) / 1000,
-                index: i
-              }
-            }
-          })
-          .catch(() => {
-            // Fallback em caso de erro
-            return {
-              success: false,
-              coordinates: [[start.lat, start.lng], [end.lat, end.lng]],
-              distance: start.distanceTo(end) / 1000,
-              index: i
-            }
-          })
+      if (routeResult && routeResult.coordinates.length > 0) {
+        // Atualizar distância total (garantir que é número)
+        distanciaTotal.value = Number(routeResult.distance_km)
 
-        segmentPromises.push(segmentPromise)
-      }
+        // Converter coordenadas para Leaflet LatLng
+        const routeLatLngs = routeResult.coordinates.map(coord => [coord[0], coord[1]] as L.LatLngExpression)
 
-      // Aguardar todos os segmentos
-      Promise.all(segmentPromises)
-        .then(segments => {
-          // Ordenar por index
-          segments.sort((a, b) => a.index - b.index)
+        // Remover rota anterior
+        if (routingControl.value) {
+          map.value?.removeControl(routingControl.value)
+        }
 
-          // Combinar coordenadas
-          segments.forEach((segment, idx) => {
-            if (idx === 0) {
-              // Primeiro segmento: adicionar todos os pontos
-              allCoordinates.push(...segment.coordinates)
-            } else {
-              // Segmentos seguintes: pular primeiro ponto (duplicado)
-              allCoordinates.push(...segment.coordinates.slice(1))
-            }
-            totalDistance += segment.distance
-          })
+        // Adicionar rota real
+        routingControl.value = L.polyline(routeLatLngs, {
+          color: routeColor,
+          weight: 4,
+          opacity: 0.7
+        }).addTo(map.value!)
 
-          const successfulSegments = segments.filter(s => s.success).length
+        // Ajustar bounds para mostrar toda a rota
+        if (bounds.length > 0) {
+          map.value!.fitBounds(bounds, { padding: [50, 50] })
+        }
+      } else {
+        // Fallback: desenhar linha reta tracejada
+        addDebugLog('warn', 'ROUTING', 'Usando linha reta como fallback')
 
-          addDebugLog('success', 'ROUTING', `Rota calculada via Laravel proxy`, {
-            distanciaKm: totalDistance.toFixed(1),
-            pontosRota: allCoordinates.length,
-            segmentos: segments.length,
-            segmentosOSRM: successfulSegments,
-            segmentosFallback: segments.length - successfulSegments
-          })
+        const polylinePoints = waypoints.map(w => [w.lat, w.lng] as L.LatLngExpression)
 
-          // Desenhar polyline com as coordenadas recebidas
-          if (routingControl.value) {
-            map.value?.removeControl(routingControl.value)
-          }
+        if (routingControl.value) {
+          map.value?.removeControl(routingControl.value)
+        }
 
-          routingControl.value = L.polyline(allCoordinates, {
-            color: routeColor,
-            weight: 4,
-            opacity: 0.7
-          }).addTo(map.value!)
+        routingControl.value = L.polyline(polylinePoints, {
+          color: routeColor,
+          weight: 3,
+          opacity: 0.5,
+          dashArray: '10, 10'
+        }).addTo(map.value!)
 
-          distanciaTotal.value = totalDistance
+        // Calcular distância aproximada
+        let totalDist = 0
+        for (let i = 0; i < waypoints.length - 1; i++) {
+          totalDist += waypoints[i].distanceTo(waypoints[i + 1])
+        }
+        distanciaTotal.value = totalDist / 1000
 
-          // Ajustar bounds para mostrar toda a rota
-          if (bounds.length > 0) {
-            map.value!.fitBounds(bounds, { padding: [50, 50] })
-          }
-        })
-        .catch(error => {
-          addDebugLog('error', 'ROUTING', 'Erro ao calcular rota via Laravel proxy', error)
-
-          // Fallback: desenhar linha reta entre pontos
-          const polylinePoints = waypoints.map(w => [w.lat, w.lng] as L.LatLngExpression)
-
-          if (routingControl.value) {
-            map.value?.removeControl(routingControl.value)
-          }
-
-          routingControl.value = L.polyline(polylinePoints, {
-            color: routeColor,
-            weight: 3,
-            opacity: 0.5,
-            dashArray: '10, 10'
-          }).addTo(map.value!)
-
-          // Calcular distância aproximada
-          let totalDist = 0
-          for (let i = 0; i < waypoints.length - 1; i++) {
-            totalDist += waypoints[i].distanceTo(waypoints[i + 1])
-          }
-          distanciaTotal.value = totalDist / 1000
-
-          addDebugLog('warn', 'ROUTING', 'Usando linha reta como fallback', {
-            distanciaKm: distanciaTotal.value.toFixed(1)
-          })
+        addDebugLog('warn', 'ROUTING', 'Distância calculada por linha reta', {
+          distanciaKm: distanciaTotal.value.toFixed(1)
         })
 
-      // Ajustar bounds inicial
-      if (bounds.length > 0) {
-        map.value.fitBounds(bounds, { padding: [50, 50] })
+        // Ajustar bounds inicial
+        if (bounds.length > 0) {
+          map.value.fitBounds(bounds, { padding: [50, 50] })
+        }
       }
     } else if (waypoints.length === 1) {
       // Se apenas 1 ponto, centralizar nele
@@ -622,9 +612,11 @@ const updateMapMarkersInternal = async () => {
   }
 }
 
-// Funções de cálculo de rota removidas - agora usando OSRM diretamente
+// ===================================
+// FUNÇÕES DE GEOCODING
+// ===================================
 
-// Função para geocoding usando código IBGE via Google Maps
+// Função para geocoding usando código IBGE
 const geocodeByIBGE = async (municipio: RotaMunicipio): Promise<{lat: number, lon: number} | null> => {
   const startTime = performance.now()
   debugStats.value.totalGeocodes++
@@ -1009,46 +1001,58 @@ const updateMapWithSimulation = async () => {
     total: markers.value.length
   })
 
-  // 3. Calcular rota combinada (rota + entregas) com cor magenta/rosa vibrante
+  // 3. Calcular rota combinada (rota + entregas) com cor magenta/rosa vibrante usando MapService
   if (allWaypoints.length > 1) {
-    addDebugLog('info', 'SIMULATION', `Calculando rota combinada com ${allWaypoints.length} pontos`)
+    addDebugLog('info', 'SIMULATION', `Calculando rota combinada com ${allWaypoints.length} pontos via MapService`)
 
-    // Configurar OSRM router
-    // @ts-ignore
-    const osrmRouter = L.Routing.osrmv1({
-      serviceUrl: 'https://routing.openstreetmap.de/routed-car/route/v1',
-      profile: 'driving',
-      timeout: 30000
-    })
+    // Converter waypoints para formato MapService [lat, lon]
+    const mapServiceWaypoints = allWaypoints.map(w => [w.lat, w.lng] as [number, number])
 
-    // @ts-ignore
-    routingControl.value = L.Routing.control({
-      waypoints: allWaypoints,
-      router: osrmRouter,
-      language: 'pt-BR',
-      draggableWaypoints: false,
-      addWaypoints: false,
-      fitSelectedRoutes: 'smart',
-      lineOptions: {
-        styles: [{
-          color: '#E91E63', // Magenta/Pink vibrante para simulação
-          weight: 4,
-          opacity: 0.7
-        }]
-      },
-      routeWhileDragging: false,
-      show: false,
-      createMarker: () => null
-    }).on('routesfound', function(e: any) {
-      const route = e.routes[0]
-      const distance = (route.summary.totalDistance / 1000).toFixed(1)
-      const time = Math.round(route.summary.totalTime / 60)
-      distanciaTotal.value = parseFloat(distance)
-    }).addTo(map.value!)
+    // Calcular rota com MapService
+    const routeResult = await calculateRouteWithMapService(mapServiceWaypoints)
 
-    // Ajustar bounds
-    if (bounds.length > 0) {
-      map.value.fitBounds(bounds, { padding: [50, 50] })
+    if (routeResult && routeResult.coordinates.length > 0) {
+      // Atualizar distância total
+      distanciaTotal.value = Number(routeResult.distance_km)
+
+      // Converter coordenadas para Leaflet LatLng
+      const routeLatLngs = routeResult.coordinates.map(coord => [coord[0], coord[1]] as L.LatLngExpression)
+
+      // Adicionar rota com cor magenta/rosa para simulação
+      routingControl.value = L.polyline(routeLatLngs, {
+        color: '#E91E63', // Magenta/Pink vibrante para simulação
+        weight: 4,
+        opacity: 0.7
+      }).addTo(map.value!)
+
+      // Ajustar bounds
+      if (bounds.length > 0) {
+        map.value.fitBounds(bounds, { padding: [50, 50] })
+      }
+    } else {
+      // Fallback: linha reta
+      addDebugLog('warn', 'SIMULATION', 'Usando linha reta como fallback')
+
+      const polylinePoints = allWaypoints.map(w => [w.lat, w.lng] as L.LatLngExpression)
+
+      routingControl.value = L.polyline(polylinePoints, {
+        color: '#E91E63',
+        weight: 3,
+        opacity: 0.5,
+        dashArray: '10, 10'
+      }).addTo(map.value!)
+
+      // Calcular distância aproximada
+      let totalDist = 0
+      for (let i = 0; i < allWaypoints.length - 1; i++) {
+        totalDist += allWaypoints[i].distanceTo(allWaypoints[i + 1])
+      }
+      distanciaTotal.value = totalDist / 1000
+
+      // Ajustar bounds
+      if (bounds.length > 0) {
+        map.value.fitBounds(bounds, { padding: [50, 50] })
+      }
     }
   } else if (bounds.length > 0) {
     map.value.fitBounds(bounds, { padding: [50, 50] })
