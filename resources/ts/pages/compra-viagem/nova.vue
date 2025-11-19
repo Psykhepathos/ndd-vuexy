@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { API_BASE_URL } from '@/config/api'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -250,12 +250,15 @@ watch(modoCD, async () => {
 watch(rotaId, async (novoRotaId) => {
   if (!novoRotaId) {
     rotaMunicipios.value = []
+    addDebugLog('info', 'WATCH', 'Rota desmarcada, limpando municípios')
     await updateMapMarkers()
     return
   }
 
   addDebugLog('info', 'WATCH', `Rota mudou para ${novoRotaId}, carregando municípios...`)
+  console.log('🔍 [WATCH rotaId] Nova rota:', novoRotaId)
   await carregarMunicipiosRota(novoRotaId)
+  console.log('🔍 [WATCH rotaId] Municípios após carregar:', rotaMunicipios.value.length)
 })
 
 // Watch para codpac - carrega entregas do pacote
@@ -282,6 +285,31 @@ watch(codpac, async (novoCodpac) => {
     addDebugLog('error', 'PACOTE', `Erro ao carregar entregas: ${error.message}`)
   } finally {
     loadingEntregas.value = false
+  }
+})
+
+// Watch para showMapDialog - inicializa mapa quando dialog abre
+watch(showMapDialog, async (isOpen) => {
+  if (isOpen) {
+    console.log('🗺️ [WATCH showMapDialog] Dialog aberto')
+    console.log('🗺️ Municípios disponíveis:', rotaMunicipios.value.length)
+    console.log('🗺️ Entregas disponíveis:', entregas.value.length)
+
+    // Dialog aberto
+    if (!map.value) {
+      // Primeira vez: inicializar mapa
+      addDebugLog('info', 'WATCH', 'Dialog do mapa aberto, inicializando mapa...')
+      await nextTick() // Aguarda o DOM atualizar
+      await initMap()
+    }
+
+    // Sempre atualizar marcadores quando dialog abre (primeira vez ou não)
+    if (rotaMunicipios.value.length > 0 || entregas.value.length > 0) {
+      addDebugLog('info', 'WATCH', 'Atualizando marcadores do mapa...')
+      await updateMapMarkers()
+    } else {
+      addDebugLog('warn', 'WATCH', 'Nenhum dado para mostrar no mapa')
+    }
   }
 })
 
@@ -778,6 +806,12 @@ const carregarMunicipiosRota = async (rotaIdValue: number) => {
     rotaMunicipios.value = data.data.municipios || []
     console.log('🗺️ Municípios carregados:', rotaMunicipios.value)
 
+    // DEBUG: Mostrar estrutura de cada município
+    if (rotaMunicipios.value.length > 0) {
+      console.log('🔍 Estrutura do primeiro município:', rotaMunicipios.value[0])
+      console.log('🔍 Campos disponíveis:', Object.keys(rotaMunicipios.value[0]))
+    }
+
     addDebugLog('success', 'ROTA', `${rotaMunicipios.value.length} municípios carregados`)
 
     // Atualizar mapa
@@ -862,7 +896,7 @@ const calcularDistancia = (lat1: number, lon1: number, lat2: number, lon2: numbe
  */
 const updateMapMarkers = async () => {
   if (!map.value) {
-    addDebugLog('warn', 'MAP', 'Mapa não inicializado')
+    addDebugLog('info', 'MAP', 'Mapa ainda não inicializado (será atualizado quando dialog abrir)')
     return
   }
 
@@ -900,19 +934,31 @@ const updateMapMarkers = async () => {
     console.log('🗺️ Iniciando geocoding de', rotaMunicipios.value.length, 'municípios')
 
     // Preparar municípios para geocoding (garantir formato correto)
+    // IMPORTANTE: Progress retorna CodMun, DesMun (case sensitive!)
     const municipiosFormatados = rotaMunicipios.value.map(m => ({
       cdibge: String(m.cdibge), // ✅ Converter para string
-      desmun: String(m.desmun).trim(), // ✅ Remover espaços extras
-      desest: String(m.desest).trim(), // ✅ Remover espaços extras
-      cod_mun: m.codmun || m.cod_mun,
-      cod_est: m.codest || m.cod_est
+      desmun: String(m.DesMun || m.desmun).trim(), // Progress usa DesMun (D e M maiúsculos)
+      desest: String(m.desest).trim(), // ✅ OK (alias na query)
+      cod_mun: m.CodMun || m.codmun || m.cod_mun, // Progress usa CodMun (C e M maiúsculos)
+      cod_est: m.CodEst || m.codest || m.cod_est  // Progress usa CodEst (C e E maiúsculos)
     }))
 
     console.log('🗺️ Municípios formatados:', municipiosFormatados)
 
+    // DEBUG: Verificar se municípios têm cdibge válido
+    municipiosFormatados.forEach((m, i) => {
+      console.log(`🔍 Município ${i + 1}:`, {
+        cdibge: m.cdibge,
+        cdibge_type: typeof m.cdibge,
+        desmun: m.desmun,
+        desest: m.desest
+      })
+    })
+
     // Geocodificar municípios
     const coords = await geocodeByIBGE(municipiosFormatados)
     console.log('🗺️ Coordenadas retornadas:', coords)
+    console.log('🗺️ Quantidade de coordenadas:', Object.keys(coords).length)
 
     let municipiosRenderizados = 0
 
@@ -921,11 +967,11 @@ const updateMapMarkers = async () => {
       const coord = coords[municipio.cdibge]
 
       if (!coord) {
-        console.warn(`⚠️ Município ${municipio.desmun} (IBGE: ${municipio.cdibge}) sem coordenadas`)
+        console.warn(`⚠️ Município ${municipio.DesMun || municipio.desmun} (IBGE: ${municipio.cdibge}) sem coordenadas`)
         return
       }
 
-      console.log(`✅ Município ${municipio.desmun} tem coordenadas:`, coord)
+      console.log(`✅ Município ${municipio.DesMun || municipio.desmun} tem coordenadas:`, coord)
       municipiosRenderizados++
 
       const latLng = L.latLng(coord.lat, coord.lon)
@@ -952,7 +998,7 @@ const updateMapMarkers = async () => {
       })
 
       const marker = L.marker(latLng, { icon })
-        .bindPopup(`<b>${municipio.desmun}</b><br>${municipio.desest}`)
+        .bindPopup(`<b>${municipio.DesMun || municipio.desmun}</b><br>${municipio.desest}`)
         .addTo(map.value!)
 
       markers.value.push(marker)
@@ -1245,10 +1291,7 @@ const updateMapMarkers = async () => {
 initialize()
 addDebugLog('info', 'SYSTEM', 'Sistema de Compra de Viagem SemParar inicializado')
 
-// Inicializar mapa após component montar
-onMounted(async () => {
-  await initMap()
-})
+// Mapa será inicializado quando o dialog abrir (watch showMapDialog)
 </script>
 
 <template>
