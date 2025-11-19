@@ -18,9 +18,9 @@ const distanciaTotal = ref(0)
 
 // Computed
 const estatisticas = computed(() => {
-  const municipios = props.formData.rotaPadrao.municipios.length
+  const municipios = props.formData.rota.municipios.length
   const entregas = props.formData.pacote.entregas_com_gps.length
-  const pedagios = props.formData.pedagios.pracas.length
+  const pedagios = props.formData.preco.pracas.length
 
   return {
     municipios,
@@ -65,8 +65,8 @@ const atualizarMapa = async () => {
   const markers: MapMarker[] = []
   const waypoints: L.LatLng[] = []
 
-  // === 1. MUNICÍPIOS DA ROTA PADRÃO ===
-  const municipios = props.formData.rotaPadrao.municipios.filter(m => m.lat && m.lon)
+  // === 1. MUNICÍPIOS DA ROTA ===
+  const municipios = props.formData.rota.municipios.filter(m => m.lat && m.lon)
 
   municipios.forEach((mun, index) => {
     if (!mun.lat || !mun.lon) return
@@ -108,7 +108,7 @@ const atualizarMapa = async () => {
   })
 
   // === 3. PRAÇAS DE PEDÁGIO ===
-  props.formData.pedagios.pracas.forEach((praca, index) => {
+  props.formData.preco.pracas.forEach((praca, index) => {
     if (praca.lat && praca.lon) {
       markers.push({
         id: `pedagio-${praca.id}`,
@@ -155,7 +155,7 @@ const criarIconeCustomizado = (marker: MapMarker): L.DivIcon => {
   if (marker.tipo === 'entrega') {
     // Verde (primeiro), Laranja (meio), Vermelho (último)
     const totalEntregas = props.formData.pacote.entregas_com_gps.length
-    const indexEntrega = marker.sequencia! - props.formData.rotaPadrao.municipios.length
+    const indexEntrega = marker.sequencia! - props.formData.rota.municipios.length
 
     if (indexEntrega === 1) {
       bgColor = '#4CAF50' // Verde
@@ -287,7 +287,7 @@ onMounted(async () => {
   await initMap()
 
   // Atualizar mapa se já houver dados
-  if (props.formData.rotaPadrao.municipios.length > 0) {
+  if (props.formData.rota.municipios.length > 0) {
     atualizarMapa()
   }
 })

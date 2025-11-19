@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { CompraViagemFormData, PacoteBasico, EntregaPacote } from '../types'
+import type { CompraViagemFormData, PacoteCompraViagem, EntregaPacote } from '../types'
 
 // Props & Emits
 const props = defineProps<{
@@ -15,7 +15,7 @@ const emit = defineEmits<{
 // State
 const loadingPacotes = ref(false)
 const loadingEntregas = ref(false)
-const pacotesDisponiveis = ref<PacoteBasico[]>([])
+const pacotesDisponiveis = ref<PacoteCompraViagem[]>([])
 const searchPacote = ref<string | null>(null)
 
 // Computed
@@ -24,8 +24,7 @@ const entregas = computed(() => props.formData.pacote.entregas)
 const entregasComGps = computed(() => props.formData.pacote.entregas_com_gps)
 
 const isStepValid = computed(() => {
-  // Pacote é opcional - step sempre válido
-  return true
+  return pacoteSelecionado.value !== null
 })
 
 const estatisticasEntregas = computed(() => {
@@ -44,7 +43,7 @@ const estatisticasEntregas = computed(() => {
 // Watchers
 watch(isStepValid, (valid) => {
   emit('stepComplete', valid)
-}, { immediate: true })
+})
 
 // Methods
 const buscarPacotes = async (search: string) => {
@@ -56,7 +55,7 @@ const buscarPacotes = async (search: string) => {
   loadingPacotes.value = true
   try {
     const response = await fetch(
-      `http://localhost:8002/api/pacotes?search=${encodeURIComponent(search)}&per_page=10`
+      `http://localhost:8002/api/compra-viagem/pacotes?search=${encodeURIComponent(search)}`
     )
     const data = await response.json()
 
@@ -70,7 +69,7 @@ const buscarPacotes = async (search: string) => {
   }
 }
 
-const selecionarPacote = async (pacote: PacoteBasico) => {
+const selecionarPacote = async (pacote: PacoteCompraViagem) => {
   loadingEntregas.value = true
 
   try {
@@ -84,11 +83,19 @@ const selecionarPacote = async (pacote: PacoteBasico) => {
     const data = await response.json()
 
     if (data.success && data.data) {
-      const todasEntregas: EntregaPacote[] = data.data.pedidos || []
+      const todasEntregas: any[] = data.data.pedidos || []
 
       // Processar coordenadas GPS
-      const entregasProcessadas = todasEntregas.map((entrega: any) => ({
-        ...entrega,
+      const entregasProcessadas: EntregaPacote[] = todasEntregas.map((entrega: any) => ({
+        numseqped: entrega.numseqped,
+        razcli: entrega.razcli,
+        endcli: entrega.endcli,
+        baicli: entrega.baicli,
+        cidcli: entrega.cidcli,
+        sigufs: entrega.sigufs,
+        cepcli: entrega.cepcli,
+        gps_lat: entrega.gps_lat,
+        gps_lon: entrega.gps_lon,
         lat: processGpsCoordinate(entrega.gps_lat),
         lon: processGpsCoordinate(entrega.gps_lon),
         tipo: 'entrega' as const
@@ -96,7 +103,7 @@ const selecionarPacote = async (pacote: PacoteBasico) => {
 
       // Filtrar apenas entregas com GPS válido
       const entregasComGpsValido = entregasProcessadas.filter(
-        e => e.lat !== null && e.lon !== null && !isNaN(e.lat) && !isNaN(e.lon)
+        e => e.lat !== null && e.lon !== null && !isNaN(e.lat!) && !isNaN(e.lon!)
       )
 
       // Atualizar form data
@@ -107,7 +114,7 @@ const selecionarPacote = async (pacote: PacoteBasico) => {
           entregas: entregasProcessadas,
           entregas_com_gps: entregasComGpsValido
         },
-        step2Completo: true
+        step1Completo: true
       }
 
       emit('update:formData', updated)
@@ -127,7 +134,7 @@ const limparPacote = () => {
       entregas: [],
       entregas_com_gps: []
     },
-    step2Completo: true // Ainda válido pois é opcional
+    step1Completo: false
   }
 
   emit('update:formData', updated)
@@ -164,10 +171,10 @@ watch(searchPacote, (newSearch) => {
   <div>
     <!-- Header -->
     <h6 class="text-h6 font-weight-medium mb-2">
-      Seleção de Pacote (Opcional)
+      Seleção de Pacote
     </h6>
     <p class="text-body-2 text-medium-emphasis mb-6">
-      Adicione um pacote para incluir suas entregas na rota
+      Busque e selecione o pacote para compra da viagem
     </p>
 
     <!-- Autocomplete de Pacotes -->
@@ -177,7 +184,7 @@ watch(searchPacote, (newSearch) => {
       :loading="loadingPacotes"
       item-title="codpac"
       item-value="codpac"
-      label="Buscar Pacote"
+      label="Buscar Pacote *"
       placeholder="Digite o código do pacote (ex: 3043368)"
       prepend-inner-icon="tabler-package"
       clearable
@@ -204,7 +211,7 @@ watch(searchPacote, (newSearch) => {
               {{ item.raw.sitpac }}
             </VChip>
             <span class="text-caption">
-              {{ item.raw.datforpac }}
+              Transportador: {{ item.raw.nomtrn }}
             </span>
           </VListItemSubtitle>
         </VListItem>
@@ -237,8 +244,7 @@ watch(searchPacote, (newSearch) => {
         <VCardTitle>Pacote #{{ pacoteSelecionado.codpac }}</VCardTitle>
 
         <VCardSubtitle>
-          Status: {{ pacoteSelecionado.sitpac }} •
-          {{ estatisticasEntregas?.total }} entregas
+          {{ pacoteSelecionado.nomtrn }} • {{ pacoteSelecionado.sitpac }}
         </VCardSubtitle>
 
         <template #append>
@@ -258,6 +264,17 @@ watch(searchPacote, (newSearch) => {
         <VRow class="mb-4">
           <VCol cols="4">
             <div class="text-center">
+              <div class="text-h5 text-primary">
+                {{ estatisticasEntregas?.total }}
+              </div>
+              <div class="text-caption text-medium-emphasis">
+                Total
+              </div>
+            </div>
+          </VCol>
+
+          <VCol cols="4">
+            <div class="text-center">
               <div class="text-h5 text-success">
                 {{ estatisticasEntregas?.comGps }}
               </div>
@@ -269,18 +286,7 @@ watch(searchPacote, (newSearch) => {
 
           <VCol cols="4">
             <div class="text-center">
-              <div class="text-h5 text-warning">
-                {{ estatisticasEntregas?.semGps }}
-              </div>
-              <div class="text-caption text-medium-emphasis">
-                Sem GPS
-              </div>
-            </div>
-          </VCol>
-
-          <VCol cols="4">
-            <div class="text-center">
-              <div class="text-h5 text-primary">
+              <div class="text-h5 text-info">
                 {{ estatisticasEntregas?.percentualGps }}%
               </div>
               <div class="text-caption text-medium-emphasis">
@@ -290,41 +296,27 @@ watch(searchPacote, (newSearch) => {
           </VCol>
         </VRow>
 
-        <!-- Lista de Entregas (primeiras 5) -->
-        <div v-if="entregas.length > 0">
-          <div class="text-caption text-medium-emphasis mb-2">
-            Entregas ({{ entregasComGps.length }} serão visualizadas no mapa):
-          </div>
+        <!-- Informações do Transportador -->
+        <VDivider class="my-4" />
 
-          <VList density="compact">
-            <VListItem
-              v-for="(entrega, index) in entregas.slice(0, 5)"
-              :key="entrega.numseqped"
-              :class="{ 'opacity-50': !entrega.lat || !entrega.lon }"
-            >
-              <template #prepend>
-                <VIcon
-                  :icon="entrega.lat && entrega.lon ? 'tabler-map-pin' : 'tabler-map-pin-off'"
-                  :color="entrega.lat && entrega.lon ? 'success' : 'warning'"
-                  size="small"
-                />
-              </template>
+        <div class="d-flex align-center gap-2 mb-2">
+          <VIcon icon="tabler-truck" size="small" color="primary" />
+          <span class="text-body-2 font-weight-medium">
+            Transportador:
+          </span>
+          <span class="text-body-2">
+            {{ pacoteSelecionado.nomtrn }}
+          </span>
+        </div>
 
-              <VListItemTitle class="text-caption">
-                {{ entrega.razcli }}
-              </VListItemTitle>
-
-              <VListItemSubtitle class="text-caption">
-                {{ entrega.cidcli }} - {{ entrega.sigufs }}
-              </VListItemSubtitle>
-            </VListItem>
-
-            <VListItem v-if="entregas.length > 5">
-              <VListItemTitle class="text-caption text-center text-medium-emphasis">
-                + {{ entregas.length - 5 }} entregas...
-              </VListItemTitle>
-            </VListItem>
-          </VList>
+        <div class="d-flex align-center gap-2">
+          <VIcon icon="tabler-calendar" size="small" color="primary" />
+          <span class="text-body-2 font-weight-medium">
+            Data Formação:
+          </span>
+          <span class="text-body-2">
+            {{ pacoteSelecionado.datforpac }}
+          </span>
         </div>
       </VCardText>
     </VCard>
@@ -341,10 +333,10 @@ watch(searchPacote, (newSearch) => {
       </template>
       <div>
         <div class="font-weight-medium mb-1">
-          Pacote Opcional
+          Pacote Obrigatório
         </div>
         <div class="text-caption">
-          Você pode pular esta etapa e comprar apenas a rota padrão, ou adicionar um pacote para incluir suas entregas no cálculo de pedágios.
+          Busque e selecione um pacote para iniciar a compra da viagem.
         </div>
       </div>
     </VAlert>

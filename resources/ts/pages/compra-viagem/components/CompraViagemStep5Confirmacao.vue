@@ -20,33 +20,44 @@ const codViagem = ref<string | null>(null)
 
 // Computed
 const resumo = computed(() => {
-  const rota = props.formData.rotaPadrao.rota
   const pacote = props.formData.pacote.pacote
+  const placa = props.formData.placa
+  const rota = props.formData.rota.rota
+  const preco = props.formData.preco
   const config = props.formData.configuracao
-  const pedagios = props.formData.pedagios
 
   return {
-    rota: rota ? {
-      id: rota.sPararRotID,
-      nome: rota.desSPararRot,
-      municipios: props.formData.rotaPadrao.municipios.length,
-      tempoViagem: rota.tempoViagem
-    } : null,
     pacote: pacote ? {
       codigo: pacote.codpac,
       entregas: props.formData.pacote.entregas.length,
-      entregasComGps: props.formData.pacote.entregas_com_gps.length
+      entregasComGps: props.formData.pacote.entregas_com_gps.length,
+      transportador: pacote.nomtrn
     } : null,
     veiculo: {
-      placa: config.placa,
-      eixos: config.eixos,
-      dataInicio: new Date(config.dataInicio).toLocaleDateString('pt-BR'),
-      dataFim: new Date(config.dataFim).toLocaleDateString('pt-BR'),
-      itemFin1: config.itemFin1 || 'N/A'
+      placa: placa.placa,
+      descricao: placa.descricao,
+      eixos: placa.eixos,
+      proprietario: placa.proprietario,
+      tag: placa.tag
     },
-    pedagios: {
-      quantidade: pedagios.pracas.length,
-      valor: pedagios.valorTotal
+    rota: rota ? {
+      id: rota.sPararRotID,
+      nome: rota.desSPararRot,
+      municipios: props.formData.rota.municipios.length,
+      tempoViagem: rota.tempoViagem,
+      modoCD: props.formData.rota.modoCD,
+      modoRetorno: props.formData.rota.modoRetorno
+    } : null,
+    preco: {
+      valor: preco.valor,
+      numeroViagem: preco.numeroViagem,
+      nomeRota: preco.nomeRotaSemParar,
+      codRota: preco.codRotaSemParar,
+      pracas: preco.pracas.length
+    },
+    periodo: {
+      dataInicio: new Date(config.dataInicio).toLocaleDateString('pt-BR'),
+      dataFim: new Date(config.dataFim).toLocaleDateString('pt-BR')
     }
   }
 })
@@ -70,27 +81,26 @@ const confirmarCompra = async () => {
     // Preparar dados da compra
     const payload = {
       // Dados obrigatórios
-      nome_rota: props.formData.pedagios.nomeRotaTemporaria,
-      placa: props.formData.configuracao.placa,
-      eixos: props.formData.configuracao.eixos,
+      codpac: props.formData.pacote.pacote?.codpac,
+      cod_rota: props.formData.rota.rota?.sPararRotID,
+      placa: props.formData.placa.placa,
+      qtd_eixos: props.formData.placa.eixos,
       data_inicio: props.formData.configuracao.dataInicio,
       data_fim: props.formData.configuracao.dataFim,
 
-      // Dados opcionais
-      item_fin1: props.formData.configuracao.itemFin1 || '',
+      // Dados do preço calculado
+      nome_rota_semparar: props.formData.preco.nomeRotaSemParar,
+      cod_rota_semparar: props.formData.preco.codRotaSemParar,
+      valor_viagem: props.formData.preco.valor,
 
-      // Dados para Progress (se houver pacote)
-      ...(props.formData.pacote.pacote && {
-        cod_pac: props.formData.pacote.pacote.codpac,
-        s_parar_rot_id: props.formData.rotaPadrao.rota?.sPararRotID,
-        valor_viagem: props.formData.pedagios.valorTotal,
-        res_compra: 'sistema'
-      })
+      // Modos da rota
+      flgcd: props.formData.rota.modoCD,
+      flgretorno: props.formData.rota.modoRetorno
     }
 
     console.log('🛒 Enviando compra:', payload)
 
-    const response = await fetch('http://localhost:8002/api/semparar/comprar-viagem', {
+    const response = await fetch('http://localhost:8002/api/compra-viagem/comprar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -98,11 +108,11 @@ const confirmarCompra = async () => {
 
     const data = await response.json()
 
-    if (!data.success || !data.data) {
+    if (!data.success) {
       throw new Error(data.message || data.error || 'Erro ao comprar viagem')
     }
 
-    codViagem.value = data.data.cod_viagem
+    codViagem.value = data.data?.numero_viagem || data.data?.cod_viagem || 'N/A'
     success.value = true
 
     console.log(`✅ Viagem comprada com sucesso: ${codViagem.value}`)
@@ -213,7 +223,108 @@ const irParaListagem = () => {
 
       <!-- Resumo Completo -->
       <VRow>
-        <!-- Rota Padrão -->
+        <!-- Pacote -->
+        <VCol cols="12" md="6">
+          <VCard variant="tonal" color="success">
+            <VCardItem>
+              <template #prepend>
+                <VIcon icon="tabler-package" color="success" />
+              </template>
+
+              <VCardTitle>Pacote</VCardTitle>
+            </VCardItem>
+
+            <VDivider />
+
+            <VCardText>
+              <VList density="compact">
+                <VListItem>
+                  <VListItemTitle class="text-caption text-medium-emphasis">
+                    Código
+                  </VListItemTitle>
+                  <VListItemSubtitle class="text-body-2 font-weight-bold">
+                    #{{ resumo.pacote?.codigo }}
+                  </VListItemSubtitle>
+                </VListItem>
+
+                <VListItem>
+                  <VListItemTitle class="text-caption text-medium-emphasis">
+                    Transportador
+                  </VListItemTitle>
+                  <VListItemSubtitle class="text-body-2">
+                    {{ resumo.pacote?.transportador }}
+                  </VListItemSubtitle>
+                </VListItem>
+
+                <VListItem>
+                  <VListItemTitle class="text-caption text-medium-emphasis">
+                    Entregas
+                  </VListItemTitle>
+                  <VListItemSubtitle class="text-body-2">
+                    {{ resumo.pacote?.entregas }} total ({{ resumo.pacote?.entregasComGps }} com GPS)
+                  </VListItemSubtitle>
+                </VListItem>
+              </VList>
+            </VCardText>
+          </VCard>
+        </VCol>
+
+        <!-- Veículo -->
+        <VCol cols="12" md="6">
+          <VCard>
+            <VCardItem>
+              <template #prepend>
+                <VIcon icon="tabler-car" color="info" />
+              </template>
+
+              <VCardTitle>Veículo</VCardTitle>
+            </VCardItem>
+
+            <VDivider />
+
+            <VCardText>
+              <VList density="compact">
+                <VListItem>
+                  <VListItemTitle class="text-caption text-medium-emphasis">
+                    Placa
+                  </VListItemTitle>
+                  <VListItemSubtitle class="text-body-2 font-weight-bold">
+                    {{ resumo.veiculo.placa }}
+                  </VListItemSubtitle>
+                </VListItem>
+
+                <VListItem>
+                  <VListItemTitle class="text-caption text-medium-emphasis">
+                    Descrição
+                  </VListItemTitle>
+                  <VListItemSubtitle class="text-body-2">
+                    {{ resumo.veiculo.descricao }}
+                  </VListItemSubtitle>
+                </VListItem>
+
+                <VListItem>
+                  <VListItemTitle class="text-caption text-medium-emphasis">
+                    Eixos
+                  </VListItemTitle>
+                  <VListItemSubtitle class="text-body-2">
+                    {{ resumo.veiculo.eixos }} eixos
+                  </VListItemSubtitle>
+                </VListItem>
+
+                <VListItem>
+                  <VListItemTitle class="text-caption text-medium-emphasis">
+                    Proprietário
+                  </VListItemTitle>
+                  <VListItemSubtitle class="text-body-2">
+                    {{ resumo.veiculo.proprietario }}
+                  </VListItemSubtitle>
+                </VListItem>
+              </VList>
+            </VCardText>
+          </VCard>
+        </VCol>
+
+        <!-- Rota -->
         <VCol cols="12" md="6">
           <VCard>
             <VCardItem>
@@ -221,7 +332,7 @@ const irParaListagem = () => {
                 <VIcon icon="tabler-route" color="primary" />
               </template>
 
-              <VCardTitle>Rota Padrão</VCardTitle>
+              <VCardTitle>Rota SemParar</VCardTitle>
             </VCardItem>
 
             <VDivider />
@@ -254,102 +365,14 @@ const irParaListagem = () => {
                     {{ resumo.rota?.tempoViagem }} dia(s)
                   </VListItemSubtitle>
                 </VListItem>
-              </VList>
-            </VCardText>
-          </VCard>
-        </VCol>
 
-        <!-- Pacote (se houver) -->
-        <VCol cols="12" md="6">
-          <VCard :color="resumo.pacote ? 'success' : 'default'" :variant="resumo.pacote ? 'tonal' : 'outlined'">
-            <VCardItem>
-              <template #prepend>
-                <VIcon :icon="resumo.pacote ? 'tabler-package' : 'tabler-package-off'" :color="resumo.pacote ? 'success' : 'default'" />
-              </template>
-
-              <VCardTitle>Pacote</VCardTitle>
-            </VCardItem>
-
-            <VDivider />
-
-            <VCardText>
-              <div v-if="resumo.pacote">
-                <VList density="compact">
-                  <VListItem>
-                    <VListItemTitle class="text-caption text-medium-emphasis">
-                      Código
-                    </VListItemTitle>
-                    <VListItemSubtitle class="text-body-2">
-                      #{{ resumo.pacote.codigo }}
-                    </VListItemSubtitle>
-                  </VListItem>
-
-                  <VListItem>
-                    <VListItemTitle class="text-caption text-medium-emphasis">
-                      Entregas
-                    </VListItemTitle>
-                    <VListItemSubtitle class="text-body-2">
-                      {{ resumo.pacote.entregas }} total ({{ resumo.pacote.entregasComGps }} com GPS)
-                    </VListItemSubtitle>
-                  </VListItem>
-                </VList>
-              </div>
-
-              <div v-else class="text-center py-4 text-medium-emphasis">
-                Nenhum pacote selecionado
-              </div>
-            </VCardText>
-          </VCard>
-        </VCol>
-
-        <!-- Veículo -->
-        <VCol cols="12" md="6">
-          <VCard>
-            <VCardItem>
-              <template #prepend>
-                <VIcon icon="tabler-car" color="info" />
-              </template>
-
-              <VCardTitle>Veículo</VCardTitle>
-            </VCardItem>
-
-            <VDivider />
-
-            <VCardText>
-              <VList density="compact">
-                <VListItem>
+                <VListItem v-if="resumo.rota?.modoCD || resumo.rota?.modoRetorno">
                   <VListItemTitle class="text-caption text-medium-emphasis">
-                    Placa
+                    Modos
                   </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2 font-weight-bold">
-                    {{ resumo.veiculo.placa }}
-                  </VListItemSubtitle>
-                </VListItem>
-
-                <VListItem>
-                  <VListItemTitle class="text-caption text-medium-emphasis">
-                    Eixos
-                  </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2">
-                    {{ resumo.veiculo.eixos }} eixos
-                  </VListItemSubtitle>
-                </VListItem>
-
-                <VListItem>
-                  <VListItemTitle class="text-caption text-medium-emphasis">
-                    Período
-                  </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2">
-                    {{ resumo.veiculo.dataInicio }} até {{ resumo.veiculo.dataFim }}
-                  </VListItemSubtitle>
-                </VListItem>
-
-                <VListItem v-if="resumo.veiculo.itemFin1 !== 'N/A'">
-                  <VListItemTitle class="text-caption text-medium-emphasis">
-                    Item Financeiro
-                  </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2">
-                    {{ resumo.veiculo.itemFin1 }}
+                  <VListItemSubtitle class="d-flex gap-2 mt-1">
+                    <VChip v-if="resumo.rota?.modoCD" size="x-small" color="primary">CD</VChip>
+                    <VChip v-if="resumo.rota?.modoRetorno" size="x-small" color="warning">Retorno</VChip>
                   </VListItemSubtitle>
                 </VListItem>
               </VList>
@@ -357,33 +380,65 @@ const irParaListagem = () => {
           </VCard>
         </VCol>
 
-        <!-- Pedágios -->
+        <!-- Preço -->
         <VCol cols="12" md="6">
           <VCard variant="tonal" color="warning">
             <VCardItem>
               <template #prepend>
-                <VIcon icon="tabler-road" color="warning" />
+                <VIcon icon="tabler-cash" color="warning" />
               </template>
 
-              <VCardTitle>Pedágios</VCardTitle>
+              <VCardTitle>Valor da Viagem</VCardTitle>
             </VCardItem>
 
             <VDivider />
 
             <VCardText>
-              <div class="d-flex justify-space-between align-center mb-4">
-                <span class="text-body-2">Praças Identificadas:</span>
-                <VChip color="warning" size="small">
-                  {{ resumo.pedagios.quantidade }}
-                </VChip>
+              <div class="text-center mb-4">
+                <div class="text-caption text-medium-emphasis mb-1">
+                  Valor Total
+                </div>
+                <div class="text-h3 text-warning font-weight-bold">
+                  R$ {{ resumo.preco.valor.toFixed(2) }}
+                </div>
               </div>
 
               <VDivider class="my-4" />
 
-              <div class="d-flex justify-space-between align-center">
-                <span class="text-h6">Valor Total:</span>
-                <span class="text-h5 text-warning font-weight-bold">
-                  R$ {{ resumo.pedagios.valor.toFixed(2) }}
+              <VList density="compact">
+                <VListItem v-if="resumo.preco.numeroViagem">
+                  <VListItemTitle class="text-caption text-medium-emphasis">
+                    Número da Viagem
+                  </VListItemTitle>
+                  <VListItemSubtitle class="text-body-2">
+                    {{ resumo.preco.numeroViagem }}
+                  </VListItemSubtitle>
+                </VListItem>
+
+                <VListItem>
+                  <VListItemTitle class="text-caption text-medium-emphasis">
+                    Praças de Pedágio
+                  </VListItemTitle>
+                  <VListItemSubtitle class="text-body-2">
+                    {{ resumo.preco.pracas }} praça(s)
+                  </VListItemSubtitle>
+                </VListItem>
+              </VList>
+            </VCardText>
+          </VCard>
+        </VCol>
+
+        <!-- Período -->
+        <VCol cols="12">
+          <VCard variant="outlined">
+            <VCardText>
+              <div class="d-flex align-center justify-space-between">
+                <div class="d-flex align-center gap-2">
+                  <VIcon icon="tabler-calendar" color="info" />
+                  <span class="text-body-2 font-weight-medium">Período da Viagem:</span>
+                </div>
+                <span class="text-body-2">
+                  {{ resumo.periodo.dataInicio }} até {{ resumo.periodo.dataFim }}
                 </span>
               </div>
             </VCardText>
