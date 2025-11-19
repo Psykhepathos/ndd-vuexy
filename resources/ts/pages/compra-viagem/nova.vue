@@ -3,10 +3,10 @@ import { ref, computed } from 'vue'
 import type { CompraViagemFormData, WizardStep } from './types'
 
 // Importar componentes dos steps
-import CompraViagemStep1Rota from './components/CompraViagemStep1Rota.vue'
-import CompraViagemStep2Pacote from './components/CompraViagemStep2Pacote.vue'
-import CompraViagemStep3Configuracao from './components/CompraViagemStep3Configuracao.vue'
-import CompraViagemStep4Pedagios from './components/CompraViagemStep4Pedagios.vue'
+import CompraViagemStep1Pacote from './components/CompraViagemStep1Pacote.vue'
+import CompraViagemStep2Placa from './components/CompraViagemStep2Placa.vue'
+import CompraViagemStep3Rota from './components/CompraViagemStep3Rota.vue'
+import CompraViagemStep4Preco from './components/CompraViagemStep4Preco.vue'
 import CompraViagemStep5Confirmacao from './components/CompraViagemStep5Confirmacao.vue'
 import CompraViagemMapaFixo from './components/CompraViagemMapaFixo.vue'
 
@@ -16,27 +16,27 @@ import CompraViagemMapaFixo from './components/CompraViagemMapaFixo.vue'
 
 const wizardSteps: WizardStep[] = [
   {
-    title: 'Rota Padrão',
-    subtitle: 'Selecione a rota SemParar',
-    icon: 'tabler-route',
+    title: 'Pacote',
+    subtitle: 'Selecione o pacote',
+    icon: 'tabler-package',
     value: 0
   },
   {
-    title: 'Pacote',
-    subtitle: 'Adicione entregas (opcional)',
-    icon: 'tabler-package',
+    title: 'Veículo',
+    subtitle: 'Valide a placa',
+    icon: 'tabler-car',
     value: 1
   },
   {
-    title: 'Configuração',
-    subtitle: 'Placa, eixos e datas',
-    icon: 'tabler-settings',
+    title: 'Rota',
+    subtitle: 'Escolha a rota SemParar',
+    icon: 'tabler-route',
     value: 2
   },
   {
-    title: 'Pedágios',
-    subtitle: 'Cálculo de praças',
-    icon: 'tabler-road',
+    title: 'Preço',
+    subtitle: 'Cálculo automático',
+    icon: 'tabler-cash',
     value: 3
   },
   {
@@ -51,45 +51,65 @@ const wizardSteps: WizardStep[] = [
 // STATE MANAGEMENT
 // ============================================================================
 
+// Helper functions
+const getDataHoje = () => {
+  const hoje = new Date()
+  return hoje.toISOString().split('T')[0]
+}
+
+const getDataFutura = (dias: number) => {
+  const futuro = new Date()
+  futuro.setDate(futuro.getDate() + dias)
+  return futuro.toISOString().split('T')[0]
+}
+
 const currentStep = ref(0)
 
 const formData = ref<CompraViagemFormData>({
-  rotaPadrao: {
-    rota: null,
-    municipios: []
-  },
   pacote: {
     pacote: null,
     entregas: [],
     entregas_com_gps: []
   },
-  configuracao: {
+  placa: {
     placa: '',
+    descricao: '',
     eixos: 2,
-    dataInicio: '',
-    dataFim: '',
-    itemFin1: ''
+    proprietario: '',
+    tag: ''
   },
-  pedagios: {
+  rota: {
+    rota: null,
+    municipios: [],
+    modoCD: false,
+    modoRetorno: false
+  },
+  preco: {
+    valor: 0,
+    numeroViagem: '',
+    nomeRotaSemParar: '',
+    codRotaSemParar: '',
     pracas: [],
-    valorTotal: 0,
-    nomeRotaTemporaria: '',
-    rotaCadastrada: false,
-    custoCalculado: false
+    calculado: false
+  },
+  configuracao: {
+    dataInicio: getDataHoje(),
+    dataFim: getDataFutura(7)
   },
   step1Completo: false,
-  step2Completo: true, // Pacote é opcional
+  step2Completo: false,
   step3Completo: false,
-  step4Completo: false
+  step4Completo: false,
+  step5Completo: false
 })
 
 // Track step completion from child components
 const stepCompletionStatus = ref<Record<number, boolean>>({
-  0: false,
-  1: true,  // Step 2 sempre válido (opcional)
-  2: false,
-  3: false,
-  4: false
+  0: false,  // Step 1: Pacote (obrigatório)
+  1: false,  // Step 2: Placa (obrigatório)
+  2: false,  // Step 3: Rota (obrigatório)
+  3: false,  // Step 4: Preço (auto-calculado)
+  4: false   // Step 5: Confirmação
 })
 
 // ============================================================================
@@ -190,33 +210,34 @@ const voltarParaListagem = () => {
               class="disable-tab-transition"
               :touch="false"
             >
-              <!-- Step 1: Rota Padrão -->
+              <!-- Step 1: Pacote -->
               <VWindowItem :value="0">
-                <CompraViagemStep1Rota
+                <CompraViagemStep1Pacote
                   v-model:form-data="formData"
                   @step-complete="(val) => handleStepComplete(0, val)"
                 />
               </VWindowItem>
 
-              <!-- Step 2: Pacote (Opcional) -->
+              <!-- Step 2: Placa -->
               <VWindowItem :value="1">
-                <CompraViagemStep2Pacote
+                <CompraViagemStep2Placa
                   v-model:form-data="formData"
                   @step-complete="(val) => handleStepComplete(1, val)"
                 />
               </VWindowItem>
 
-              <!-- Step 3: Configuração -->
+              <!-- Step 3: Rota -->
               <VWindowItem :value="2">
-                <CompraViagemStep3Configuracao
+                <CompraViagemStep3Rota
                   v-model:form-data="formData"
                   @step-complete="(val) => handleStepComplete(2, val)"
+                  @rota-validada="() => { currentStep = 3 }"
                 />
               </VWindowItem>
 
-              <!-- Step 4: Pedágios -->
+              <!-- Step 4: Preço -->
               <VWindowItem :value="3">
-                <CompraViagemStep4Pedagios
+                <CompraViagemStep4Preco
                   v-model:form-data="formData"
                   @step-complete="(val) => handleStepComplete(3, val)"
                 />

@@ -1,49 +1,25 @@
 /**
  * Types for Compra de Viagem SemParar
- *
- * Este arquivo centraliza todas as interfaces TypeScript usadas no módulo
- * de compra de viagem, garantindo type safety em todo o fluxo.
+ * Seguindo fluxo original: Pacote → Placa → Rota → Preço → Compra
  */
 
 // ============================================================================
-// ROTA PADRÃO
+// STEP 1: PACOTE (obrigatório)
 // ============================================================================
 
-export interface SemPararRota {
-  sPararRotID: number
-  desSPararRot: string
-  tempoViagem: number
-  flgCD: boolean
-  flgRetorno: boolean
-  datAtu: string | null
-  resAtu: string | null
-}
-
-export interface Municipio {
-  sPararMuSeq: number
-  codMun: number
-  codEst: number
-  desMun: string
-  desEst: string
-  cdibge: string
-  lat?: number
-  lon?: number
-}
-
-export interface RotaPadraoData {
-  rota: SemPararRota | null
-  municipios: Municipio[]
-}
-
-// ============================================================================
-// PACOTE
-// ============================================================================
-
-export interface PacoteBasico {
+export interface PacoteCompraViagem {
   codpac: number
-  desobs: string
+  descpac: string
+  codtrn: number
+  nomtrn: string
   sitpac: string
   datforpac: string
+}
+
+export interface PacoteData {
+  pacote: PacoteCompraViagem | null
+  entregas: EntregaPacote[]
+  entregas_com_gps: EntregaPacote[]
 }
 
 export interface EntregaPacote {
@@ -61,27 +37,60 @@ export interface EntregaPacote {
   tipo: 'entrega'
 }
 
-export interface PacoteData {
-  pacote: PacoteBasico | null
-  entregas: EntregaPacote[]
-  entregas_com_gps: EntregaPacote[]
-}
-
 // ============================================================================
-// CONFIGURAÇÃO DA VIAGEM
+// STEP 2: PLACA
 // ============================================================================
 
-export interface ConfiguracaoViagemData {
+export interface PlacaData {
   placa: string
+  descricao: string
   eixos: number
-  dataInicio: string
-  dataFim: string
-  itemFin1: string
+  proprietario: string
+  tag: string
 }
 
 // ============================================================================
-// PEDÁGIOS
+// STEP 3: ROTA
 // ============================================================================
+
+export interface RotaCompraViagem {
+  sPararRotID: number
+  desSPararRot: string
+  tempoViagem: number
+  flgCD: boolean
+  flgRetorno: boolean
+}
+
+export interface RotaData {
+  rota: RotaCompraViagem | null
+  municipios: MunicipioRota[]
+  modoCD: boolean
+  modoRetorno: boolean
+}
+
+export interface MunicipioRota {
+  sPararMuSeq: number
+  codMun: number
+  codEst: number
+  desMun: string
+  desEst: string
+  cdibge: string
+  lat?: number
+  lon?: number
+}
+
+// ============================================================================
+// STEP 4: PREÇO
+// ============================================================================
+
+export interface PrecoData {
+  valor: number
+  numeroViagem: string
+  nomeRotaSemParar: string
+  codRotaSemParar: string
+  pracas: PracaPedagio[]
+  calculado: boolean
+}
 
 export interface PracaPedagio {
   id: number
@@ -93,12 +102,13 @@ export interface PracaPedagio {
   lon?: number
 }
 
-export interface PedagiosData {
-  pracas: PracaPedagio[]
-  valorTotal: number
-  nomeRotaTemporaria: string
-  rotaCadastrada: boolean
-  custoCalculado: boolean
+// ============================================================================
+// STEP 5: CONFIGURAÇÃO E DATAS
+// ============================================================================
+
+export interface ConfiguracaoData {
+  dataInicio: string
+  dataFim: string
 }
 
 // ============================================================================
@@ -106,23 +116,27 @@ export interface PedagiosData {
 // ============================================================================
 
 export interface CompraViagemFormData {
-  // Step 1: Rota Padrão
-  rotaPadrao: RotaPadraoData
-
-  // Step 2: Pacote (opcional)
+  // Step 1: Pacote
   pacote: PacoteData
 
-  // Step 3: Configuração
-  configuracao: ConfiguracaoViagemData
+  // Step 2: Placa
+  placa: PlacaData
 
-  // Step 4: Pedágios
-  pedagios: PedagiosData
+  // Step 3: Rota
+  rota: RotaData
 
-  // Metadados
+  // Step 4: Preço
+  preco: PrecoData
+
+  // Step 5: Configuração (datas)
+  configuracao: ConfiguracaoData
+
+  // Controle de conclusão dos steps
   step1Completo: boolean
   step2Completo: boolean
   step3Completo: boolean
   step4Completo: boolean
+  step5Completo: boolean
 }
 
 // ============================================================================
@@ -160,37 +174,37 @@ export interface MapRoute {
 // API RESPONSES
 // ============================================================================
 
-export interface GeocodingResponse {
+export interface ApiResponse<T = any> {
   success: boolean
-  data?: {
-    codigo_ibge: string
-    nome_municipio: string
-    uf: string
-    coordenadas: {
-      lat: number
-      lon: number
-    }
-  }
-}
-
-export interface RoteirizacaoResponse {
-  success: boolean
-  data?: {
-    pracas: PracaPedagio[]
-    total_pracas: number
-  }
-  message?: string
-}
-
-export interface CompraViagemResponse {
-  success: boolean
-  data?: {
-    cod_viagem: string
-    status: number
-    progress_saved?: boolean
-  }
-  message?: string
+  data?: T
   error?: string
+  message?: string
+  errors?: Record<string, string[]>
+}
+
+export interface ValidarPlacaResponse {
+  descricao: string
+  eixos: number
+  proprietario: string
+  tag: string
+}
+
+export interface ValidarRotaResponse {
+  data_inicio: string
+  data_fim: string
+}
+
+export interface VerificarPrecoResponse {
+  valor: number
+  numero_viagem: string
+  nome_rota: string
+  cod_rota: string
+}
+
+export interface ComprarViagemResponse {
+  cod_viagem: string
+  numero_viagem: string
+  success: boolean
 }
 
 // ============================================================================
