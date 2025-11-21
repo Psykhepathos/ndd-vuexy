@@ -1851,8 +1851,8 @@ class ProgressService
             Log::info('Rota encontrada', ['nome' => $nomeRota, 'retorno' => $flgRetorno, 'cd' => $flgCD]);
 
             // PASSO 2: Buscar municípios da rota em ordem de sequência
-            // Usa APENAS código IBGE e descrição, EXATAMENTE como no Progress (Rota.cls linha 702-713)
-            $sqlMunicipios = "SELECT m.cdibge, m.desMun FROM PUB.semPararRotMu m WHERE m.sPararRotID = " . intval($codRota) . " ORDER BY m.sPararMuSeq";
+            // Busca TODOS os campos necessários para geocoding
+            $sqlMunicipios = "SELECT m.cdibge, m.desMun, m.codMun, m.codEst, m.desEst FROM PUB.semPararRotMu m WHERE m.sPararRotID = " . intval($codRota) . " ORDER BY m.sPararMuSeq";
             $resultMunicipios = $this->executeCustomQuery($sqlMunicipios);
 
             if (!$resultMunicipios['success'] || empty($resultMunicipios['data']['results'])) {
@@ -2030,6 +2030,7 @@ class ProgressService
                     'cod_rota' => $idRotaTemporaria,
                     'rota_temporaria' => $nomeRotaTemporaria,
                     'id_rota_temporaria' => $idRotaTemporaria,
+                    'pracas' => $resultRoteirizar['pracas'] ?? [], // Adicionar praças para exibição
                     'total_pracas' => count($pracasIds),
                     'placa' => strtoupper($placa),
                     'data_inicio' => $dataInicio,
