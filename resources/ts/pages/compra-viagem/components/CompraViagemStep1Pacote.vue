@@ -115,13 +115,20 @@ const selecionarPacote = async (pacoteItem: any) => {
         e => e.lat !== null && e.lon !== null && !isNaN(e.lat!) && !isNaN(e.lon!)
       )
 
-      // Atualizar form data
+      // Atualizar form data + AUTO-PREENCHER PLACA
       const updated: CompraViagemFormData = {
         ...props.formData,
         pacote: {
           pacote,
           entregas: entregasProcessadas,
           entregas_com_gps: entregasComGpsValido
+        },
+        placa: {
+          placa: data.data.placa || '',
+          descricao: '', // Será preenchida na validação do Step 2
+          eixos: 2,      // Será atualizada na validação do Step 2
+          proprietario: data.data.transportador || '',
+          tag: ''        // Será preenchida na validação do Step 2
         },
         step1Completo: true
       }

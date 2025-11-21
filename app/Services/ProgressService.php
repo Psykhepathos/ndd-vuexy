@@ -523,11 +523,11 @@ class ProgressService
                 Log::info('Pacote TCD detectado', ['tcd' => $codPac, 'original' => $pacoteOriginal]);
             }
 
-            // Buscar dados principais da carga usando o pacote correto
-            $sqlCarga = "SELECT p.codpac, p.codrot as rota, p.codmot as motorista, p.pespac as peso, p.volpac as volume, p.valpac as valor, COALESCE(cf.valfre, 0) as frete FROM PUB.pacote p LEFT JOIN PUB.cxapacote cp ON cp.codpac = p.codpac LEFT JOIN PUB.caixafech cf ON cf.codcxa = cp.codcxa WHERE p.codpac = $pacoteParaBuscar";
+            // Buscar dados principais da carga + PLACA DO VEÍCULO usando o pacote correto
+            $sqlCarga = "SELECT p.codpac, p.codrot as rota, p.codmot as motorista, p.codtrn, p.numpla as placa, p.pespac as peso, p.volpac as volume, p.valpac as valor, t.nomtrn as transportador, COALESCE(cf.valfre, 0) as frete FROM PUB.pacote p LEFT JOIN PUB.cxapacote cp ON cp.codpac = p.codpac LEFT JOIN PUB.caixafech cf ON cf.codcxa = cp.codcxa LEFT JOIN PUB.transporte t ON t.codtrn = p.codtrn WHERE p.codpac = $pacoteParaBuscar";
 
             $resultCarga = $this->executeJavaConnector('query', $sqlCarga);
-            
+
             if (!$resultCarga['success']) {
                 return [
                     'success' => false,
@@ -575,6 +575,9 @@ class ProgressService
                 'codpac' => (string)$carga['codpac'],
                 'rota' => $carga['rota'],
                 'motorista' => (int)$carga['motorista'],
+                'codtrn' => (int)$carga['codtrn'],
+                'placa' => trim($carga['placa'] ?? ''),
+                'transportador' => trim($carga['transportador'] ?? ''),
                 'peso' => (float)$carga['peso'],
                 'volume' => (float)$carga['volume'],
                 'valor' => (float)$carga['valor'],
