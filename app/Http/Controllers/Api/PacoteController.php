@@ -110,10 +110,10 @@ class PacoteController extends Controller
     public function itinerario(Request $request): JsonResponse
     {
         $request->validate([
-            'Pacote.codPac' => 'required|integer'
+            'codPac' => 'required|integer'
         ]);
 
-        $codPac = $request->input('Pacote.codPac');
+        $codPac = $request->input('codPac');
         
         $result = $this->progressService->getItinerarioPacote($codPac);
 
