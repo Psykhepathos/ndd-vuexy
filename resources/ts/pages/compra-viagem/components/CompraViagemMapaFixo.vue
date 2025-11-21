@@ -137,7 +137,9 @@ const atualizarMapa = async () => {
   })
 
   // === 5. CALCULAR E DESENHAR ROTA ===
-  if (waypoints.length >= 2) {
+  // Só calcular rota se tiver municípios da rota (Step 3+)
+  // No Step 1 (só entregas), apenas mostra marcadores sem rota
+  if (waypoints.length >= 2 && municipios.length > 0) {
     await calcularRota(waypoints)
   }
 
