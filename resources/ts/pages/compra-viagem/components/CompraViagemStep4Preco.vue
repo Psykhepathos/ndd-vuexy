@@ -179,168 +179,131 @@ onMounted(() => {
       </template>
     </VAlert>
 
-    <!-- Success State -->
-    <div v-else-if="props.formData.preco.calculado">
-      <!-- Card de Valor em Destaque -->
-      <VCard variant="tonal" color="success" class="pa-6 text-center mb-6">
-        <div class="text-body-2 text-medium-emphasis mb-2">
-          Valor Total da Viagem
-        </div>
-        <h1 class="text-h1 font-weight-bold text-success">
-          R$ {{ props.formData.preco.valor.toFixed(2) }}
-        </h1>
-      </VCard>
+    <!-- Success State - Layout Compacto -->
+    <VCard v-else-if="props.formData.preco.calculado" class="mt-4">
+      <VCardText class="pa-3">
+        <VRow dense>
+          <!-- Coluna Esquerda: Preço -->
+          <VCol cols="12" md="5">
+            <div class="d-flex flex-column align-center justify-center h-100 pa-2">
+              <div class="text-caption text-medium-emphasis mb-1">
+                Valor Total
+              </div>
+              <div class="text-h4 text-success font-weight-bold mb-2">
+                R$ {{ props.formData.preco.valor.toFixed(2) }}
+              </div>
+              <VChip
+                v-if="props.formData.preco.pracas?.length > 0"
+                size="small"
+                color="warning"
+                prepend-icon="tabler-road"
+              >
+                {{ props.formData.preco.pracas.length }} pedágios
+              </VChip>
+              <VBtn
+                icon="tabler-refresh"
+                size="x-small"
+                variant="text"
+                class="mt-2"
+                @click="recalcular"
+              />
+            </div>
+          </VCol>
 
-      <!-- Detalhes da Rota -->
-      <VCard>
-        <VCardItem>
-          <VCardTitle>Detalhes da Viagem</VCardTitle>
+          <VDivider vertical />
 
-          <template #append>
-            <VBtn
-              icon="tabler-refresh"
-              size="small"
-              variant="text"
-              @click="recalcular"
-            />
-          </template>
-        </VCardItem>
+          <!-- Coluna Direita: Detalhes -->
+          <VCol cols="12" md="7">
+            <VList density="compact" class="py-0">
+              <VListItem class="px-2" min-height="32">
+                <template #prepend>
+                  <VIcon icon="tabler-route" size="small" color="primary" />
+                </template>
+                <VListItemTitle class="text-caption font-weight-medium">
+                  Rota SemParar
+                </VListItemTitle>
+                <VListItemSubtitle class="text-caption">
+                  {{ props.formData.preco.nomeRotaSemParar }}
+                </VListItemSubtitle>
+              </VListItem>
 
-        <VDivider />
+              <VListItem class="px-2" min-height="32">
+                <template #prepend>
+                  <VIcon icon="tabler-package" size="small" color="success" />
+                </template>
+                <VListItemTitle class="text-caption font-weight-medium">
+                  Pacote #{{ props.formData.pacote.pacote?.codpac }}
+                </VListItemTitle>
+                <VListItemSubtitle class="text-caption">
+                  {{ props.formData.pacote.entregas.length }} entregas
+                </VListItemSubtitle>
+              </VListItem>
 
-        <VCardText>
-          <VList density="compact">
-            <VListItem>
-              <template #prepend>
-                <VIcon
-                  icon="tabler-route"
-                  class="me-2"
-                  color="primary"
-                />
-              </template>
-              <VListItemTitle class="text-caption text-medium-emphasis">
-                Rota SemParar
-              </VListItemTitle>
-              <VListItemSubtitle class="text-body-2 mt-1">
-                {{ props.formData.preco.nomeRotaSemParar }}
-              </VListItemSubtitle>
-            </VListItem>
+              <VListItem class="px-2" min-height="32">
+                <template #prepend>
+                  <VIcon icon="tabler-car" size="small" color="info" />
+                </template>
+                <VListItemTitle class="text-caption font-weight-medium">
+                  {{ props.formData.placa.placa }}
+                </VListItemTitle>
+                <VListItemSubtitle class="text-caption">
+                  {{ props.formData.placa.eixos }} eixos
+                </VListItemSubtitle>
+              </VListItem>
 
-            <VListItem>
-              <template #prepend>
-                <VIcon
-                  icon="tabler-barcode"
-                  class="me-2"
-                  color="primary"
-                />
-              </template>
-              <VListItemTitle class="text-caption text-medium-emphasis">
-                Código da Rota
-              </VListItemTitle>
-              <VListItemSubtitle class="text-body-2 mt-1">
-                {{ props.formData.preco.codRotaSemParar }}
-              </VListItemSubtitle>
-            </VListItem>
+              <VListItem class="px-2" min-height="32">
+                <template #prepend>
+                  <VIcon icon="tabler-calendar" size="small" color="warning" />
+                </template>
+                <VListItemTitle class="text-caption font-weight-medium">
+                  Período
+                </VListItemTitle>
+                <VListItemSubtitle class="text-caption">
+                  {{ new Date(props.formData.configuracao.dataInicio).toLocaleDateString('pt-BR') }} -
+                  {{ new Date(props.formData.configuracao.dataFim).toLocaleDateString('pt-BR') }}
+                </VListItemSubtitle>
+              </VListItem>
+            </VList>
+          </VCol>
+        </VRow>
+      </VCardText>
+    </VCard>
 
-            <VListItem v-if="props.formData.preco.numeroViagem">
-              <template #prepend>
-                <VIcon
-                  icon="tabler-receipt"
-                  class="me-2"
-                  color="primary"
-                />
-              </template>
-              <VListItemTitle class="text-caption text-medium-emphasis">
-                Número da Viagem
-              </VListItemTitle>
-              <VListItemSubtitle class="text-body-2 mt-1">
-                {{ props.formData.preco.numeroViagem }}
-              </VListItemSubtitle>
-            </VListItem>
-
-            <VListItem>
-              <template #prepend>
-                <VIcon
-                  icon="tabler-package"
-                  class="me-2"
-                  color="success"
-                />
-              </template>
-              <VListItemTitle class="text-caption text-medium-emphasis">
-                Pacote
-              </VListItemTitle>
-              <VListItemSubtitle class="text-body-2 mt-1">
-                #{{ props.formData.pacote.pacote?.codpac }}
-              </VListItemSubtitle>
-            </VListItem>
-
-            <VListItem>
-              <template #prepend>
-                <VIcon
-                  icon="tabler-car"
-                  class="me-2"
-                  color="info"
-                />
-              </template>
-              <VListItemTitle class="text-caption text-medium-emphasis">
-                Placa
-              </VListItemTitle>
-              <VListItemSubtitle class="text-body-2 mt-1">
-                {{ props.formData.placa.placa }} • {{ props.formData.placa.eixos }} eixos
-              </VListItemSubtitle>
-            </VListItem>
-
-            <VListItem>
-              <template #prepend>
-                <VIcon
-                  icon="tabler-calendar"
-                  class="me-2"
-                  color="warning"
-                />
-              </template>
-              <VListItemTitle class="text-caption text-medium-emphasis">
-                Período
-              </VListItemTitle>
-              <VListItemSubtitle class="text-body-2 mt-1">
-                {{ new Date(props.formData.configuracao.dataInicio).toLocaleDateString('pt-BR') }}
-                até
-                {{ new Date(props.formData.configuracao.dataFim).toLocaleDateString('pt-BR') }}
-              </VListItemSubtitle>
-            </VListItem>
-          </VList>
-        </VCardText>
-      </VCard>
-
-      <!-- Praças de Pedágio (se houver) -->
-      <VCard v-if="props.formData.preco.pracas && props.formData.preco.pracas.length > 0" class="mt-4">
-        <VCardItem>
-          <VCardTitle>Praças de Pedágio</VCardTitle>
-          <template #append>
-            <VChip size="small" color="warning">
-              {{ props.formData.preco.pracas.length }}
-            </VChip>
-          </template>
-        </VCardItem>
-
-        <VDivider />
-
-        <VCardText>
-          <div class="d-flex flex-column gap-2">
-            <div
+    <!-- Praças de Pedágio - Expandible -->
+    <VExpansionPanels
+      v-if="props.formData.preco.calculado && props.formData.preco.pracas && props.formData.preco.pracas.length > 0"
+      class="mt-3"
+    >
+      <VExpansionPanel>
+        <VExpansionPanelTitle class="text-body-2 py-2">
+          <VIcon icon="tabler-road" color="warning" size="small" class="me-2" />
+          Ver Detalhes dos Pedágios ({{ props.formData.preco.pracas.length }})
+        </VExpansionPanelTitle>
+        <VExpansionPanelText>
+          <VList density="compact" class="py-0">
+            <VListItem
               v-for="(praca, index) in props.formData.preco.pracas"
               :key="index"
-              class="d-flex justify-space-between align-center pa-2 bg-surface-variant rounded"
+              class="px-2"
+              min-height="28"
             >
-              <div class="d-flex align-center gap-2">
-                <VChip size="x-small" color="warning">{{ index + 1 }}</VChip>
-                <span class="text-body-2">{{ praca.nome }}</span>
-              </div>
-              <span class="text-body-2 font-weight-medium">R$ {{ praca.valor?.toFixed(2) || '0.00' }}</span>
-            </div>
-          </div>
-        </VCardText>
-      </VCard>
-    </div>
+              <template #prepend>
+                <VChip size="x-small" color="warning" class="me-2">{{ index + 1 }}</VChip>
+              </template>
+              <VListItemTitle class="text-caption">
+                {{ praca.nome }}
+              </VListItemTitle>
+              <VListItemSubtitle class="text-caption">
+                {{ praca.cidade }}/{{ praca.uf }}
+              </VListItemSubtitle>
+              <template #append>
+                <span class="text-caption font-weight-medium">R$ {{ praca.valor?.toFixed(2) || '0.00' }}</span>
+              </template>
+            </VListItem>
+          </VList>
+        </VExpansionPanelText>
+      </VExpansionPanel>
+    </VExpansionPanels>
 
     <!-- Initial State -->
     <VAlert

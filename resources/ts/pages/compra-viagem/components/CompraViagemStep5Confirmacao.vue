@@ -207,61 +207,59 @@ const irParaListagem = () => {
       <VAlert
         type="warning"
         variant="tonal"
-        prominent
-        class="mb-6"
+        class="mb-4"
       >
         <template #prepend>
-          <VIcon icon="tabler-alert-triangle" size="32" />
+          <VIcon icon="tabler-alert-triangle" />
         </template>
 
-        <VAlertTitle>Atenção: Operação Irreversível</VAlertTitle>
+        <VAlertTitle class="text-body-2">Atenção: Operação Irreversível</VAlertTitle>
         <div class="text-caption">
-          Ao confirmar, a viagem será efetivamente comprada no sistema SemParar.
-          Esta operação NÃO pode ser desfeita. Verifique todos os dados cuidadosamente.
+          Ao confirmar, a viagem será comprada no sistema SemParar e não poderá ser desfeita.
         </div>
       </VAlert>
 
-      <!-- Resumo Completo -->
-      <VRow>
+      <!-- Resumo Compacto -->
+      <VRow dense>
         <!-- Pacote -->
         <VCol cols="12" md="6">
           <VCard variant="tonal" color="success">
-            <VCardItem>
+            <VCardItem class="pb-2">
               <template #prepend>
-                <VIcon icon="tabler-package" color="success" />
+                <VIcon icon="tabler-package" size="small" color="success" />
               </template>
 
-              <VCardTitle>Pacote</VCardTitle>
+              <VCardTitle class="text-body-1">Pacote</VCardTitle>
             </VCardItem>
 
             <VDivider />
 
-            <VCardText>
-              <VList density="compact">
-                <VListItem>
+            <VCardText class="pa-3">
+              <VList density="compact" class="py-0">
+                <VListItem class="px-0" min-height="28">
                   <VListItemTitle class="text-caption text-medium-emphasis">
                     Código
                   </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2 font-weight-bold">
+                  <VListItemSubtitle class="text-caption font-weight-bold">
                     #{{ resumo.pacote?.codigo }}
                   </VListItemSubtitle>
                 </VListItem>
 
-                <VListItem>
+                <VListItem class="px-0" min-height="28">
                   <VListItemTitle class="text-caption text-medium-emphasis">
                     Transportador
                   </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2">
+                  <VListItemSubtitle class="text-caption">
                     {{ resumo.pacote?.transportador }}
                   </VListItemSubtitle>
                 </VListItem>
 
-                <VListItem>
+                <VListItem class="px-0" min-height="28">
                   <VListItemTitle class="text-caption text-medium-emphasis">
                     Entregas
                   </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2">
-                    {{ resumo.pacote?.entregas }} total ({{ resumo.pacote?.entregasComGps }} com GPS)
+                  <VListItemSubtitle class="text-caption">
+                    {{ resumo.pacote?.entregas }} ({{ resumo.pacote?.entregasComGps }} GPS)
                   </VListItemSubtitle>
                 </VListItem>
               </VList>
@@ -272,51 +270,42 @@ const irParaListagem = () => {
         <!-- Veículo -->
         <VCol cols="12" md="6">
           <VCard>
-            <VCardItem>
+            <VCardItem class="pb-2">
               <template #prepend>
-                <VIcon icon="tabler-car" color="info" />
+                <VIcon icon="tabler-car" size="small" color="info" />
               </template>
 
-              <VCardTitle>Veículo</VCardTitle>
+              <VCardTitle class="text-body-1">Veículo</VCardTitle>
             </VCardItem>
 
             <VDivider />
 
-            <VCardText>
-              <VList density="compact">
-                <VListItem>
+            <VCardText class="pa-3">
+              <VList density="compact" class="py-0">
+                <VListItem class="px-0" min-height="28">
                   <VListItemTitle class="text-caption text-medium-emphasis">
                     Placa
                   </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2 font-weight-bold">
+                  <VListItemSubtitle class="text-caption font-weight-bold">
                     {{ resumo.veiculo.placa }}
                   </VListItemSubtitle>
                 </VListItem>
 
-                <VListItem>
+                <VListItem class="px-0" min-height="28">
                   <VListItemTitle class="text-caption text-medium-emphasis">
                     Descrição
                   </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2">
+                  <VListItemSubtitle class="text-caption">
                     {{ resumo.veiculo.descricao }}
                   </VListItemSubtitle>
                 </VListItem>
 
-                <VListItem>
+                <VListItem class="px-0" min-height="28">
                   <VListItemTitle class="text-caption text-medium-emphasis">
-                    Eixos
+                    Eixos / Proprietário
                   </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2">
-                    {{ resumo.veiculo.eixos }} eixos
-                  </VListItemSubtitle>
-                </VListItem>
-
-                <VListItem>
-                  <VListItemTitle class="text-caption text-medium-emphasis">
-                    Proprietário
-                  </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2">
-                    {{ resumo.veiculo.proprietario }}
+                  <VListItemSubtitle class="text-caption">
+                    {{ resumo.veiculo.eixos }} eixos • {{ resumo.veiculo.proprietario }}
                   </VListItemSubtitle>
                 </VListItem>
               </VList>
@@ -327,46 +316,37 @@ const irParaListagem = () => {
         <!-- Rota -->
         <VCol cols="12" md="6">
           <VCard>
-            <VCardItem>
+            <VCardItem class="pb-2">
               <template #prepend>
-                <VIcon icon="tabler-route" color="primary" />
+                <VIcon icon="tabler-route" size="small" color="primary" />
               </template>
 
-              <VCardTitle>Rota SemParar</VCardTitle>
+              <VCardTitle class="text-body-1">Rota SemParar</VCardTitle>
             </VCardItem>
 
             <VDivider />
 
-            <VCardText>
-              <VList density="compact">
-                <VListItem>
+            <VCardText class="pa-3">
+              <VList density="compact" class="py-0">
+                <VListItem class="px-0" min-height="28">
                   <VListItemTitle class="text-caption text-medium-emphasis">
                     Nome
                   </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2">
+                  <VListItemSubtitle class="text-caption">
                     {{ resumo.rota?.nome }}
                   </VListItemSubtitle>
                 </VListItem>
 
-                <VListItem>
+                <VListItem class="px-0" min-height="28">
                   <VListItemTitle class="text-caption text-medium-emphasis">
-                    Municípios
+                    Municípios / Tempo
                   </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2">
-                    {{ resumo.rota?.municipios }} município(s)
+                  <VListItemSubtitle class="text-caption">
+                    {{ resumo.rota?.municipios }} municípios • {{ resumo.rota?.tempoViagem }} dias
                   </VListItemSubtitle>
                 </VListItem>
 
-                <VListItem>
-                  <VListItemTitle class="text-caption text-medium-emphasis">
-                    Tempo de Viagem
-                  </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2">
-                    {{ resumo.rota?.tempoViagem }} dia(s)
-                  </VListItemSubtitle>
-                </VListItem>
-
-                <VListItem v-if="resumo.rota?.modoCD || resumo.rota?.modoRetorno">
+                <VListItem v-if="resumo.rota?.modoCD || resumo.rota?.modoRetorno" class="px-0" min-height="28">
                   <VListItemTitle class="text-caption text-medium-emphasis">
                     Modos
                   </VListItemTitle>
@@ -383,64 +363,47 @@ const irParaListagem = () => {
         <!-- Preço -->
         <VCol cols="12" md="6">
           <VCard variant="tonal" color="warning">
-            <VCardItem>
+            <VCardItem class="pb-2">
               <template #prepend>
-                <VIcon icon="tabler-cash" color="warning" />
+                <VIcon icon="tabler-cash" size="small" color="warning" />
               </template>
 
-              <VCardTitle>Valor da Viagem</VCardTitle>
+              <VCardTitle class="text-body-1">Valor</VCardTitle>
             </VCardItem>
 
             <VDivider />
 
-            <VCardText>
-              <div class="text-center mb-4">
+            <VCardText class="pa-3">
+              <div class="text-center mb-3">
                 <div class="text-caption text-medium-emphasis mb-1">
                   Valor Total
                 </div>
-                <div class="text-h3 text-warning font-weight-bold">
+                <div class="text-h5 text-warning font-weight-bold">
                   R$ {{ resumo.preco.valor.toFixed(2) }}
                 </div>
               </div>
 
-              <VDivider class="my-4" />
+              <VDivider class="my-2" />
 
-              <VList density="compact">
-                <VListItem v-if="resumo.preco.numeroViagem">
-                  <VListItemTitle class="text-caption text-medium-emphasis">
-                    Número da Viagem
-                  </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2">
-                    {{ resumo.preco.numeroViagem }}
-                  </VListItemSubtitle>
-                </VListItem>
-
-                <VListItem>
+              <VList density="compact" class="py-0">
+                <VListItem class="px-0" min-height="28">
                   <VListItemTitle class="text-caption text-medium-emphasis">
                     Praças de Pedágio
                   </VListItemTitle>
-                  <VListItemSubtitle class="text-body-2">
+                  <VListItemSubtitle class="text-caption">
                     {{ resumo.preco.pracas }} praça(s)
                   </VListItemSubtitle>
                 </VListItem>
-              </VList>
-            </VCardText>
-          </VCard>
-        </VCol>
 
-        <!-- Período -->
-        <VCol cols="12">
-          <VCard variant="outlined">
-            <VCardText>
-              <div class="d-flex align-center justify-space-between">
-                <div class="d-flex align-center gap-2">
-                  <VIcon icon="tabler-calendar" color="info" />
-                  <span class="text-body-2 font-weight-medium">Período da Viagem:</span>
-                </div>
-                <span class="text-body-2">
-                  {{ resumo.periodo.dataInicio }} até {{ resumo.periodo.dataFim }}
-                </span>
-              </div>
+                <VListItem class="px-0" min-height="28">
+                  <VListItemTitle class="text-caption text-medium-emphasis">
+                    Período
+                  </VListItemTitle>
+                  <VListItemSubtitle class="text-caption">
+                    {{ resumo.periodo.dataInicio }} - {{ resumo.periodo.dataFim }}
+                  </VListItemSubtitle>
+                </VListItem>
+              </VList>
             </VCardText>
           </VCard>
         </VCol>
