@@ -291,14 +291,11 @@ onMounted(() => {
                 <VChip size="x-small" color="warning" class="me-2">{{ index + 1 }}</VChip>
               </template>
               <VListItemTitle class="text-caption">
-                {{ praca.nome }}
+                {{ praca.praca || 'Praça não identificada' }}
               </VListItemTitle>
               <VListItemSubtitle class="text-caption">
-                {{ praca.cidade }}/{{ praca.uf }}
+                {{ praca.rodovia }} - KM {{ praca.km }} ({{ praca.concessionaria }})
               </VListItemSubtitle>
-              <template #append>
-                <span class="text-caption font-weight-medium">R$ {{ praca.valor?.toFixed(2) || '0.00' }}</span>
-              </template>
             </VListItem>
           </VList>
         </VExpansionPanelText>

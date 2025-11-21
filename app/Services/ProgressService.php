@@ -1808,6 +1808,7 @@ class ProgressService
                 'data_fim' => $dataFim,
                 'test_mode' => $testMode
             ]);
+            Log::info('🔧 CODE VERSION: 2025-11-21-FIX-TYPE-MISMATCH - String conversion active');
 
             // Em TEST_MODE: retorna dados simulados
             if ($testMode) {
@@ -1880,6 +1881,7 @@ class ProgressService
             // Geocodificar todos de uma vez
             try {
                 $coordsMap = $geocodingService->getCoordenadasLote($municipiosParaGeocoding);
+                Log::info('Resultado do geocoding em lote', ['coords_map_keys' => array_keys($coordsMap), 'total' => count($coordsMap)]);
             } catch (\Exception $e) {
                 Log::warning('Erro ao geocodificar municípios em lote', ['error' => $e->getMessage()]);
                 $coordsMap = [];
@@ -1887,8 +1889,9 @@ class ProgressService
 
             // Adicionar municípios com coordenadas
             foreach ($resultMunicipios['data']['results'] as $mun) {
-                $cdibge = $mun['cdibge'];
+                $cdibge = (string) $mun['cdibge']; // Converter para string para bater com chave do $coordsMap
                 $coords = $coordsMap[$cdibge] ?? null;
+                Log::debug('Mapeando município para pontos', ['cdibge' => $cdibge, 'cdibge_type' => gettype($cdibge), 'coords' => $coords, 'coords_found' => $coords !== null]);
 
                 $pontos[] = [
                     'cod_ibge' => $cdibge,
