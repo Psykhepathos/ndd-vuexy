@@ -16,8 +16,7 @@ const emit = defineEmits<{
 // State
 const loadingRotas = ref(false)
 const rotasOptions = ref<any[]>([])
-const searchRota = ref('')
-const selectedRota = ref<any | null>(null)
+const selectedRota = ref<number | null>(null)
 const modoCD = ref(false)
 const modoRetorno = ref(false)
 const loadingRotaMunicipios = ref(false)
@@ -33,10 +32,8 @@ watch(isStepValid, (valid) => {
 })
 
 // Recarregar rotas quando modo CD muda
-watch(modoCD, () => {
+watch(modoCD, async () => {
   selectedRota.value = null
-  searchRota.value = ''
-  rotasOptions.value = []
   const updated: CompraViagemFormData = {
     ...props.formData,
     rota: {
@@ -48,6 +45,7 @@ watch(modoCD, () => {
     step3Completo: false
   }
   emit('update:formData', updated)
+  await carregarTodasRotas()
 })
 
 watch(modoRetorno, () => {
@@ -62,57 +60,37 @@ watch(modoRetorno, () => {
 })
 
 // Methods
-const buscarRotas = async (search: string | null) => {
-  if (!search || search.length < 2) {
-    rotasOptions.value = []
-    return
-  }
-
+const carregarTodasRotas = async () => {
   loadingRotas.value = true
   try {
     const params = new URLSearchParams({
-      search: search,
+      search: '', // Vazio = busca TODAS
       flg_cd: modoCD.value ? '1' : '0'
     })
 
-    const response = await fetch(`http://localhost:8002/api/semparar-rotas?${params}`)
+    const response = await fetch(`http://localhost:8002/api/compra-viagem/rotas?${params}`)
     const data = await response.json()
 
     if (!data.success) {
       throw new Error(data.message || 'Erro ao buscar rotas')
     }
 
-    const rotas = data.data || []
-
-    // Formatar para o autocomplete
-    rotasOptions.value = rotas.map((rota: any) => ({
-      label: `${rota.desspararrot || rota.desSPararRot} (ID: ${rota.spararrotid || rota.sPararRotID} • ${rota.tempoviagem || rota.tempoViagem} dias)`,
-      value: rota.spararrotid || rota.sPararRotID,
-      raw: {
-        sPararRotID: rota.spararrotid || rota.sPararRotID,
-        desSPararRot: rota.desspararrot || rota.desSPararRot,
-        tempoViagem: rota.tempoviagem || rota.tempoViagem,
-        flgCD: rota.flgcd || rota.flgCD,
-        flgRetorno: rota.flgretorno || rota.flgRetorno
-      }
-    }))
+    // data.data já está no formato correto do backend (value, title, subtitle, flgcd, flgretorno)
+    rotasOptions.value = data.data || []
 
   } catch (error) {
-    console.error('Erro ao buscar rotas:', error)
+    console.error('Erro ao carregar rotas:', error)
     rotasOptions.value = []
   } finally {
     loadingRotas.value = false
   }
 }
 
-const selecionarRota = async (rotaItem: any) => {
-  if (!rotaItem || !rotaItem.raw) {
+const selecionarRota = async (rotaIdValue: number | null) => {
+  if (!rotaIdValue) {
     limparRota()
     return
   }
-
-  const rota = rotaItem.raw
-  const rotaIdValue = rota.sPararRotID
 
   try {
     // VALIDAR ROTA PRIMEIRO
@@ -137,6 +115,13 @@ const selecionarRota = async (rotaItem: any) => {
 
     console.log('✅ Rota validada com sucesso')
 
+    // Buscar dados da rota selecionada nas options
+    const rotaSelecionada = rotasOptions.value.find(r => r.value === rotaIdValue)
+    if (!rotaSelecionada) {
+      console.error('Rota não encontrada nas opções')
+      return
+    }
+
     // Carregar municípios da rota
     await carregarMunicipiosRota(rotaIdValue)
 
@@ -145,11 +130,11 @@ const selecionarRota = async (rotaItem: any) => {
       ...props.formData,
       rota: {
         rota: {
-          sPararRotID: rota.sPararRotID,
-          desSPararRot: rota.desSPararRot,
-          tempoViagem: rota.tempoViagem,
-          flgCD: rota.flgCD,
-          flgRetorno: rota.flgRetorno
+          sPararRotID: rotaIdValue,
+          desSPararRot: rotaSelecionada.title,
+          tempoViagem: rotaSelecionada.tempoviagem,
+          flgCD: rotaSelecionada.flgcd,
+          flgRetorno: rotaSelecionada.flgretorno
         },
         municipios: props.formData.rota.municipios, // Será preenchido em carregarMunicipiosRota
         modoCD: modoCD.value,
@@ -207,8 +192,6 @@ const carregarMunicipiosRota = async (rotaIdValue: number) => {
 
 const limparRota = () => {
   selectedRota.value = null
-  searchRota.value = ''
-  rotasOptions.value = []
 
   const updated: CompraViagemFormData = {
     ...props.formData,
@@ -224,18 +207,15 @@ const limparRota = () => {
   emit('update:formData', updated)
 }
 
-// Lifecycle - Inicializar com dados existentes se houver
-onMounted(() => {
+// Lifecycle - Carregar rotas ao montar + inicializar com dados existentes
+onMounted(async () => {
+  await carregarTodasRotas()
+
+  // Inicializar com dados existentes se houver
   if (props.formData.rota.rota) {
     modoCD.value = props.formData.rota.modoCD
     modoRetorno.value = props.formData.rota.modoRetorno
-
-    // Reconstruir objeto selectedRota se já existe no formData
-    selectedRota.value = {
-      label: `${props.formData.rota.rota.desSPararRot} (ID: ${props.formData.rota.rota.sPararRotID} • ${props.formData.rota.rota.tempoViagem} dias)`,
-      value: props.formData.rota.rota.sPararRotID,
-      raw: props.formData.rota.rota
-    }
+    selectedRota.value = props.formData.rota.rota.sPararRotID
   }
 })
 </script>
@@ -279,44 +259,40 @@ onMounted(() => {
     <VAutocomplete
       :key="`rota-autocomplete-${modoCD}`"
       v-model="selectedRota"
-      v-model:search="searchRota"
       :items="rotasOptions"
       :loading="loadingRotas"
       :disabled="props.formData.step3Completo"
-      item-title="label"
+      item-title="title"
       item-value="value"
       label="Buscar Rota SemParar *"
       placeholder="Digite para buscar..."
       prepend-inner-icon="tabler-route"
       clearable
-      return-object
-      hide-no-data
-      @update:search="buscarRotas"
+      :menu-props="{ maxHeight: 400 }"
       @update:model-value="selecionarRota"
     >
       <template #item="{ props: itemProps, item }">
-        <VListItem v-bind="itemProps">
+        <VListItem
+          v-bind="itemProps"
+          :title="item.raw.title"
+          :subtitle="item.raw.subtitle"
+        >
           <template #prepend>
             <VIcon
-              :icon="item.raw?.raw?.flgCD ? 'tabler-building-warehouse' : 'tabler-route'"
-              :color="item.raw?.raw?.flgCD ? 'info' : 'primary'"
+              :icon="item.raw.flgcd ? 'tabler-building-warehouse' : 'tabler-route'"
+              :color="item.raw.flgcd ? 'info' : 'primary'"
             />
           </template>
 
-          <VListItemTitle>{{ item.raw?.raw?.desSPararRot }}</VListItemTitle>
-
-          <VListItemSubtitle>
+          <template #append>
             <VChip
+              v-if="item.raw.flgretorno"
               size="x-small"
-              :color="item.raw?.raw?.flgCD ? 'info' : 'primary'"
-              class="me-2"
+              color="warning"
             >
-              {{ item.raw?.raw?.flgCD ? 'CD' : 'Rota' }}
+              Retorno
             </VChip>
-            <span class="text-caption">
-              ID: {{ item.raw?.raw?.sPararRotID }} • {{ item.raw?.raw?.tempoViagem }} dias
-            </span>
-          </VListItemSubtitle>
+          </template>
         </VListItem>
       </template>
     </VAutocomplete>
