@@ -15,8 +15,9 @@ const emit = defineEmits<{
 // State
 const loadingPacotes = ref(false)
 const loadingEntregas = ref(false)
-const pacotesDisponiveis = ref<PacoteCompraViagem[]>([])
-const searchPacote = ref<string | null>(null)
+const pacotesDisponiveis = ref<any[]>([])
+const searchPacote = ref('')
+const selectedPacote = ref<PacoteCompraViagem | null>(null)
 
 // Computed
 const pacoteSelecionado = computed(() => props.formData.pacote.pacote)
@@ -46,7 +47,7 @@ watch(isStepValid, (valid) => {
 })
 
 // Methods
-const buscarPacotes = async (search: string) => {
+const buscarPacotes = async (search: string | null) => {
   if (!search || search.length < 2) {
     pacotesDisponiveis.value = []
     return
@@ -60,7 +61,12 @@ const buscarPacotes = async (search: string) => {
     const data = await response.json()
 
     if (data.success && data.data) {
-      pacotesDisponiveis.value = data.data
+      // Formatar para o autocomplete
+      pacotesDisponiveis.value = data.data.map((pacote: any) => ({
+        label: `#${pacote.codpac} - ${pacote.nomtrn} (${pacote.sitpac})`,
+        codpac: pacote.codpac,
+        raw: pacote
+      }))
     }
   } catch (error) {
     console.error('Erro ao buscar pacotes:', error)
@@ -69,7 +75,10 @@ const buscarPacotes = async (search: string) => {
   }
 }
 
-const selecionarPacote = async (pacote: PacoteCompraViagem) => {
+const selecionarPacote = async (pacoteItem: any) => {
+  if (!pacoteItem || !pacoteItem.raw) return
+
+  const pacote = pacoteItem.raw
   loadingEntregas.value = true
 
   try {
@@ -138,7 +147,9 @@ const limparPacote = () => {
   }
 
   emit('update:formData', updated)
-  searchPacote.value = null
+  selectedPacote.value = null
+  searchPacote.value = ''
+  pacotesDisponiveis.value = []
 }
 
 // Utility: Processar coordenada GPS do Progress
@@ -158,13 +169,6 @@ const processGpsCoordinate = (coord: string | null): number | null => {
 
   return parseFloat(coord)
 }
-
-// Lifecycle
-watch(searchPacote, (newSearch) => {
-  if (newSearch && newSearch.length >= 2) {
-    buscarPacotes(newSearch)
-  }
-})
 </script>
 
 <template>
@@ -178,17 +182,20 @@ watch(searchPacote, (newSearch) => {
     </p>
 
     <!-- Autocomplete de Pacotes -->
-    <AppAutocomplete
-      v-model="searchPacote"
+    <VAutocomplete
+      v-model="selectedPacote"
+      v-model:search="searchPacote"
       :items="pacotesDisponiveis"
       :loading="loadingPacotes"
-      item-title="codpac"
+      item-title="label"
       item-value="codpac"
       label="Buscar Pacote *"
       placeholder="Digite o código do pacote (ex: 3043368)"
       prepend-inner-icon="tabler-package"
       clearable
-      :return-object="true"
+      return-object
+      hide-no-data
+      @update:search="buscarPacotes"
       @update:model-value="selecionarPacote"
     >
       <template #item="{ props: itemProps, item }">
@@ -196,27 +203,27 @@ watch(searchPacote, (newSearch) => {
           <template #prepend>
             <VIcon
               icon="tabler-package"
-              :color="item.raw.sitpac === 'FECHADO' ? 'success' : 'warning'"
+              :color="item.raw.raw?.sitpac === 'FECHADO' ? 'success' : 'warning'"
             />
           </template>
 
-          <VListItemTitle>Pacote #{{ item.raw.codpac }}</VListItemTitle>
+          <VListItemTitle>Pacote #{{ item.raw.raw?.codpac }}</VListItemTitle>
 
           <VListItemSubtitle>
             <VChip
               size="x-small"
-              :color="item.raw.sitpac === 'FECHADO' ? 'success' : 'warning'"
+              :color="item.raw.raw?.sitpac === 'FECHADO' ? 'success' : 'warning'"
               class="me-2"
             >
-              {{ item.raw.sitpac }}
+              {{ item.raw.raw?.sitpac }}
             </VChip>
             <span class="text-caption">
-              Transportador: {{ item.raw.nomtrn }}
+              Transportador: {{ item.raw.raw?.nomtrn }}
             </span>
           </VListItemSubtitle>
         </VListItem>
       </template>
-    </AppAutocomplete>
+    </VAutocomplete>
 
     <!-- Loading Entregas -->
     <VSkeletonLoader
