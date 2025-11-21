@@ -75,16 +75,26 @@ const buscarRotas = async (search: string | null) => {
       flg_cd: modoCD.value ? '1' : '0'
     })
 
-    const response = await fetch(`http://localhost:8002/api/compra-viagem/rotas?${params}`)
+    const response = await fetch(`http://localhost:8002/api/semparar-rotas?${params}`)
     const data = await response.json()
+
+    if (!data.success) {
+      throw new Error(data.message || 'Erro ao buscar rotas')
+    }
 
     const rotas = data.data || []
 
     // Formatar para o autocomplete
     rotasOptions.value = rotas.map((rota: any) => ({
-      label: `${rota.desSPararRot} (ID: ${rota.sPararRotID} • ${rota.tempoViagem} dias)`,
-      value: rota.sPararRotID,
-      raw: rota
+      label: `${rota.desspararrot || rota.desSPararRot} (ID: ${rota.spararrotid || rota.sPararRotID} • ${rota.tempoviagem || rota.tempoViagem} dias)`,
+      value: rota.spararrotid || rota.sPararRotID,
+      raw: {
+        sPararRotID: rota.spararrotid || rota.sPararRotID,
+        desSPararRot: rota.desspararrot || rota.desSPararRot,
+        tempoViagem: rota.tempoviagem || rota.tempoViagem,
+        flgCD: rota.flgcd || rota.flgCD,
+        flgRetorno: rota.flgretorno || rota.flgRetorno
+      }
     }))
 
   } catch (error) {
@@ -288,23 +298,23 @@ onMounted(() => {
         <VListItem v-bind="itemProps">
           <template #prepend>
             <VIcon
-              :icon="item.raw.raw?.flgCD ? 'tabler-building-warehouse' : 'tabler-route'"
-              :color="item.raw.raw?.flgCD ? 'info' : 'primary'"
+              :icon="item.raw?.raw?.flgCD ? 'tabler-building-warehouse' : 'tabler-route'"
+              :color="item.raw?.raw?.flgCD ? 'info' : 'primary'"
             />
           </template>
 
-          <VListItemTitle>{{ item.raw.raw?.desSPararRot }}</VListItemTitle>
+          <VListItemTitle>{{ item.raw?.raw?.desSPararRot }}</VListItemTitle>
 
           <VListItemSubtitle>
             <VChip
               size="x-small"
-              :color="item.raw.raw?.flgCD ? 'info' : 'primary'"
+              :color="item.raw?.raw?.flgCD ? 'info' : 'primary'"
               class="me-2"
             >
-              {{ item.raw.raw?.flgCD ? 'CD' : 'Rota' }}
+              {{ item.raw?.raw?.flgCD ? 'CD' : 'Rota' }}
             </VChip>
             <span class="text-caption">
-              ID: {{ item.raw.raw?.sPararRotID }} • {{ item.raw.raw?.tempoViagem }} dias
+              ID: {{ item.raw?.raw?.sPararRotID }} • {{ item.raw?.raw?.tempoViagem }} dias
             </span>
           </VListItemSubtitle>
         </VListItem>
