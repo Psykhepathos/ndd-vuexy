@@ -56,7 +56,7 @@ const buscarPacotes = async (search: string | null) => {
   loadingPacotes.value = true
   try {
     const response = await fetch(
-      `http://localhost:8002/api/compra-viagem/pacotes?search=${encodeURIComponent(search)}`
+      `http://localhost:8002/api/pacotes/autocomplete?search=${encodeURIComponent(search)}`
     )
     const data = await response.json()
 
