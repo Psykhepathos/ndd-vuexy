@@ -8,9 +8,9 @@ const isDevelopment = import.meta.env.DEV
 const isProduction = import.meta.env.PROD
 
 // Base URL da API Laravel
-export const API_BASE_URL = isDevelopment
-  ? 'http://localhost:8002'  // Desenvolvimento
-  : window.location.origin    // Produção (usa o mesmo domínio)
+// SEMPRE usa window.location.origin para evitar problemas de CORS
+// quando acessado via IP da rede (ex: 10.0.3.9:8002)
+export const API_BASE_URL = window.location.origin
 
 // Endpoints principais
 export const API_ENDPOINTS = {

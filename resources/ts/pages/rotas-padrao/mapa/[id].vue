@@ -3,6 +3,7 @@ import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import draggable from 'vuedraggable'
 import { usePackageSimulation } from '@/composables/usePackageSimulation'
+import { usePracasPedagio } from '@/composables/usePracasPedagio'
 import { API_ENDPOINTS, apiFetch } from '@/config/api'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -130,6 +131,17 @@ const {
   createCombinedWaypoints,
 } = usePackageSimulation()
 
+// Composable para praças de pedágio
+const {
+  loading: loadingPracas,
+  pracas,
+  loadAndDisplayPracas,
+  removePracasFromMap
+} = usePracasPedagio()
+
+// Estado para controlar exibição de praças
+const mostrarPracas = ref(true)
+
 // Validação de coordenadas
 const isValidCoordinate = (lat?: number, lon?: number): boolean => {
   if (lat === undefined || lon === undefined) return false
@@ -195,6 +207,48 @@ const fetchRota = async () => {
   } catch (error) {
     console.error('Erro ao carregar rota SemParar:', error)
     loading.value = false
+  }
+}
+
+/**
+ * Carrega e exibe TODAS as praças de pedágio no mapa
+ */
+async function loadPracasProximasRota() {
+  if (!map.value || !mostrarPracas.value) {
+    return
+  }
+
+  try {
+    addDebugLog('info', 'PRACAS_PEDAGIO', 'Carregando TODAS as praças de pedágio...')
+
+    const pracasEncontradas = await loadAndDisplayPracas(
+      map.value,
+      {
+        color: '#F44336', // Vermelho para praças de pedágio
+        showPopup: true,
+        zIndex: 1000
+      }
+    )
+
+    addDebugLog('success', 'PRACAS_PEDAGIO', `${pracasEncontradas.length} praças de pedágio exibidas no mapa`)
+  } catch (error) {
+    addDebugLog('error', 'PRACAS_PEDAGIO', 'Erro ao carregar praças de pedágio', error)
+  }
+}
+
+/**
+ * Toggle para mostrar/ocultar praças de pedágio
+ */
+async function togglePracas() {
+  mostrarPracas.value = !mostrarPracas.value
+
+  if (mostrarPracas.value) {
+    // Carregar TODAS as praças
+    await loadPracasProximasRota()
+  } else {
+    // Remover praças do mapa
+    removePracasFromMap()
+    addDebugLog('info', 'PRACAS_PEDAGIO', 'Praças de pedágio ocultadas')
   }
 }
 
@@ -512,6 +566,13 @@ const updateMapMarkersInternal = async () => {
     })
 
     // ============================================================================
+    // CARREGAMENTO PARALELO: Routing + Praças de Pedágio
+    // ============================================================================
+    // Iniciar carregamento das praças ANTES do routing para renderizar simultaneamente
+    // ⚠️ IMPORTANTE: Não usar await aqui, apenas iniciar a Promise
+    const pracasPromise = mostrarPracas.value ? loadPracasProximasRota() : Promise.resolve()
+
+    // ============================================================================
     // ROUTING VIA MAPSERVICE UNIFICADO (OSRM-only com chunking automático)
     // ============================================================================
     //
@@ -604,6 +665,12 @@ const updateMapMarkersInternal = async () => {
     } else {
       addDebugLog('error', 'ROUTING', 'Nenhum município com coordenadas válidas')
     }
+
+    // ============================================================================
+    // AGUARDAR PRAÇAS DE PEDÁGIO CARREGAREM (iniciado em paralelo acima)
+    // ============================================================================
+    await pracasPromise
+    addDebugLog('success', 'RENDER_COMPLETE', 'Rota e praças renderizadas simultaneamente')
 
   } catch (error: any) {
     addDebugLog('error', 'MAP_UPDATE', 'Erro ao atualizar mapa', error)
@@ -1125,6 +1192,26 @@ onMounted(async () => {
             v-if="debugLogs.length > 0"
             :content="debugLogs.length"
             color="error"
+            inline
+            class="ms-2"
+          />
+        </VBtn>
+
+        <!-- Botão Toggle Praças de Pedágio -->
+        <VBtn
+          :color="mostrarPracas ? 'error' : 'default'"
+          :variant="mostrarPracas ? 'flat' : 'tonal'"
+          prepend-icon="tabler-coin"
+          @click="togglePracas"
+          :loading="loadingPracas"
+          title="Mostrar/ocultar praças de pedágio próximas à rota"
+        >
+          {{ mostrarPracas ? 'Ocultar' : 'Mostrar' }} Praças
+          <VBadge
+            v-if="mostrarPracas && pracas.length > 0"
+            :content="pracas.length"
+            color="white"
+            text-color="error"
             inline
             class="ms-2"
           />

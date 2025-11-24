@@ -25,6 +25,11 @@ export default [
         icon: { icon: 'tabler-route-2' },
       },
       {
+        title: 'Praças de Pedágio',
+        to: 'pracas-pedagio',
+        icon: { icon: 'tabler-coin' },
+      },
+      {
         title: 'Rotas Padrão',
         to: 'rotas-padrao',
         icon: { icon: 'tabler-map-route' },

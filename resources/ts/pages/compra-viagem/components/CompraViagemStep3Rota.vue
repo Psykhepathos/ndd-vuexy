@@ -68,7 +68,7 @@ const carregarTodasRotas = async () => {
       flg_cd: modoCD.value ? '1' : '0'
     })
 
-    const response = await fetch(`http://localhost:8002/api/compra-viagem/rotas?${params}`)
+    const response = await fetch(`${window.location.origin}/api/compra-viagem/rotas?${params}`)
     const data = await response.json()
 
     if (!data.success) {
@@ -94,7 +94,7 @@ const selecionarRota = async (rotaIdValue: number | null) => {
 
   try {
     // VALIDAR ROTA PRIMEIRO
-    const response = await fetch('http://localhost:8002/api/compra-viagem/validar-rota', {
+    const response = await fetch(`${window.location.origin}/api/compra-viagem/validar-rota`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -161,7 +161,7 @@ const carregarMunicipiosRota = async (rotaIdValue: number) => {
 
   loadingRotaMunicipios.value = true
   try {
-    const response = await fetch(`http://localhost:8002/api/semparar-rotas/${rotaIdValue}/municipios`)
+    const response = await fetch(`${window.location.origin}/api/semparar-rotas/${rotaIdValue}/municipios`)
     const data = await response.json()
 
     if (!data.success) {

@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\MapController;
 use App\Http\Controllers\Api\MotoristaController;
 use App\Http\Controllers\Api\OSRMController;
 use App\Http\Controllers\Api\PacoteController;
+use App\Http\Controllers\Api\PracaPedagioController;
 use App\Http\Controllers\Api\ProgressController;
 use App\Http\Controllers\Api\RotaController;
 use App\Http\Controllers\Api\SemPararController;
@@ -108,6 +109,35 @@ Route::middleware('api')->group(function () {
     Route::prefix('geocoding')->group(function () {
         Route::post('ibge', [GeocodingController::class, 'getCoordenadasByIbge']);
         Route::post('lote', [GeocodingController::class, 'getCoordenadasLote']);
+    });
+
+    // Rotas para gestão de praças de pedágio (ANTT)
+    Route::prefix('pracas-pedagio')->group(function () {
+        // Rotas específicas primeiro para evitar conflitos com /{id}
+
+        // Estatísticas (público)
+        Route::get('estatisticas', [PracaPedagioController::class, 'estatisticas'])
+            ->middleware('throttle:30,1');  // 30 requests per minute
+
+        // Buscar praças próximas a coordenadas (público)
+        Route::post('proximidade', [PracaPedagioController::class, 'proximidade'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        // Importar CSV (público por ora, considerar auth futuramente)
+        Route::post('importar', [PracaPedagioController::class, 'importar'])
+            ->middleware('throttle:5,1');   // 5 requests per minute (operação pesada)
+
+        // Limpar todas as praças (público por ora, considerar auth futuramente)
+        Route::delete('limpar', [PracaPedagioController::class, 'limpar'])
+            ->middleware('throttle:2,1');   // 2 requests per minute (operação crítica)
+
+        // Listagem com filtros e paginação (público)
+        Route::get('/', [PracaPedagioController::class, 'index'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        // Obter praça específica (público) - SEMPRE POR ÚLTIMO
+        Route::get('/{id}', [PracaPedagioController::class, 'show'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
     });
 
     // Rotas para MapService unificado (FASE 1 - Backend Foundation)

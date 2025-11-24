@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { usePracasPedagio } from '@/composables/usePracasPedagio'
 import type { CompraViagemFormData, MapMarker } from '../types'
 
 // Props
@@ -15,6 +16,17 @@ const map = ref<L.Map | null>(null)
 const markersLayer = ref<L.LayerGroup | null>(null)
 const routeLayer = ref<L.LayerGroup | null>(null)
 const distanciaTotal = ref(0)
+
+// Composable para praças de pedágio ANTT (banco de dados)
+const {
+  loading: loadingPracasANTT,
+  pracas: pracasANTT,
+  loadAndDisplayPracas,
+  removePracasFromMap
+} = usePracasPedagio()
+
+// Estado para controlar exibição de praças ANTT
+const mostrarPracasANTT = ref(true)
 
 // Computed
 const estatisticas = computed(() => {
@@ -143,6 +155,11 @@ const atualizarMapa = async () => {
     await calcularRota(waypoints)
   }
 
+  // === 5.5. CARREGAR TODAS AS PRAÇAS ANTT ===
+  if (mostrarPracasANTT.value) {
+    await loadPracasANTT()
+  }
+
   // === 6. AJUSTAR ZOOM ===
   if (markers.length > 0) {
     const bounds = L.latLngBounds(markers.map(m => [m.lat, m.lon]))
@@ -207,7 +224,7 @@ const calcularRota = async (waypoints: L.LatLng[]) => {
     const mapServiceWaypoints = waypoints.map(w => [w.lat, w.lng] as [number, number])
 
     // Chamar MapService
-    const response = await fetch('http://localhost:8002/api/map/route', {
+    const response = await fetch(`${window.location.origin}/api/map/route`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -277,6 +294,48 @@ const desenharLinhaReta = (waypoints: L.LatLng[]) => {
   console.log('📍 Linha reta desenhada (fallback)')
 }
 
+/**
+ * Carrega e exibe TODAS as praças de pedágio ANTT
+ */
+const loadPracasANTT = async () => {
+  if (!map.value || !mostrarPracasANTT.value) {
+    return
+  }
+
+  try {
+    console.log('🏛️ Carregando TODAS as praças ANTT...')
+
+    const pracasEncontradas = await loadAndDisplayPracas(
+      map.value,
+      {
+        color: '#9C27B0', // Roxo para diferenciar das praças SemParar (amarelas)
+        showPopup: true,
+        zIndex: 999 // Menor que praças SemParar
+      }
+    )
+
+    console.log(`✅ ${pracasEncontradas.length} praças ANTT exibidas no mapa`)
+  } catch (error) {
+    console.error('❌ Erro ao carregar praças ANTT:', error)
+  }
+}
+
+/**
+ * Toggle para mostrar/ocultar praças ANTT
+ */
+const togglePracasANTT = async () => {
+  mostrarPracasANTT.value = !mostrarPracasANTT.value
+
+  if (mostrarPracasANTT.value) {
+    // Carregar TODAS as praças
+    await loadPracasANTT()
+  } else {
+    // Remover praças do mapa
+    removePracasFromMap()
+    console.log('🏛️ Praças ANTT ocultadas')
+  }
+}
+
 // Watchers
 watch(() => props.formData, async () => {
   await nextTick()
@@ -295,10 +354,22 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  // ⚠️ CRÍTICO: Remover praças ANTES de destruir o mapa
+  // Senão os marcadores ficam "órfãos" e causam erro: _latLngToNewLayerPoint
+  removePracasFromMap()
+
   if (map.value) {
     map.value.remove()
     map.value = null
   }
+})
+
+// Expor funções e estados para componente pai
+defineExpose({
+  togglePracasANTT,
+  mostrarPracasANTT,
+  pracasANTT,
+  loadingPracasANTT
 })
 </script>
 

@@ -45,7 +45,7 @@ const verificarPreco = async () => {
   try {
     console.log('💰 Calculando preço da viagem...')
 
-    const response = await fetch('http://localhost:8002/api/compra-viagem/verificar-preco', {
+    const response = await fetch(`${window.location.origin}/api/compra-viagem/verificar-preco`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

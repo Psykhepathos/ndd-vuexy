@@ -143,6 +143,8 @@ declare module 'vue-router/auto-routes' {
     'pages-pricing': RouteRecordInfo<'pages-pricing', '/pages/pricing', Record<never, never>, Record<never, never>>,
     'pages-typography': RouteRecordInfo<'pages-typography', '/pages/typography', Record<never, never>, Record<never, never>>,
     'pages-user-profile-tab': RouteRecordInfo<'pages-user-profile-tab', '/pages/user-profile/:tab', { tab: ParamValue<true> }, { tab: ParamValue<false> }>,
+    'pracas-pedagio': RouteRecordInfo<'pracas-pedagio', '/pracas-pedagio', Record<never, never>, Record<never, never>>,
+    'pracas-pedagio-mapa-id': RouteRecordInfo<'pracas-pedagio-mapa-id', '/pracas-pedagio/mapa/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
     'register': RouteRecordInfo<'register', '/register', Record<never, never>, Record<never, never>>,
     'rotas-padrao': RouteRecordInfo<'rotas-padrao', '/rotas-padrao', Record<never, never>, Record<never, never>>,
     'rotas-padrao-mapa-id': RouteRecordInfo<'rotas-padrao-mapa-id', '/rotas-padrao/mapa/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
