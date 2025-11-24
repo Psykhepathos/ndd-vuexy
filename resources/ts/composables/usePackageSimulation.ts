@@ -91,8 +91,11 @@ export function usePackageSimulation() {
     loadingPacotes.value = true
 
     try {
+      // Limitar busca a 50 caracteres (limite da API)
+      const searchTruncated = search.substring(0, 50)
+
       const params = new URLSearchParams({
-        search: search
+        search: searchTruncated
       })
 
       const response = await apiFetch(`${API_ENDPOINTS.pacoteAutocomplete}?${params}`)
@@ -120,16 +123,24 @@ export function usePackageSimulation() {
     loadingSimulation.value = true
 
     try {
+      const payload = {
+        codPac: codPac  // ✅ Backend espera 'codPac' (camelCase), não 'cod_pac'
+      }
+
+      console.log('📤 [DEBUG] Enviando payload para API:', JSON.stringify(payload, null, 2))
+      console.log('📤 [DEBUG] URL:', API_ENDPOINTS.pacoteItinerario)
+      console.log('📤 [DEBUG] codPac type:', typeof codPac, '| value:', codPac)
+
       const response = await apiFetch(API_ENDPOINTS.pacoteItinerario, {
         method: 'POST',
-        body: JSON.stringify({
-          Pacote: {
-            codPac: codPac
-          }
-        })
+        body: JSON.stringify(payload)
       })
 
+      console.log('📥 [DEBUG] Response status:', response.status)
+
       const data = await response.json()
+
+      console.log('📥 [DEBUG] Response data:', data)
 
       if (data.success && data.data?.pedidos) {
         // Processar coordenadas GPS

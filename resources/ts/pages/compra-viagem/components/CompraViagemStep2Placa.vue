@@ -39,7 +39,7 @@ const validarPlaca = async () => {
 
   loadingPlaca.value = true
   try {
-    const response = await fetch('http://localhost:8002/api/compra-viagem/validar-placa', {
+    const response = await fetch(`${window.location.origin}/api/compra-viagem/validar-placa`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ placa: placa.value })

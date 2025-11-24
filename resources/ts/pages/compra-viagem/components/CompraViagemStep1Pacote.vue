@@ -56,7 +56,7 @@ const buscarPacotes = async (search: string | null) => {
   loadingPacotes.value = true
   try {
     const response = await fetch(
-      `http://localhost:8002/api/pacotes/autocomplete?search=${encodeURIComponent(search)}`
+      `${window.location.origin}/api/pacotes/autocomplete?search=${encodeURIComponent(search)}`
     )
     const data = await response.json()
 
@@ -83,7 +83,7 @@ const selecionarPacote = async (pacoteItem: any) => {
 
   try {
     // Buscar itinerário do pacote
-    const response = await fetch('http://localhost:8002/api/pacotes/itinerario', {
+    const response = await fetch(`${window.location.origin}/api/pacotes/itinerario`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ codPac: pacote.codpac })

@@ -115,4 +115,12 @@ export default defineConfig({
       './resources/ts/**/*.vue',
     ],
   },
+  server: {
+    host: '0.0.0.0', // Aceita conexões de qualquer IP da rede
+    port: 5173,
+    cors: true,
+    hmr: {
+      host: '10.0.3.9', // Substitua pelo seu IP da rede
+    },
+  },
 })
