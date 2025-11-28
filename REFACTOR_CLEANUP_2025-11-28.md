@@ -292,8 +292,171 @@ Ao adicionar nova documentação:
 
 ---
 
+---
+
+## 🔄 FASE 2: Limpeza Completa (Continuação)
+
+**Data:** 2025-11-28 (continuação)
+**Commit:** 6df592e
+
+### Arquivos Deletados Adicionais: 5
+
+#### test-openroute-api.js
+- **Razão:** Script de teste da API OpenRouteService (diferente do .cjs)
+- **Risco:** ⚠️ **API key exposta** no código (linha 6)
+- **Status:** Obsoleto - OpenRouteService não foi selecionado
+- **Tamanho:** ~3KB
+
+#### test-openroute.html
+- **Razão:** HTML de teste para OpenRouteService
+- **Status:** Obsoleto - Acompanha o test-openroute-api.js
+- **Tamanho:** ~1KB
+
+#### test-roteirizar-pacote-3043368.json
+- **Razão:** Fixture de teste antiga que não foi deletada na Fase 1
+- **Status:** Obsoleto - Teste específico não mais referenciado
+- **Tamanho:** 2.8KB
+- **Localização:** Raiz do projeto (exposto publicamente)
+
+#### count-braces.php
+- **Razão:** Script one-off de debug para contar chaves em arquivo
+- **Status:** Obsoleto - Debug de problema já resolvido
+- **Tamanho:** ~300 bytes
+- **Uso:** Verificar balanceamento de chaves em SemPararSoapService.php
+
+#### appModelsMotorista.php
+- **Razão:** Arquivo COMPLETAMENTE VAZIO
+- **Status:** Lixo - Sem conteúdo (apenas 2 bytes - 2 line breaks)
+- **Tamanho:** 2 bytes
+
+### Scripts Reorganizados: 9 → scripts/
+
+**Pasta criada:** `scripts/`
+
+**Scripts de Teste (6):**
+1. `test-custo.ps1` - Teste API custo SemParar
+2. `test-fase2a-completo.ps1` - Teste FASE 2A (roteirização + compra)
+3. `test-fase2a-completo.sh` - Versão bash do teste FASE 2A
+4. `test-fase2b-completo.ps1` - Teste FASE 2B (persistência Progress)
+5. `test-listar-rotas-semparar.php` - Teste listagem de rotas
+6. `test-mapservice-completo.ps1` - Teste completo MapService
+
+**Scripts Utilitários (3):**
+7. `extract-soap-log.php` - Extrai últimas requisições/respostas SOAP
+8. `diagnostico_impressora.sh` - Diagnóstico impressora transp4 (CUPS/Linux)
+9. `abrir-firewall-8002.bat` - Abre porta 8002 no firewall Windows
+
+### Documentação Reorganizada: 12 → docs/ + docs/modules/
+
+**Pasta criada:** `docs/modules/`
+
+**Para docs/ (9 arquivos - documentação geral/ativa):**
+1. `CACHE_OPTIMIZATION_AND_BUG_FIXES.md` (2025-11-28)
+2. `MAP_SERVICE_FASE1_COMPLETO.md` (2025-11-19)
+3. `PLANO_MAP_SERVICE_UNIFICADO.md` (2025-11-19)
+4. `PLANO_IMPORTACAO_PRACAS_PEDAGIO.md` (2025-11-28)
+5. `INTEGRACAO_PRACAS_PEDAGIO.md` (2025-11-28)
+6. `NDD-SOAP-API-Documentation.md` (2025-09-16)
+7. `PROGRESS_INTEGRATIONS.md` (2025-10-02)
+8. `SECURITY_AUDIT_TRANSPORTES.md` (2025-10-01)
+9. `SECURITY_FIXES_SUMMARY.md` (2025-10-01)
+
+**Para docs/modules/ (3 arquivos - módulos específicos):**
+1. `GUIA_LOGS_VALE_PEDAGIO.md` - Vale Pedágio
+2. `IMPLEMENTACAO_COMPLETA.md` - Compra de Viagem
+3. `SOLUCAO_IMPRESSORA_TRANSP4.md` - Impressora Flask
+
+### DOCUMENTATION_INDEX.md Atualizado
+
+**Novos recursos:**
+- ✅ Seção `🔧 Scripts e Utilitários` com lista categorizada
+- ✅ Links atualizados para docs/ e docs/modules/
+- ✅ Estatísticas atualizadas (9 scripts, 3 módulos)
+- ✅ Guia de contribuição com estrutura de pastas
+- ✅ Folder badges (📁) para melhor navegação
+
+### Estrutura Final do Projeto
+
+```
+ndd-vuexy/
+├── 📄 CLAUDE.md                    # Guia completo (raiz)
+├── 📄 README.md                    # Readme geral (raiz)
+├── 📄 DOCUMENTATION_INDEX.md       # Índice de documentação
+├── 📄 REFACTOR_CLEANUP_2025-11-28.md
+│
+├── 📁 docs/                        # Documentação ativa (9 arquivos)
+│   ├── CACHE_OPTIMIZATION_AND_BUG_FIXES.md
+│   ├── MAP_SERVICE_FASE1_COMPLETO.md
+│   ├── PLANO_MAP_SERVICE_UNIFICADO.md
+│   ├── PLANO_IMPORTACAO_PRACAS_PEDAGIO.md
+│   ├── INTEGRACAO_PRACAS_PEDAGIO.md
+│   ├── NDD-SOAP-API-Documentation.md
+│   ├── PROGRESS_INTEGRATIONS.md
+│   ├── SECURITY_AUDIT_TRANSPORTES.md
+│   ├── SECURITY_FIXES_SUMMARY.md
+│   │
+│   ├── 📁 modules/                 # Módulos específicos (3 arquivos)
+│   │   ├── GUIA_LOGS_VALE_PEDAGIO.md
+│   │   ├── IMPLEMENTACAO_COMPLETA.md
+│   │   └── SOLUCAO_IMPRESSORA_TRANSP4.md
+│   │
+│   ├── 📁 migrations/              # Migrações de mapas (3 arquivos)
+│   │   ├── ROUTING_MIGRATION.md
+│   │   ├── MIGRACAO_ITINERARIO_MAPSERVICE.md
+│   │   └── MIGRACAO_ROTAS_PADRAO_MAPSERVICE.md
+│   │
+│   ├── 📁 semparar-phases/         # Fases SemParar (3 arquivos)
+│   │   ├── CHECKPOINT_FASE_1A.md
+│   │   ├── SEMPARAR_FASE1B_COMPLETO.md
+│   │   └── SEMPARAR_IMPLEMENTATION_ROADMAP.md
+│   │
+│   └── 📁 archive/                 # Histórico (11 arquivos)
+│       ├── ANALISE_*.md (4 arquivos)
+│       ├── COMPRA_VIAGEM_*.md (2 arquivos)
+│       ├── DEBUG_MAPA_ROTAS.md
+│       ├── GPS_CACHE_TEST_RESULTS.md
+│       ├── KEYSET_PAGINATION_IMPLEMENTATION.md
+│       ├── UX_ANALYSIS_COMPRA_VIAGEM.md
+│       ├── COMO_TESTAR.md
+│       └── email-aprovacao-mvp.md
+│
+└── 📁 scripts/                     # Scripts de teste/utilitários (9 arquivos)
+    ├── test-custo.ps1
+    ├── test-fase2a-completo.ps1
+    ├── test-fase2a-completo.sh
+    ├── test-fase2b-completo.ps1
+    ├── test-listar-rotas-semparar.php
+    ├── test-mapservice-completo.ps1
+    ├── extract-soap-log.php
+    ├── diagnostico_impressora.sh
+    └── abrir-firewall-8002.bat
+```
+
+### Impacto FASE 2
+
+| Métrica | FASE 1 | FASE 2 | Total |
+|---------|--------|--------|-------|
+| **Arquivos deletados** | 13 | 5 | **18** |
+| **Arquivos movidos** | 14 | 21 | **35** |
+| **Pastas criadas** | 3 | 2 | **5** |
+| **Scripts organizados** | 0 | 9 | **9** |
+| **API keys removidas** | 2 | 1 | **3** |
+| **Espaço liberado** | ~10KB | ~7KB | **~17KB** |
+
+### Benefícios Adicionais FASE 2
+
+✅ **Raiz limpa** - Apenas 3 arquivos .md na raiz (CLAUDE, README, INDEX)
+✅ **Scripts organizados** - Todos em pasta dedicada, fácil descoberta
+✅ **Módulos separados** - Documentação por módulo em docs/modules/
+✅ **Segurança** - 1 API key adicional removida (OpenRouteService)
+✅ **Navegação** - Índice completo com badges e categorização
+✅ **Onboarding** - Estrutura clara para novos desenvolvedores
+
+---
+
 ## ✅ Checklist de Conclusão
 
+### FASE 1
 - [x] Analisar todos arquivos .cjs
 - [x] Analisar todos arquivos .json
 - [x] Analisar todos arquivos .md
@@ -304,12 +467,29 @@ Ao adicionar nova documentação:
 - [x] Reorganizar documentação
 - [x] Criar índice de documentação
 - [x] Criar documentação de limpeza
-- [x] Revisar mudanças
-- [ ] Commit e push das mudanças
+- [x] Commit e push (7dd7823)
+
+### FASE 2
+- [x] Deletar 5 arquivos obsoletos adicionais
+- [x] Criar pasta scripts/
+- [x] Mover 9 scripts para scripts/
+- [x] Criar pasta docs/modules/
+- [x] Mover 12 arquivos .md para docs/ e docs/modules/
+- [x] Atualizar DOCUMENTATION_INDEX.md
+- [x] Adicionar seção de scripts ao índice
+- [x] Atualizar todos os links internos
+- [x] Commit e push (6df592e)
+
+### Pendente
 - [ ] Merge para master (aguardando aprovação)
+- [ ] Verificar links quebrados (opcional)
+- [ ] Criar README.md para scripts/ (opcional)
 
 ---
 
-**Última atualização:** 2025-11-28
+**Última atualização:** 2025-11-28 (FASE 2 completa)
 **Mantido por:** Claude Code
 **Branch:** refactor/cleanup-obsolete-files
+**Commits:**
+- FASE 1: 7dd7823
+- FASE 2: 6df592e
