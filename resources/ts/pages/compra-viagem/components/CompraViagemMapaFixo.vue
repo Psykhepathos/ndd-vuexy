@@ -100,9 +100,15 @@ const atualizarMapa = async () => {
 
   // === 2. ENTREGAS DO PACOTE ===
   const entregas = props.formData.pacote.entregas_com_gps
+  const totalEntregas = entregas.length
 
   entregas.forEach((entrega, index) => {
     if (!entrega.lat || !entrega.lon) return
+
+    // Determinar se é primeira, última ou intermediária
+    const isPrimeira = index === 0
+    const isUltima = index === totalEntregas - 1
+    const isIntermediaria = !isPrimeira && !isUltima
 
     markers.push({
       id: `entrega-${entrega.numseqped}`,
@@ -113,10 +119,15 @@ const atualizarMapa = async () => {
       sequencia: municipios.length + index + 1,
       popup: `<strong>Entrega #${index + 1}</strong><br>` +
              `${entrega.razcli}<br>` +
-             `${entrega.cidcli} - ${entrega.sigufs}`
+             `${entrega.cidcli} - ${entrega.sigufs}`,
+      isIntermediaria: isIntermediaria  // Flag para opacidade
     })
 
-    waypoints.push(L.latLng(entrega.lat, entrega.lon))
+    // ⚠️ IMPORTANTE: Para roteirização OSRM, adiciona apenas primeira e última entrega
+    // Entregas intermediárias aparecem no mapa mas não na rota calculada
+    if (isPrimeira || isUltima) {
+      waypoints.push(L.latLng(entrega.lat, entrega.lon))
+    }
   })
 
   // === 3. PRAÇAS DE PEDÁGIO ===
@@ -152,6 +163,8 @@ const atualizarMapa = async () => {
   // Só calcular rota se tiver municípios da rota (Step 3+)
   // No Step 1 (só entregas), apenas mostra marcadores sem rota
   if (waypoints.length >= 2 && municipios.length > 0) {
+    console.log(`🗺️ Roteirizando com ${waypoints.length} waypoints (municípios + primeira/última entrega)`)
+    console.log(`📍 Total de marcadores exibidos no mapa: ${markers.length}`)
     await calcularRota(waypoints)
   }
 
@@ -170,6 +183,7 @@ const atualizarMapa = async () => {
 const criarIconeCustomizado = (marker: MapMarker): L.DivIcon => {
   let bgColor = '#2196F3' // Azul para municípios
   let icon = 'tabler-map-pin'
+  let opacity = 1.0 // Opacidade padrão
 
   if (marker.tipo === 'entrega') {
     // Verde (primeiro), Laranja (meio), Vermelho (último)
@@ -177,11 +191,14 @@ const criarIconeCustomizado = (marker: MapMarker): L.DivIcon => {
     const indexEntrega = marker.sequencia! - props.formData.rota.municipios.length
 
     if (indexEntrega === 1) {
-      bgColor = '#4CAF50' // Verde
+      bgColor = '#4CAF50' // Verde (primeira entrega - destaque)
+      opacity = 1.0
     } else if (indexEntrega === totalEntregas) {
-      bgColor = '#F44336' // Vermelho
+      bgColor = '#F44336' // Vermelho (última entrega - destaque)
+      opacity = 1.0
     } else {
-      bgColor = '#FF9800' // Laranja
+      bgColor = '#FF9800' // Laranja (intermediárias)
+      opacity = 0.3 // ⚠️ Transparente para entregas intermediárias
     }
   } else if (marker.tipo === 'pedagio') {
     bgColor = '#FFC107' // Amarelo
@@ -203,6 +220,7 @@ const criarIconeCustomizado = (marker: MapMarker): L.DivIcon => {
         font-weight: bold;
         font-size: 14px;
         box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        opacity: ${opacity};
       ">
         ${marker.sequencia || ''}
       </div>

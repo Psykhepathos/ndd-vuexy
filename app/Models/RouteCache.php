@@ -16,6 +16,7 @@ class RouteCache extends Model
         'waypoints',
         'route_coordinates',
         'total_distance',
+        'duration_seconds',
         'waypoints_count',
         'source',
         'expires_at'

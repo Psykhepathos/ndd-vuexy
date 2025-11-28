@@ -168,6 +168,10 @@ import { ref, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { $api } from '@/utils/api'
 import L from 'leaflet'
+import 'leaflet.markercluster'
+import 'leaflet/dist/leaflet.css'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 
 // Fix para ícones do Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -219,29 +223,53 @@ const pacoteData = ref<ItinerarioData>({
 const distanciaTotal = ref<number>(0)
 
 let map: L.Map | null = null
-let markersLayer: L.LayerGroup | null = null
+let markerClusterGroup: L.MarkerClusterGroup | null = null
 let routeLayer: L.LayerGroup | null = null
+const markersById = new Map<number, L.Marker>() // Map de index -> marker
 
 /**
  * Converte coordenada do formato Progress para decimal
- * Progress: "-23,2041" ou "230876543" (implícito)
- * Decimal: -23.2041 ou -23.0876543
  */
 function convertCoordinate(coord: string): number {
   if (!coord) return 0
 
-  // Se contém vírgula, é formato "-23,2041"
   if (coord.includes(',')) {
     return parseFloat(coord.replace(',', '.'))
   }
 
-  // Se é número puro "230876543", divide por 10^7
   const num = parseInt(coord)
   if (Math.abs(num) > 1000000) {
     return num / 10000000
   }
 
   return parseFloat(coord)
+}
+
+/**
+ * Ajusta o brilho de uma cor hexadecimal
+ */
+function adjustBrightness(hex: string, percent: number): string {
+  // Remove o # se existir
+  hex = hex.replace('#', '')
+
+  // Converte para RGB
+  const r = parseInt(hex.substring(0, 2), 16)
+  const g = parseInt(hex.substring(2, 4), 16)
+  const b = parseInt(hex.substring(4, 6), 16)
+
+  // Ajusta o brilho
+  const adjust = (value: number) => {
+    const adjusted = value + (value * percent / 100)
+    return Math.max(0, Math.min(255, Math.round(adjusted)))
+  }
+
+  // Converte de volta para hex
+  const toHex = (value: number) => {
+    const hex = value.toString(16)
+    return hex.length === 1 ? '0' + hex : hex
+  }
+
+  return `#${toHex(adjust(r))}${toHex(adjust(g))}${toHex(adjust(b))}`
 }
 
 /**
@@ -267,20 +295,82 @@ function focusOnMarker(index: number) {
   const lat = convertCoordinate(entrega.gps_lat)
   const lng = convertCoordinate(entrega.gps_lon)
 
+  // Zoom e centralizar
   map.setView([lat, lng], 16)
 
-  // Abrir popup do marcador
-  if (markersLayer) {
-    markersLayer.eachLayer((layer: any) => {
-      if (layer.options?.entregaIndex === index) {
-        layer.openPopup()
-      }
-    })
+  // Pegar o marcador do Map
+  const marker = markersById.get(index)
+  if (marker) {
+    // Se o marcador está em um cluster, o markercluster vai expandi-lo automaticamente
+    setTimeout(() => {
+      marker.openPopup()
+    }, 300)
   }
 }
 
 /**
- * Calcula rota usando MapService unificado
+ * Simplifica array de pontos usando algoritmo Douglas-Peucker
+ * Reduz quantidade de waypoints mantendo a forma geral da rota
+ */
+function simplifyPoints(points: Array<[number, number]>, tolerance: number): Array<[number, number]> {
+  if (points.length <= 2) return points
+
+  // Encontrar ponto mais distante da linha entre início e fim
+  let maxDistance = 0
+  let maxIndex = 0
+  const start = points[0]
+  const end = points[points.length - 1]
+
+  for (let i = 1; i < points.length - 1; i++) {
+    const distance = perpendicularDistance(points[i], start, end)
+    if (distance > maxDistance) {
+      maxDistance = distance
+      maxIndex = i
+    }
+  }
+
+  // Se o ponto mais distante está além da tolerância, dividir recursivamente
+  if (maxDistance > tolerance) {
+    const left = simplifyPoints(points.slice(0, maxIndex + 1), tolerance)
+    const right = simplifyPoints(points.slice(maxIndex), tolerance)
+    return [...left.slice(0, -1), ...right]
+  } else {
+    // Todos os pontos estão dentro da tolerância, retornar só início e fim
+    return [start, end]
+  }
+}
+
+/**
+ * Calcula distância perpendicular de um ponto a uma linha
+ */
+function perpendicularDistance(
+  point: [number, number],
+  lineStart: [number, number],
+  lineEnd: [number, number]
+): number {
+  const [x0, y0] = point
+  const [x1, y1] = lineStart
+  const [x2, y2] = lineEnd
+
+  const dx = x2 - x1
+  const dy = y2 - y1
+
+  // Linha vertical ou horizontal
+  if (dx === 0 && dy === 0) {
+    const dx0 = x0 - x1
+    const dy0 = y0 - y1
+    return Math.sqrt(dx0 * dx0 + dy0 * dy0)
+  }
+
+  // Fórmula da distância perpendicular
+  const num = Math.abs(dy * x0 - dx * y0 + x2 * y1 - y2 * x1)
+  const den = Math.sqrt(dx * dx + dy * dy)
+  return num / den
+}
+
+/**
+ * Calcula rota usando MapService, dividindo em chunks se necessário
+ * Com simplificação inteligente de pontos baseada no zoom
  */
 async function calculateRouteWithMapService(waypoints: Array<[number, number]>): Promise<{
   coordinates: Array<[number, number]>
@@ -289,6 +379,103 @@ async function calculateRouteWithMapService(waypoints: Array<[number, number]>):
 } | null> {
   if (waypoints.length < 2) return null
 
+  // Simplificar waypoints baseado na quantidade e zoom do mapa
+  // Tolerância adaptativa: quanto mais zoom out, mais simplificação
+  let simplifiedWaypoints = waypoints
+  if (waypoints.length > 50) {
+    // Pegar nível de zoom atual do mapa (4 = Brasil inteiro, 18 = rua)
+    const currentZoom = map?.getZoom() || 4
+
+    // Calcular tolerância baseada no zoom
+    // Zoom baixo (4-8) = alta tolerância (mais simplificação)
+    // Zoom médio (9-12) = média tolerância
+    // Zoom alto (13+) = baixa tolerância (menos simplificação)
+    let tolerance = 0.01 // Default: ~1km
+    if (currentZoom < 8) {
+      tolerance = 0.05 // ~5km - Simplificação agressiva (zoom Brasil)
+    } else if (currentZoom < 12) {
+      tolerance = 0.02 // ~2km - Simplificação média (zoom Estado)
+    } else {
+      tolerance = 0.005 // ~500m - Pouca simplificação (zoom Cidade)
+    }
+
+    simplifiedWaypoints = simplifyPoints(waypoints, tolerance)
+    console.log(`🔧 Simplificado (zoom ${currentZoom}): ${waypoints.length} → ${simplifiedWaypoints.length} pontos`)
+  }
+
+  const MAX_WAYPOINTS_PER_REQUEST = 25 // Limite seguro para OSRM
+
+  // Se tiver poucos waypoints, calcular direto
+  if (simplifiedWaypoints.length <= MAX_WAYPOINTS_PER_REQUEST) {
+    return await calculateSingleRoute(simplifiedWaypoints)
+  }
+
+  // Dividir em chunks e calcular segmento por segmento
+  console.log(`📊 ${simplifiedWaypoints.length} waypoints - dividindo em segmentos de ${MAX_WAYPOINTS_PER_REQUEST}`)
+
+  const allCoordinates: Array<[number, number]> = []
+  let totalDistance = 0
+
+  for (let i = 0; i < simplifiedWaypoints.length - 1; i += MAX_WAYPOINTS_PER_REQUEST - 1) {
+    const end = Math.min(i + MAX_WAYPOINTS_PER_REQUEST, simplifiedWaypoints.length)
+    const chunk = simplifiedWaypoints.slice(i, end)
+
+    console.log(`🔗 Calculando segmento ${Math.floor(i / (MAX_WAYPOINTS_PER_REQUEST - 1)) + 1} (${chunk.length} pontos)`)
+
+    const segmentResult = await calculateSingleRoute(chunk)
+
+    if (segmentResult && segmentResult.coordinates.length > 0) {
+      // Evitar duplicar o último ponto do segmento anterior
+      if (allCoordinates.length > 0) {
+        allCoordinates.push(...segmentResult.coordinates.slice(1))
+      } else {
+        allCoordinates.push(...segmentResult.coordinates)
+      }
+      // FIX: Converter para número (pode vir como string do cache)
+      totalDistance += Number(segmentResult.distance_km)
+    } else {
+      console.warn(`⚠️ Segmento ${i} falhou, usando linha reta`)
+      // Fallback: linha reta para este segmento
+      if (allCoordinates.length === 0 || i === 0) {
+        allCoordinates.push(chunk[0])
+      }
+      for (let j = 1; j < chunk.length; j++) {
+        allCoordinates.push(chunk[j])
+        // Calcular distância aproximada
+        const lat1 = chunk[j-1][0], lng1 = chunk[j-1][1]
+        const lat2 = chunk[j][0], lng2 = chunk[j][1]
+        const R = 6371
+        const dLat = (lat2 - lat1) * Math.PI / 180
+        const dLng = (lng2 - lng1) * Math.PI / 180
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLng/2) * Math.sin(dLng/2)
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+        totalDistance += R * c
+      }
+    }
+  }
+
+  if (allCoordinates.length > 0) {
+    console.log(`✅ Rota total calculada: ${totalDistance.toFixed(1)}km com ${allCoordinates.length} coordenadas`)
+    return {
+      coordinates: allCoordinates,
+      distance_km: totalDistance,
+      cached: false
+    }
+  }
+
+  return null
+}
+
+/**
+ * Calcula uma rota simples
+ */
+async function calculateSingleRoute(waypoints: Array<[number, number]>): Promise<{
+  coordinates: Array<[number, number]>
+  distance_km: number
+  cached: boolean
+} | null> {
   try {
     const payload = {
       waypoints: waypoints,
@@ -298,10 +485,7 @@ async function calculateRouteWithMapService(waypoints: Array<[number, number]>):
       }
     }
 
-    console.log('🗺️ Calculando rota com MapService para', waypoints.length, 'waypoints')
-    console.log('📤 Payload:', JSON.stringify(payload, null, 2))
-
-    const response = await fetch('http://localhost:8002/api/map/route', {
+    const response = await fetch(`${window.location.origin}/api/map/route`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -311,24 +495,13 @@ async function calculateRouteWithMapService(waypoints: Array<[number, number]>):
     })
 
     if (!response.ok) {
-      const errorText = await response.text()
       console.error('❌ MapService retornou erro:', response.status)
-      console.error('📥 Resposta:', errorText)
-      try {
-        const errorJson = JSON.parse(errorText)
-        console.error('🔍 Erro detalhado:', errorJson)
-      } catch (e) {
-        // Não é JSON
-      }
       return null
     }
 
     const result = await response.json()
 
     if (result.success && result.data?.coordinates) {
-      console.log(`✅ Rota calculada: ${result.data.distance_km}km via ${result.data.provider}`)
-      console.log(`💾 Cache: ${result.data.cached ? 'HIT' : 'MISS'}`)
-
       return {
         coordinates: result.data.coordinates,
         distance_km: result.data.distance_km,
@@ -336,10 +509,9 @@ async function calculateRouteWithMapService(waypoints: Array<[number, number]>):
       }
     }
 
-    console.warn('⚠️ MapService não retornou coordenadas válidas')
     return null
   } catch (error) {
-    console.error('❌ Erro ao calcular rota com MapService:', error)
+    console.error('❌ Erro ao calcular rota:', error)
     return null
   }
 }
@@ -350,31 +522,72 @@ async function calculateRouteWithMapService(waypoints: Array<[number, number]>):
 function initMap() {
   if (!mapContainer.value) return
 
-  map = L.map('mapa-itinerario').setView([-14.2350, -51.9253], 4) // Brasil como centro
+  map = L.map('mapa-itinerario').setView([-14.2350, -51.9253], 4)
 
   // Adicionar camada OpenStreetMap
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
   }).addTo(map)
 
-  markersLayer = L.layerGroup().addTo(map)
+  // Criar grupo de clustering com configurações customizadas
+  markerClusterGroup = L.markerClusterGroup({
+    maxClusterRadius: 50,
+    spiderfyOnMaxZoom: true,
+    showCoverageOnHover: true,
+    zoomToBoundsOnClick: true,
+    spiderfyDistanceMultiplier: 1.5,
+    iconCreateFunction: function(cluster) {
+      const count = cluster.getChildCount()
+      let size = 32 // Menor
+      let className = 'marker-cluster-small'
+
+      if (count > 10) {
+        size = 38
+        className = 'marker-cluster-medium'
+      }
+      if (count > 20) {
+        size = 44
+        className = 'marker-cluster-large'
+      }
+
+      return L.divIcon({
+        html: `<div><span>${count}</span></div>`,
+        className: `marker-cluster ${className}`,
+        iconSize: L.point(size, size)
+      })
+    }
+  })
+
+  map.addLayer(markerClusterGroup)
+
   routeLayer = L.layerGroup().addTo(map)
 }
 
 /**
- * Adiciona marcadores e rota no mapa usando MapService
+ * Adiciona marcadores e rota no mapa
  */
 async function addMarkersAndRoute() {
-  if (!map || !markersLayer || !routeLayer) return
+  if (!map || !markerClusterGroup || !routeLayer) return
 
   // Limpar camadas existentes
-  markersLayer.clearLayers()
+  markerClusterGroup.clearLayers()
   routeLayer.clearLayers()
+  markersById.clear()
 
-  // Filtrar entregas com GPS e manter índice original
+  // Filtrar entregas com GPS
   const entregasComGPS = pacoteData.value.pedidos
-    .map((pedido, originalIndex) => ({ ...pedido, originalIndex }))
-    .filter(p => p.gps_lat && p.gps_lon)
+    .map((pedido, originalIndex) => {
+      const lat = convertCoordinate(pedido.gps_lat || '')
+      const lng = convertCoordinate(pedido.gps_lon || '')
+
+      return {
+        entrega: pedido,
+        originalIndex,
+        lat,
+        lng
+      }
+    })
+    .filter(item => item.lat && item.lng)
 
   if (!entregasComGPS.length) {
     console.warn('⚠️ Nenhuma entrega com GPS encontrada')
@@ -384,135 +597,164 @@ async function addMarkersAndRoute() {
   console.log(`📍 Processando ${entregasComGPS.length} entregas com GPS`)
 
   const latlngs: L.LatLng[] = []
-  const waypoints: Array<[number, number]> = [] // [lat, lon] para MapService
+  const waypoints: Array<[number, number]> = []
 
-  // Adicionar marcadores
-  entregasComGPS.forEach((entrega, index) => {
-    const lat = convertCoordinate(entrega.gps_lat!)
-    const lng = convertCoordinate(entrega.gps_lon!)
+  // Adicionar marcadores ao cluster
+  entregasComGPS.forEach((item, idx) => {
+    const { entrega, originalIndex, lat, lng } = item
 
-    if (lat && lng) {
-      latlngs.push(L.latLng(lat, lng))
-      waypoints.push([lat, lng]) // MapService espera [lat, lon]
+    latlngs.push(L.latLng(lat, lng))
+    waypoints.push([lat, lng])
 
-      // Criar ícone personalizado baseado na sequência
-      const isFirst = index === 0
-      const isLast = index === entregasComGPS.length - 1
+    // Cor baseada na posição
+    const isFirst = idx === 0
+    const isLast = idx === entregasComGPS.length - 1
+    let iconColor = '#2196F3'
+    if (isFirst) iconColor = '#4CAF50'
+    if (isLast) iconColor = '#F44336'
 
-      let iconColor = '#2196F3' // Azul padrão
-      if (isFirst) iconColor = '#4CAF50' // Verde para início
-      if (isLast) iconColor = '#F44336' // Vermelho para fim
+    const customIcon = L.divIcon({
+      html: `
+        <div style="
+          background: linear-gradient(135deg, ${iconColor} 0%, ${adjustBrightness(iconColor, -20)} 100%);
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          border: 2px solid white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-weight: 600;
+          font-size: 11px;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+          text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+          transition: transform 0.2s ease;
+        "
+        onmouseover="this.style.transform='scale(1.15)'"
+        onmouseout="this.style.transform='scale(1)'"
+        >${entrega.seqent}</div>
+      `,
+      className: 'custom-div-icon',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    })
 
-      const customIcon = L.divIcon({
-        html: `
-          <div style="
-            background-color: ${iconColor};
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            border: 3px solid white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            font-size: 12px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-          ">${entrega.seqent}</div>
-        `,
-        className: 'custom-div-icon',
-        iconSize: [30, 30],
-        iconAnchor: [15, 15]
-      })
-
-      const marker = L.marker([lat, lng], {
-        icon: customIcon,
-        entregaIndex: entrega.originalIndex
-      } as any)
-        .bindPopup(`
-          <div style="min-width: 200px;">
-            <strong>Entrega ${entrega.seqent}</strong><br>
-            <strong>${entrega.razcli}</strong><br>
-            <small>${entrega.desend}<br>
-            ${entrega.desbai} • ${entrega.desmun} - ${entrega.uf}</small><br>
-            <hr style="margin: 8px 0;">
-            <strong>Valor:</strong> ${(entrega.valnot || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}<br>
-            <strong>Peso:</strong> ${(entrega.peso || 0).toFixed(1)}kg<br>
-            <strong>Volume:</strong> ${(entrega.volume || 0).toFixed(2)}m³
+    const marker = L.marker([lat, lng], { icon: customIcon })
+      .bindPopup(`
+        <div style="min-width: 220px;">
+          <strong style="font-size: 14px;">Entrega ${entrega.seqent}</strong><br>
+          <strong style="font-size: 13px;">${entrega.razcli}</strong><br>
+          <small style="color: #666;">${entrega.desend}<br>
+          ${entrega.desbai} • ${entrega.desmun} - ${entrega.uf}</small><br>
+          <hr style="margin: 10px 0; border-color: #e0e0e0;">
+          <div style="display: flex; justify-content: space-between; margin-top: 8px;">
+            <div>
+              <strong style="font-size: 11px;">Valor:</strong><br>
+              <span style="font-size: 13px; color: #4CAF50;">${(entrega.valnot || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+            </div>
+            <div>
+              <strong style="font-size: 11px;">Peso:</strong><br>
+              <span style="font-size: 13px;">${(entrega.peso || 0).toFixed(1)}kg</span>
+            </div>
+            <div>
+              <strong style="font-size: 11px;">Volume:</strong><br>
+              <span style="font-size: 13px;">${(entrega.volume || 0).toFixed(2)}m³</span>
+            </div>
           </div>
-        `)
+        </div>
+      `)
 
-      markersLayer.addLayer(marker)
-    }
+    // Adicionar ao cluster
+    markerClusterGroup.addLayer(marker)
+
+    // Guardar referência para focar depois
+    markersById.set(originalIndex, marker)
   })
 
   // Calcular e adicionar rota
   if (waypoints.length > 1) {
-    // Mostrar linha tracejada enquanto carrega
+    // Linha temporária animada
     const loadingPolyline = L.polyline(latlngs, {
-      color: '#cccccc',
-      weight: 2,
-      opacity: 0.5,
-      dashArray: '5, 5'
+      color: '#2196F3',
+      weight: 3,
+      opacity: 0.4,
+      dashArray: '10, 10',
+      className: 'route-loading'
     })
     routeLayer.addLayer(loadingPolyline)
 
-    // Calcular rota com MapService
+    // Indicador de progresso no mapa
+    const progressControl = L.control({ position: 'topright' }) as any
+    progressControl.onAdd = function() {
+      const div = L.DomUtil.create('div', 'route-progress-indicator')
+      div.innerHTML = `
+        <div style="
+          background: white;
+          padding: 12px 16px;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+          font-size: 13px;
+          font-weight: 500;
+          color: #2196F3;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        ">
+          <div class="spinner"></div>
+          <span>Calculando rota...</span>
+        </div>
+      `
+      return div
+    }
+    progressControl.addTo(map)
+
     const routeResult = await calculateRouteWithMapService(waypoints)
 
-    // Remover linha de loading
+    // Remover indicador e linha temporária
+    progressControl.remove()
     routeLayer.removeLayer(loadingPolyline)
 
     if (routeResult && routeResult.coordinates.length > 0) {
-      // Atualizar distância total (garantir que é número)
       distanciaTotal.value = Number(routeResult.distance_km)
 
-      // Converter coordenadas para Leaflet LatLng
       const routeLatLngs = routeResult.coordinates.map(coord => L.latLng(coord[0], coord[1]))
 
-      // Adicionar rota real
       const routePolyline = L.polyline(routeLatLngs, {
         color: '#2196F3',
         weight: 5,
-        opacity: 0.8,
+        opacity: 0.7,
         lineJoin: 'round',
         lineCap: 'round'
       })
 
       routeLayer.addLayer(routePolyline)
-
-      // Ajustar zoom para mostrar toda a rota
       map.fitBounds(routePolyline.getBounds(), { padding: [50, 50] })
     } else {
-      // Fallback: linha reta tracejada
-      console.warn('⚠️ Usando linha reta como fallback')
-
+      // Fallback
       const fallbackPolyline = L.polyline(latlngs, {
         color: '#FF9800',
         weight: 4,
-        opacity: 0.7,
+        opacity: 0.6,
         dashArray: '10, 5'
       })
 
       routeLayer.addLayer(fallbackPolyline)
       map.fitBounds(fallbackPolyline.getBounds(), { padding: [50, 50] })
 
-      // Calcular distância aproximada (Haversine)
       let totalDistance = 0
       for (let i = 0; i < latlngs.length - 1; i++) {
-        const distance = latlngs[i].distanceTo(latlngs[i + 1]) / 1000 // em km
-        totalDistance += distance
+        totalDistance += latlngs[i].distanceTo(latlngs[i + 1]) / 1000
       }
       distanciaTotal.value = totalDistance
     }
   } else if (latlngs.length === 1) {
-    // Apenas um ponto
     map.setView(latlngs[0], 14)
   }
 }
 
 /**
- * Busca dados do itinerário via API
+ * Busca dados do itinerário
  */
 async function fetchItinerario() {
   try {
@@ -524,9 +766,7 @@ async function fetchItinerario() {
     const response = await $api('/api/pacotes/itinerario', {
       method: 'POST',
       body: {
-        Pacote: {
-          codPac: parseInt(pacoteId)
-        }
+        codPac: parseInt(pacoteId)
       }
     })
 
@@ -581,15 +821,109 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 
-/* Leaflet map styling */
+/* Leaflet Popup */
 :deep(.leaflet-popup-content) {
-  margin: 8px 12px;
-  line-height: 1.4;
+  margin: 12px;
+  line-height: 1.5;
 }
 
 :deep(.custom-div-icon) {
   background: transparent !important;
   border: none !important;
+}
+
+/* Route Loading Animation */
+:deep(.route-loading) {
+  animation: dash 1s linear infinite;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+/* Spinner Animation */
+:deep(.spinner) {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e3f2fd;
+  border-top: 2px solid #2196F3;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+:deep(.route-progress-indicator) {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* MarkerCluster Customization - Moderno e Compacto */
+:deep(.marker-cluster) {
+  background-clip: padding-box;
+  border-radius: 50%;
+  font-weight: 600;
+}
+
+:deep(.marker-cluster div) {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 12px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  transition: transform 0.2s ease;
+}
+
+:deep(.marker-cluster div:hover) {
+  transform: scale(1.1);
+}
+
+/* Verde - 2 a 10 entregas */
+:deep(.marker-cluster-small) {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.3) 0%, rgba(56, 142, 60, 0.3) 100%);
+}
+
+:deep(.marker-cluster-small div) {
+  background: linear-gradient(135deg, #66BB6A 0%, #43A047 100%);
+}
+
+/* Amarelo - 11 a 20 entregas */
+:deep(.marker-cluster-medium) {
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.3) 0%, rgba(251, 140, 0, 0.3) 100%);
+}
+
+:deep(.marker-cluster-medium div) {
+  background: linear-gradient(135deg, #FFCA28 0%, #FFA726 100%);
+}
+
+/* Laranja/Vermelho - 21+ entregas */
+:deep(.marker-cluster-large) {
+  background: linear-gradient(135deg, rgba(255, 87, 34, 0.3) 0%, rgba(244, 67, 54, 0.3) 100%);
+}
+
+:deep(.marker-cluster-large div) {
+  background: linear-gradient(135deg, #FF7043 0%, #F4511E 100%);
 }
 
 /* Stats Cards */
@@ -607,7 +941,7 @@ onMounted(async () => {
   padding: 16px !important;
 }
 
-/* Responsive adjustments */
+/* Responsive */
 @media (max-width: 768px) {
   .entrega-stats {
     flex-direction: column;
@@ -618,7 +952,6 @@ onMounted(async () => {
     height: 400px !important;
   }
 
-  /* Stack cards vertically on mobile */
   .d-flex.gap-4 {
     flex-direction: column !important;
   }
