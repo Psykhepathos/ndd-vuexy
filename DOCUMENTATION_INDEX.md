@@ -20,7 +20,7 @@
 ## 🚀 Implementações Recentes (2025-11)
 
 ### Cache & Performance
-- **[CACHE_OPTIMIZATION_AND_BUG_FIXES.md](CACHE_OPTIMIZATION_AND_BUG_FIXES.md)** (2025-11-28)
+- **[docs/CACHE_OPTIMIZATION_AND_BUG_FIXES.md](docs/CACHE_OPTIMIZATION_AND_BUG_FIXES.md)** (2025-11-28)
   - Sistema de cache de rotas
   - Algoritmo Douglas-Peucker
   - Otimização de performance (80-85% melhoria)
@@ -28,24 +28,24 @@
   - Bug fixes compra de viagem
 
 ### MapService Unificado
-- **[MAP_SERVICE_FASE1_COMPLETO.md](MAP_SERVICE_FASE1_COMPLETO.md)** (2025-11-19)
+- **[docs/MAP_SERVICE_FASE1_COMPLETO.md](docs/MAP_SERVICE_FASE1_COMPLETO.md)** (2025-11-19)
   - Implementação MapService unificado
   - OSRM routing gratuito
   - Cache de 30 dias
   - Fallback inteligente
 
-- **[PLANO_MAP_SERVICE_UNIFICADO.md](PLANO_MAP_SERVICE_UNIFICADO.md)** (2025-11-19)
+- **[docs/PLANO_MAP_SERVICE_UNIFICADO.md](docs/PLANO_MAP_SERVICE_UNIFICADO.md)** (2025-11-19)
   - Arquitetura do MapService
   - CacheManager design
   - Estratégias de otimização
 
 ### Praças de Pedágio
-- **[PLANO_IMPORTACAO_PRACAS_PEDAGIO.md](PLANO_IMPORTACAO_PRACAS_PEDAGIO.md)** (2025-11-28)
+- **[docs/PLANO_IMPORTACAO_PRACAS_PEDAGIO.md](docs/PLANO_IMPORTACAO_PRACAS_PEDAGIO.md)** (2025-11-28)
   - Sistema de importação praças ANTT
   - Geocoding e validação
   - API endpoints
 
-- **[INTEGRACAO_PRACAS_PEDAGIO.md](INTEGRACAO_PRACAS_PEDAGIO.md)** (2025-11-28)
+- **[docs/INTEGRACAO_PRACAS_PEDAGIO.md](docs/INTEGRACAO_PRACAS_PEDAGIO.md)** (2025-11-28)
   - Integração frontend/backend
   - Visualização em mapa
   - Filtros e paginação
@@ -71,16 +71,16 @@ Documentação histórica das fases de implementação da API SemParar
 - `SEMPARAR_IMPLEMENTATION_ROADMAP.md` - Roadmap completo
 
 ### 🛡️ Segurança & Auditorias
-- **[SECURITY_AUDIT_TRANSPORTES.md](SECURITY_AUDIT_TRANSPORTES.md)** (2025-10-01)
+- **[docs/SECURITY_AUDIT_TRANSPORTES.md](docs/SECURITY_AUDIT_TRANSPORTES.md)** (2025-10-01)
   - Auditoria de segurança módulo transportes
   - Vulnerabilidades identificadas
   - Fixes implementados
 
-- **[SECURITY_FIXES_SUMMARY.md](SECURITY_FIXES_SUMMARY.md)** (2025-10-01)
+- **[docs/SECURITY_FIXES_SUMMARY.md](docs/SECURITY_FIXES_SUMMARY.md)** (2025-10-01)
   - Resumo de correções de segurança
 
 ### 🗄️ Progress Database
-- **[PROGRESS_INTEGRATIONS.md](PROGRESS_INTEGRATIONS.md)** (2025-10-02)
+- **[docs/PROGRESS_INTEGRATIONS.md](docs/PROGRESS_INTEGRATIONS.md)** (2025-10-02)
   - Integrações com Progress OpenEdge
   - JDBC patterns
   - Query examples
@@ -96,23 +96,25 @@ Documentação histórica das fases de implementação da API SemParar
 
 ### 📄 Documentação de Módulos
 
+📁 **[docs/modules/](docs/modules/)**
+
 #### Vale Pedágio
-- **[GUIA_LOGS_VALE_PEDAGIO.md](GUIA_LOGS_VALE_PEDAGIO.md)** (2025-11-06)
+- **[docs/modules/GUIA_LOGS_VALE_PEDAGIO.md](docs/modules/GUIA_LOGS_VALE_PEDAGIO.md)** (2025-11-06)
   - Como analisar logs de vale pedágio
   - Troubleshooting comum
 
-- **[SOLUCAO_IMPRESSORA_TRANSP4.md](SOLUCAO_IMPRESSORA_TRANSP4.md)** (2025-11-06)
+- **[docs/modules/SOLUCAO_IMPRESSORA_TRANSP4.md](docs/modules/SOLUCAO_IMPRESSORA_TRANSP4.md)** (2025-11-06)
   - Configuração impressora Python Flask
   - Integração com sistema
 
 #### Compra de Viagem
-- **[IMPLEMENTACAO_COMPLETA.md](IMPLEMENTACAO_COMPLETA.md)** (2025-10-24)
+- **[docs/modules/IMPLEMENTACAO_COMPLETA.md](docs/modules/IMPLEMENTACAO_COMPLETA.md)** (2025-10-24)
   - Implementação completa do módulo
   - Fluxo de compra
   - Integração SemParar
 
 ### 🎨 APIs Externas
-- **[NDD-SOAP-API-Documentation.md](NDD-SOAP-API-Documentation.md)** (2025-09-16)
+- **[docs/NDD-SOAP-API-Documentation.md](docs/NDD-SOAP-API-Documentation.md)** (2025-09-16)
   - Documentação SOAP APIs
   - Endpoints e exemplos
 
@@ -143,6 +145,25 @@ Documentação antiga preservada para referência histórica.
 
 ---
 
+## 🔧 Scripts e Utilitários
+
+📁 **[scripts/](scripts/)**
+
+### Scripts de Teste
+- `test-custo.ps1` - Teste de cálculo de custo SemParar
+- `test-fase2a-completo.ps1` - Teste completo FASE 2A (roteirização + compra)
+- `test-fase2a-completo.sh` - Versão bash do teste FASE 2A
+- `test-fase2b-completo.ps1` - Teste completo FASE 2B (persistência Progress)
+- `test-listar-rotas-semparar.php` - Teste de listagem de rotas
+- `test-mapservice-completo.ps1` - Teste completo do MapService
+
+### Scripts Utilitários
+- `extract-soap-log.php` - Extrai últimas requisições/respostas SOAP dos logs
+- `diagnostico_impressora.sh` - Diagnóstico de impressora transp4 (Linux/CUPS)
+- `abrir-firewall-8002.bat` - Abre porta 8002 no firewall Windows
+
+---
+
 ## 🔍 Como Usar Este Índice
 
 ### Por Tipo de Tarefa
@@ -158,27 +179,30 @@ Documentação antiga preservada para referência histórica.
 3. Procure na pasta `docs/archive/` por análises de problemas similares
 
 **Otimizando Performance:**
-1. Leia `CACHE_OPTIMIZATION_AND_BUG_FIXES.md`
-2. Consulte `MAP_SERVICE_FASE1_COMPLETO.md` para patterns de cache
-3. Veja `PLANO_MAP_SERVICE_UNIFICADO.md` para estratégias
+1. Leia `docs/CACHE_OPTIMIZATION_AND_BUG_FIXES.md`
+2. Consulte `docs/MAP_SERVICE_FASE1_COMPLETO.md` para patterns de cache
+3. Veja `docs/PLANO_MAP_SERVICE_UNIFICADO.md` para estratégias
 
 **Trabalhando com SemParar API:**
 1. Veja `docs/semparar-phases/` para histórico de implementação
-2. Consulte `IMPLEMENTACAO_COMPLETA.md` para fluxo completo
-3. Verifique `NDD-SOAP-API-Documentation.md` para referência SOAP
+2. Consulte `docs/modules/IMPLEMENTACAO_COMPLETA.md` para fluxo completo
+3. Verifique `docs/NDD-SOAP-API-Documentation.md` para referência SOAP
 
 **Migrando Sistema de Mapas:**
 1. Leia `docs/migrations/ROUTING_MIGRATION.md`
 2. Veja exemplos específicos nas outras migrações
-3. Consulte `MAP_SERVICE_FASE1_COMPLETO.md` para patterns
+3. Consulte `docs/MAP_SERVICE_FASE1_COMPLETO.md` para patterns
 
 ---
 
 ## 📊 Estatísticas da Documentação
 
 - **Total de documentos:** 30+
-- **Documentação ativa:** 15 arquivos
-- **Documentação arquivada:** 11 arquivos
+- **Documentação ativa:** 15 arquivos (docs/ + docs/modules/)
+- **Documentação arquivada:** 11 arquivos (docs/archive/)
+- **Migrações:** 3 arquivos (docs/migrations/)
+- **Fases SemParar:** 3 arquivos (docs/semparar-phases/)
+- **Scripts:** 9 arquivos (scripts/)
 - **Última atualização:** 2025-11-28
 - **Cobertura:** Backend (PHP), Frontend (Vue/TS), Infraestrutura, APIs
 
@@ -190,10 +214,13 @@ Ao criar nova documentação:
 
 1. **Nome do arquivo:** Use padrão `NOME_DESCRITIVO.md`
 2. **Localização:**
-   - Raiz: Documentação principal/recente
+   - Raiz: `CLAUDE.md`, `README.md` apenas
+   - `docs/`: Documentação recente e ativa (implementações, segurança, APIs)
    - `docs/migrations/`: Migrações de sistema
-   - `docs/semparar-phases/`: Fases SemParar
-   - `docs/archive/`: Documentação antiga preservada
+   - `docs/semparar-phases/`: Fases de implementação SemParar
+   - `docs/modules/`: Documentação de módulos específicos
+   - `docs/archive/`: Documentação histórica preservada
+   - `scripts/`: Scripts de teste e utilitários
 
 3. **Formato:** Siga template similar aos existentes
 4. **Atualização:** Atualize este índice ao adicionar novos docs
