@@ -289,10 +289,10 @@ class CacheManager
                 'expired_entries' => RouteCache::where('expires_at', '<=', now())->count(),
                 'size_mb' => $this->calculateTableSize('route_cache'),
                 'providers' => DB::table('route_cache')
-                    ->select('provider', DB::raw('count(*) as count'))
-                    ->groupBy('provider')
+                    ->select('source', DB::raw('count(*) as count'))
+                    ->groupBy('source')
                     ->get()
-                    ->pluck('count', 'provider')
+                    ->pluck('count', 'source')
                     ->toArray(),
                 'avg_distance_km' => round(RouteCache::avg('total_distance'), 2)
             ];

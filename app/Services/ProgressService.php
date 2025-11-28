@@ -1631,6 +1631,56 @@ class ProgressService
     }
 
     /**
+     * Busca descrição do status de erro do SemParar
+     *
+     * @param int $codStatus Código do status retornado pelo SemParar
+     * @return array ['success' => bool, 'descricao' => string|null]
+     */
+    public function getSemPararStatusDescricao(int $codStatus): array
+    {
+        try {
+            Log::info('Buscando descrição do status SemParar', ['cod_status' => $codStatus]);
+
+            $sql = "SELECT TOP 1 codStatus, desStatus FROM PUB.semPararStatus WHERE codStatus = " . intval($codStatus);
+            $result = $this->executeCustomQuery($sql);
+
+            if ($result['success'] && !empty($result['data']['results'])) {
+                $status = $result['data']['results'][0];
+
+                Log::info('Status SemParar encontrado', [
+                    'codigo' => $status['codstatus'],
+                    'descricao' => $status['desstatus']
+                ]);
+
+                return [
+                    'success' => true,
+                    'descricao' => $status['desstatus'],
+                    'codigo' => $status['codstatus']
+                ];
+            }
+
+            Log::warning('Status SemParar não encontrado na tabela', ['cod_status' => $codStatus]);
+
+            return [
+                'success' => false,
+                'descricao' => null
+            ];
+
+        } catch (Exception $e) {
+            Log::error('Erro ao buscar status SemParar', [
+                'cod_status' => $codStatus,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'descricao' => null,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
      * Atualiza os municípios de uma rota SemParar
      */
     public function updateSemPararRotaMunicipios($rotaId, $municipios): array
@@ -1908,6 +1958,7 @@ class ProgressService
 
             // PASSO 2.5: Buscar entregas do pacote com GPS (Rota.cls linha 716-797)
             // Só busca entregas se NÃO for rota CD (flgCD)
+            // ⚠️ IMPORTANTE: Para SemParar, enviamos apenas PRIMEIRA e ÚLTIMA entrega (não todas)
             if (!$flgCD) {
                 Log::info('Buscando entregas do pacote com GPS', ['codpac' => $codPac]);
 
@@ -1916,23 +1967,48 @@ class ProgressService
                 if ($itinerario['success'] && !empty($itinerario['data']['entregas'])) {
                     $entregas = $itinerario['data']['entregas'];
 
-                    foreach ($entregas as $entrega) {
-                        // Só adiciona entregas com GPS válido (Rota.cls linha 739-740)
-                        if (!empty($entrega['gps_lat']) && !empty($entrega['gps_lon'])
-                            && $entrega['gps_lat'] !== null && $entrega['gps_lon'] !== null) {
+                    // Filtrar entregas com GPS válido
+                    $entregasComGPS = array_filter($entregas, function($entrega) {
+                        return !empty($entrega['gps_lat']) && !empty($entrega['gps_lon'])
+                            && $entrega['gps_lat'] !== null && $entrega['gps_lon'] !== null;
+                    });
 
+                    // Reindexar array após filter
+                    $entregasComGPS = array_values($entregasComGPS);
+
+                    // ⚠️ CORREÇÃO: Enviar apenas PRIMEIRA e ÚLTIMA entrega ao SemParar
+                    // Progress: compraRota.p - "pego a primeira e a ultima"
+                    if (count($entregasComGPS) > 0) {
+                        // Primeira entrega
+                        $primeiraEntrega = $entregasComGPS[0];
+                        $pontos[] = [
+                            'cod_ibge' => '0',  // Entregas usam GPS, não IBGE
+                            'desc' => $primeiraEntrega['desend'] ?? $primeiraEntrega['razcli'],
+                            'latitude' => $primeiraEntrega['gps_lat'],
+                            'longitude' => $primeiraEntrega['gps_lon']
+                        ];
+
+                        // Última entrega (se for diferente da primeira)
+                        if (count($entregasComGPS) > 1) {
+                            $ultimaEntrega = $entregasComGPS[count($entregasComGPS) - 1];
                             $pontos[] = [
-                                'cod_ibge' => '0',  // Entregas usam GPS, não IBGE (linha 741)
-                                'desc' => $entrega['desend'] ?? $entrega['razcli'],
-                                'latitude' => $entrega['gps_lat'],
-                                'longitude' => $entrega['gps_lon']
+                                'cod_ibge' => '0',
+                                'desc' => $ultimaEntrega['desend'] ?? $ultimaEntrega['razcli'],
+                                'latitude' => $ultimaEntrega['gps_lat'],
+                                'longitude' => $ultimaEntrega['gps_lon']
                             ];
                         }
-                    }
 
-                    Log::info('Entregas com GPS adicionadas', ['total_entregas' => count($entregas), 'total_pontos' => count($pontos)]);
+                        Log::info('Entregas adicionadas para SemParar (apenas primeira e última)', [
+                            'total_entregas_com_gps' => count($entregasComGPS),
+                            'enviadas_para_semparar' => count($entregasComGPS) > 1 ? 2 : 1,
+                            'total_pontos' => count($pontos)
+                        ]);
+                    } else {
+                        Log::info('Nenhuma entrega com GPS válido encontrada', ['codpac' => $codPac]);
+                    }
                 } else {
-                    Log::info('Nenhuma entrega com GPS encontrada', ['codpac' => $codPac]);
+                    Log::info('Nenhuma entrega encontrada no itinerário', ['codpac' => $codPac]);
                 }
             } else {
                 Log::info('Rota é CD (Centro de Distribuição), não busca entregas do pacote');

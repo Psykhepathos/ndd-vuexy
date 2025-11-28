@@ -162,6 +162,7 @@ export interface MapMarker {
   label: string
   sequencia?: number
   popup?: string
+  isIntermediaria?: boolean  // Flag para entregas intermediárias (opacidade reduzida)
 }
 
 export interface MapRoute {

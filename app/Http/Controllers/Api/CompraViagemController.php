@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\ProgressService;
+use App\Services\SemParar\SemPararService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
@@ -14,17 +15,22 @@ class CompraViagemController extends Controller
      * ⚠️ CONTROLE DE CHAMADAS À API SEMPARAR ⚠️
      *
      * ALLOW_SOAP_QUERIES = true  -> Permite validações e consultas (statusVei, verificaPreco)
-     * ALLOW_SOAP_PURCHASE = false -> BLOQUEIA compra real de viagens (compraViagem)
+     * ALLOW_SOAP_PURCHASE = true/false -> Controla compra real de viagens (compraViagem)
      *
-     * Configuração atual: CONSULTAS REAIS, COMPRAS BLOQUEADAS
+     * Configuração lida do .env
      */
-    protected bool $ALLOW_SOAP_QUERIES = true;   // ✅ Permite statusVei, verificaPreco
-    protected bool $ALLOW_SOAP_PURCHASE = false; // ❌ Bloqueia compraViagem
+    protected bool $ALLOW_SOAP_QUERIES;
+    protected bool $ALLOW_SOAP_PURCHASE;
     protected ProgressService $progressService;
+    protected SemPararService $semPararService;
 
-    public function __construct(ProgressService $progressService)
+    public function __construct(ProgressService $progressService, SemPararService $semPararService)
     {
         $this->progressService = $progressService;
+        $this->semPararService = $semPararService;
+        // Ler configurações do .env
+        $this->ALLOW_SOAP_QUERIES = env('ALLOW_SOAP_QUERIES', true);
+        $this->ALLOW_SOAP_PURCHASE = env('ALLOW_SOAP_PURCHASE', false);
     }
 
     /**
@@ -713,14 +719,52 @@ class CompraViagemController extends Controller
 
             $codtrn = $pacote['data']['codtrn'];
 
-            // TODO: Chamar SemParar compraViagem() quando ALLOW_SOAP_PURCHASE=true
-            // Por enquanto, simula compra bem-sucedida
-            $numeroViagem = 'SIM_' . time() . '_' . $validated['codpac'];
+            // Comprar viagem no SemParar (real ou simulada)
+            if ($this->ALLOW_SOAP_PURCHASE) {
+                // COMPRA REAL via SOAP
+                Log::info('Comprando viagem REAL no SemParar', [
+                    'codpac' => $validated['codpac'],
+                    'nome_rota' => $validated['nome_rota_semparar'],
+                    'placa' => $validated['placa']
+                ]);
 
-            Log::info('Compra simulada com sucesso', [
-                'codpac' => $validated['codpac'],
-                'numero_viagem' => $numeroViagem
-            ]);
+                $resultadoCompra = $this->semPararService->comprarViagem(
+                    $validated['nome_rota_semparar'],
+                    $validated['placa'],
+                    $validated['qtd_eixos'],
+                    $validated['data_inicio'],
+                    $validated['data_fim'],
+                    (string)$validated['codpac'] // item_fin1 = codpac (igual Progress linha 836)
+                );
+
+                if (!$resultadoCompra['success']) {
+                    Log::error('Erro ao comprar viagem no SemParar', [
+                        'error' => $resultadoCompra['error'] ?? 'Erro desconhecido'
+                    ]);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Erro ao comprar viagem no SemParar',
+                        'error' => $resultadoCompra['error'] ?? 'Erro desconhecido',
+                        'code' => 'ERRO_SEMPARAR'
+                    ], 500);
+                }
+
+                $numeroViagem = $resultadoCompra['cod_viagem'];
+
+                Log::info('Compra REAL bem-sucedida', [
+                    'codpac' => $validated['codpac'],
+                    'numero_viagem' => $numeroViagem
+                ]);
+            } else {
+                // COMPRA SIMULADA
+                $numeroViagem = 'SIM_' . time() . '_' . $validated['codpac'];
+
+                Log::info('Compra SIMULADA com sucesso', [
+                    'codpac' => $validated['codpac'],
+                    'numero_viagem' => $numeroViagem
+                ]);
+            }
 
             // PASSO 1: Salva sPararViagem no Progress (linha 856-867)
             $dadosViagem = [
@@ -789,7 +833,9 @@ class CompraViagemController extends Controller
                     'data_compra' => now()->format('Y-m-d H:i:s')
                 ],
                 'test_mode' => !$this->ALLOW_SOAP_PURCHASE,
-                'warning' => '⚠️ Compra SIMULADA - ALLOW_SOAP_PURCHASE=false'
+                'warning' => $this->ALLOW_SOAP_PURCHASE
+                    ? null
+                    : '⚠️ Compra SIMULADA - ALLOW_SOAP_PURCHASE=false'
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
