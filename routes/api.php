@@ -16,9 +16,11 @@ use App\Http\Controllers\Api\TransporteController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-// Rotas de autenticação (públicas)
-Route::post('auth/login', [AuthController::class, 'login']);
-Route::post('auth/register', [AuthController::class, 'register']);
+// Rotas de autenticação (públicas) com rate limiting
+Route::post('auth/login', [AuthController::class, 'login'])
+    ->middleware('throttle:5,1'); // 5 tentativas por minuto
+Route::post('auth/register', [AuthController::class, 'register'])
+    ->middleware('throttle:3,1'); // 3 registros por minuto
 
 // Rotas protegidas por autenticação
 Route::middleware(['auth:sanctum'])->group(function () {

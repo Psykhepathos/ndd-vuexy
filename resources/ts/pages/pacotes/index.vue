@@ -431,7 +431,7 @@ onMounted(() => {
             :loading="loading"
             :page="pagination.current_page"
             @update:page="handlePageChange"
-            @update:items-per-page="(value) => { pagination.per_page = value; fetchPacotes() }"
+            @update:items-per-page="(value) => { pagination.per_page = value; pagination.current_page = 1; fetchPacotes() }"
             hover
             loading-text="Carregando pacotes..."
             no-data-text="Nenhum pacote encontrado"
