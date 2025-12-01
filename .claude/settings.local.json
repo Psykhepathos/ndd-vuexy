@@ -72,7 +72,8 @@
       "Bash(move \"resources\\ts\\pages\\compra-viagem\\index.vue\" \"resources\\ts\\pages\\compra-viagem\\index-old-backup.vue\")",
       "Bash(git rm:*)",
       "Bash(git reset:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(git mv:*)"
     ],
     "deny": [],
     "ask": []

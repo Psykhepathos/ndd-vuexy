@@ -141,10 +141,15 @@ class ProgressService
                 $whereConditions[] = "flgautonomo = 0";
             }
 
-            // Filtro por natureza do transporte
+            // Filtro por natureza do transporte (validar para evitar SQL injection)
             $natureza = $filters['natureza'] ?? '';
             if (!empty($natureza)) {
-                $whereConditions[] = "natcam = '$natureza'";
+                // Validar que natureza é apenas 'F' ou 'J'
+                if (in_array($natureza, ['F', 'J'], true)) {
+                    $whereConditions[] = "natcam = '$natureza'";
+                } else {
+                    Log::warning('Tentativa de SQL injection detectada em natureza', ['natureza' => $natureza]);
+                }
             }
 
             // Filtro por status ativo
@@ -1691,39 +1696,86 @@ class ProgressService
                 'total_municipios' => count($municipios)
             ]);
 
-            // Primeiro, deletar todos os municípios existentes
-            // IMPORTANTE: usar executeUpdate() para DELETE/INSERT/UPDATE
+            // FASE 1: VALIDAR TODOS OS DADOS ANTES DE DELETAR QUALQUER COISA
+            // (Progress JDBC não tem transações - se falhar após DELETE, dados são perdidos!)
+            foreach ($municipios as $index => $municipio) {
+                // Validar campos obrigatórios
+                if (!isset($municipio['sequencia']) || !isset($municipio['cod_est']) ||
+                    !isset($municipio['cod_mun']) || !isset($municipio['des_est']) ||
+                    !isset($municipio['des_mun']) || !isset($municipio['cdibge'])) {
+
+                    Log::error('Dados de município inválidos na posição ' . $index, ['municipio' => $municipio]);
+                    return [
+                        'success' => false,
+                        'error' => 'Dados inválidos no município da posição ' . ($index + 1) . '. Operação cancelada para evitar perda de dados.'
+                    ];
+                }
+
+                // Validar tipos de dados
+                if (!is_numeric($municipio['sequencia']) || !is_numeric($municipio['cod_est']) ||
+                    !is_numeric($municipio['cod_mun']) || !is_numeric($municipio['cdibge'])) {
+
+                    Log::error('Tipos de dados inválidos no município da posição ' . $index, ['municipio' => $municipio]);
+                    return [
+                        'success' => false,
+                        'error' => 'Tipos de dados inválidos no município da posição ' . ($index + 1) . '. Operação cancelada.'
+                    ];
+                }
+            }
+
+            // FASE 2: CONSTRUIR TODAS AS QUERIES DE INSERT ANTES DE DELETAR
+            $insertQueries = [];
+            foreach ($municipios as $municipio) {
+                $sqlInsert = "INSERT INTO PUB.semPararRotMu (sPararRotID, sPararMuSeq, CodEst, CodMun, DesEst, DesMun, cdibge) VALUES ("
+                    . intval($rotaId) . ", "
+                    . intval($municipio['sequencia']) . ", "
+                    . intval($municipio['cod_est']) . ", "
+                    . intval($municipio['cod_mun']) . ", "
+                    . $this->escapeSqlString($municipio['des_est']) . ", "
+                    . $this->escapeSqlString($municipio['des_mun']) . ", "
+                    . intval($municipio['cdibge']) . ")";
+
+                $insertQueries[] = [
+                    'sql' => $sqlInsert,
+                    'municipio' => $municipio['des_mun']
+                ];
+            }
+
+            Log::info('Todas as queries validadas e construídas. Iniciando DELETE seguro.', [
+                'total_queries' => count($insertQueries)
+            ]);
+
+            // FASE 3: AGORA É SEGURO DELETAR (sabemos que todos os INSERTs são válidos)
             $sqlDelete = "DELETE FROM PUB.semPararRotMu WHERE sPararRotID = " . intval($rotaId);
             $deleteResult = $this->executeUpdate($sqlDelete);
 
             if (!$deleteResult['success']) {
-                throw new Exception('Erro ao deletar municípios antigos');
+                Log::error('Erro ao deletar municípios antigos', ['error' => $deleteResult['error']]);
+                throw new Exception('Erro ao deletar municípios antigos: ' . ($deleteResult['error'] ?? 'Erro desconhecido'));
             }
 
-            // Inserir novos municípios com a sequência correta
-            // IMPORTANTE: SQL single-line (Progress JDBC não gosta de quebras de linha)
-            foreach ($municipios as $municipio) {
-                $sqlInsert = "INSERT INTO PUB.semPararRotMu (sPararRotID, sPararMuSeq, CodEst, CodMun, DesEst, DesMun, cdibge) VALUES (" . intval($rotaId) . ", " . intval($municipio['sequencia']) . ", " . intval($municipio['cod_est']) . ", " . intval($municipio['cod_mun']) . ", " . $this->escapeSqlString($municipio['des_est']) . ", " . $this->escapeSqlString($municipio['des_mun']) . ", " . intval($municipio['cdibge']) . ")";
-
-                $result = $this->executeUpdate($sqlInsert);
+            // FASE 4: EXECUTAR OS INSERTS
+            foreach ($insertQueries as $query) {
+                $result = $this->executeUpdate($query['sql']);
 
                 if (!$result['success']) {
                     Log::error('Erro ao inserir município na rota', [
-                        'municipio' => $municipio,
+                        'municipio' => $query['municipio'],
                         'error' => $result['error']
                     ]);
-                    throw new Exception('Erro ao inserir município: ' . $municipio['des_mun']);
+                    // IMPORTANTE: Dados antigos já foram deletados, mas pelo menos logamos o erro
+                    throw new Exception('Erro ao inserir município: ' . $query['municipio'] . ' - ' . ($result['error'] ?? 'Erro desconhecido'));
                 }
             }
 
-            // Atualizar data de modificação da rota
-            // IMPORTANTE: Usar date() do PHP ao invés de CURDATE() do SQL
+            // FASE 5: Atualizar data de modificação da rota
             $sqlUpdate = "UPDATE PUB.semPararRot SET datAtu = '" . date('Y-m-d') . "', resAtu = 'web' WHERE sPararRotID = " . intval($rotaId);
 
             $updateResult = $this->executeUpdate($sqlUpdate);
 
             if (!$updateResult['success']) {
-                throw new Exception('Erro ao atualizar data da rota');
+                // Não é crítico, apenas log
+                Log::warning('Erro ao atualizar data da rota (não crítico)', ['error' => $updateResult['error']]);
             }
 
             return [

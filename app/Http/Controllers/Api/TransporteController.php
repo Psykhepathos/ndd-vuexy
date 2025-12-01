@@ -209,7 +209,7 @@ class TransporteController extends Controller
     {
         // Verificar se usuário é admin
         $user = $request->user();
-        if (!$user || !$user->hasRole('admin')) {
+        if (!$user || $user->role !== 'admin') {
             return response()->json([
                 'success' => false,
                 'message' => 'Acesso negado. Apenas administradores podem executar consultas customizadas.',

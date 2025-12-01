@@ -2,364 +2,139 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## ⚡ Quick Reference
+## 📚 Navigation
 
-| Task | Command/Location |
-|------|------------------|
-| **Start dev servers** | `php artisan serve --port=8002` + `pnpm run dev` |
-| **Access system** | http://localhost:8002 (NOT port 5174!) |
-| **Test Progress connection** | `curl http://localhost:8002/api/progress/test-connection` |
-| **TypeScript check** | `pnpm run typecheck` |
-| **Vuexy templates** | `resources/ts/pages/apps/` |
-| **Progress Service** | `app/Services/ProgressService.php` |
-| **API routes** | `routes/api.php` |
-| **Git user** | `git config --global user.name "Psykhepathos"` |
+- [Quick Start](#-quick-start) - Commands to get started
+- [Critical Rules](#-critical-rules) - MUST READ before coding
+- [Architecture](#-architecture) - System overview
+- [Backend Controllers](#-backend-controllers-18-controllers) - Complete API reference
+- [Services Layer](#-services-layer) - Business logic
+- [Frontend Modules](#-frontend-modules) - Vue pages and components
+- [Database](#-database-architecture) - Progress + SQLite/MySQL
+- [Implementation Patterns](#-critical-implementation-patterns) - Code examples
+- [Troubleshooting](#-troubleshooting) - Common issues
 
-## 🚨 ALERTA CRÍTICO - OSRM Routing (LEIA ISTO ANTES DE TRABALHAR COM MAPAS!)
+---
 
-**❌ NUNCA use `leaflet-routing-machine` chamando OSRM diretamente do frontend!**
+## ⚡ Quick Start
 
-**Problema:** Servidores OSRM públicos bloqueiam requisições diretas (CORS, timeouts, rate limiting)
+```bash
+# Start development servers
+php artisan serve --port=8002  # Backend API (REQUIRED PORT!)
+pnpm run dev                   # Frontend (Vite)
 
-**✅ SOLUÇÃO CORRETA:** Use o proxy Laravel que JÁ EXISTE no projeto!
+# Access system
+http://localhost:8002          # ✅ ALWAYS use this URL!
+# Login: admin@ndd.com / 123456
+
+# Testing & validation
+pnpm run typecheck            # TypeScript check
+pnpm run lint                 # ESLint
+php artisan test              # Backend tests
+composer test                 # Clear cache + tests
+
+# Test connections
+curl http://localhost:8002/api/progress/test-connection  # Progress JDBC
+curl http://localhost:8002/api/semparar/test-connection  # SemParar SOAP
+
+# Build for production
+pnpm run build
+```
+
+**⚠️ CRITICAL:** ALWAYS use `http://localhost:8002` to access the system! Vite dev server (port 5173/5174/5176) is for hot-reload only, NOT for viewing the app.
+
+---
+
+## 🚨 CRITICAL RULES
+
+### 1. Progress Database - NO TRANSACTIONS!
+
+```php
+// ❌ NEVER DO THIS - Progress JDBC doesn't support transactions
+DB::connection('progress')->beginTransaction();
+$this->executeUpdate($sql);
+DB::connection('progress')->commit();
+
+// ✅ ALWAYS DO THIS - Direct execution
+$this->executeUpdate($sql1);
+$this->executeUpdate($sql2);
+// If either fails, catch exception and handle manually
+
+// ✅ SQL must be SINGLE-LINE (Progress JDBC has multi-line issues)
+$sql = "UPDATE PUB.semPararRot SET desSPararRot = 'Test', tempoViagem = 5 WHERE sPararRotID = 204";
+
+// ❌ NEVER multi-line
+$sql = "UPDATE PUB.semPararRot SET
+  desSPararRot = 'Test',
+  tempoViagem = 5
+  WHERE sPararRotID = 204";
+```
+
+**Why:** Progress JDBC driver doesn't implement transaction methods. Any attempt to use transactions will fail silently or throw errors.
+
+### 2. OSRM Routing - ALWAYS Use Laravel Proxy!
 
 ```typescript
-// ❌ ERRADO - Não fazer isso!
+// ❌ NEVER use leaflet-routing-machine directly (CORS/timeout issues)
 import 'leaflet-routing-machine'
 const osrmRouter = L.Routing.osrmv1({
   serviceUrl: 'https://routing.openstreetmap.de/...'
 })
-L.Routing.control({ router: osrmRouter, ... })
+L.Routing.control({ router: osrmRouter, ... })  // FAILS!
 
-// ✅ CORRETO - Usar proxy Laravel!
-// Calcular rota segmento por segmento
+// ✅ ALWAYS use Laravel proxy (segment-by-segment)
 for (let i = 0; i < waypoints.length - 1; i++) {
   const response = await fetch('http://localhost:8002/api/routing/route', {
     method: 'POST',
+    headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
-      start: [waypoints[i].lng, waypoints[i].lat],
+      start: [waypoints[i].lng, waypoints[i].lat],  // [lng, lat]
       end: [waypoints[i+1].lng, waypoints[i+1].lat]
     })
   })
+
   const data = await response.json()
-  // data.coordinates = [[lat, lng], ...]
-  // Desenhar com L.polyline(data.coordinates, {...})
+  if (data.success) {
+    allCoordinates.push(...data.coordinates)  // [[lat, lng], ...]
+  }
 }
+
+L.polyline(allCoordinates, { color: '#E91E63' }).addTo(map)
 ```
 
-**Backend Proxy:**
-- **Controller:** `app/Http/Controllers/Api/RoutingController.php`
-- **Endpoint:** `POST /api/routing/route` (2 pontos) ou `POST /api/routing/calculate` (múltiplos)
-- **Features:** Retry em 3 servidores OSRM, fallback inteligente, sem CORS
-- **Formato retorno:** `{ success: true, coordinates: [[lat,lng],...], distance_km: 123.4 }`
+**Why:** Public OSRM servers block direct browser requests. Laravel proxy handles retry logic, fallbacks, and CORS.
 
-**Referência funcional:** `resources/ts/pages/rotas-padrao/mapa/[id].vue` (linhas 449-595)
+**Reference:** `resources/ts/pages/rotas-padrao/mapa/[id].vue` (lines 449-610)
 
----
+### 3. SemParar SOAP - Positional Parameters + SoapVar
 
-## Quick Start
-
-**Laravel + Vue.js unified transport management system using Vuexy template, connected to Progress OpenEdge via ODBC.**
-
-```bash
-# Start development servers
-php artisan serve --port=8002  # Laravel API (Backend)
-pnpm run dev                   # Vue frontend (Vite)
-
-# Testing & validation
-pnpm run typecheck            # TypeScript validation
-pnpm run lint                 # ESLint with auto-fix
-php artisan test              # Backend tests
-composer test                 # Clear cache + run tests
-
-# Build for production
-pnpm run build                # Frontend production build
-```
-
-**IMPORTANTE - URLs de Acesso:**
-- **Sistema completo (Frontend + API):** http://localhost:8002
-- **Vite Dev Server (desenvolvimento apenas):** http://localhost:5173/5174/5176 (NÃO usar para visualização)
-- **Login:** admin@ndd.com / 123456
-
-**⚠️ ATENÇÃO:** SEMPRE use http://localhost:8002 para acessar o sistema! O Vite (porta 517x) é apenas para desenvolvimento/hot-reload.
-
-## 🆕 Atualizações Recentes
-
-### ✅ FASE 1A: SemParar SOAP Core - COMPLETA (2025-10-27)
-
-**Status:** Integração SOAP base com SemParar API está funcional
-
-**Implementado:**
-- ✅ Cliente SOAP com TLS 1.2/1.3 (`app/Services/SemParar/SemPararSoapClient.php`)
-- ✅ Autenticação com cache de token de 1 hora
-- ✅ Verificação de status de veículo
-- ✅ Endpoints REST de teste (`/api/semparar/*`)
-- ✅ Rate limiting configurado
-
-**Teste rápido:**
-```bash
-curl http://localhost:8002/api/semparar/test-connection
-# Deve retornar: {"success": true, "token_length": 19, ...}
-```
-
-**⚠️ Descoberta importante:**
 ```php
-// ❌ ERRADO - Causa "Array to string conversion"
-$client->__soapCall('autenticarUsuario', [['cnpj' => $x, 'login' => $y, 'senha' => $z]]);
+// ❌ WRONG - Named params cause "Array to string conversion"
+$client->autenticarUsuario(['cnpj' => $x, 'login' => $y, 'senha' => $z]);
 
-// ✅ CORRETO - Parâmetros posicionais
+// ✅ CORRECT - Positional params
 $client->autenticarUsuario($cnpj, $user, $password);
-// Retorna: stdClass { sessao: "3642419762017373443", status: 0 }
-```
 
-**Documentação completa:** `CHECKPOINT_FASE_1A.md`
-
----
-
-### ✅ FASE 1B: SemParar SOAP Routing - COMPLETA (2025-10-27)
-
-**Status:** Roteirização de praças de pedágio funcional
-
-**Implementado:**
-- ✅ XML Builder para datasets Progress (`app/Services/SemParar/XmlBuilders/PontosParadaBuilder.php`)
-- ✅ `roteirizarPracasPedagio()` - Calcula praças de pedágio em rota
-- ✅ `cadastrarRotaTemporaria()` - Cadastra rota temporária
-- ✅ `obterCustoRota()` - Calcula custo total
-- ✅ Endpoints REST + interface de teste
-
-**Bug Crítico Resolvido:**
-```php
-// ❌ ERRADO - PHP SoapClient envia XML vazio
+// ❌ WRONG - XML as string (sends EMPTY XML in SOAP body!)
 $client->roteirizarPracasPedagio($pontosXml, $opcoesXml, $token);
 
-// ✅ CORRETO - Usar SoapVar com XSD_ANYXML
+// ✅ CORRECT - Use SoapVar with XSD_ANYXML
 $pontosParam = new \SoapVar($pontosXml, XSD_ANYXML);
 $opcoesParam = new \SoapVar($opcoesXml, XSD_ANYXML);
 $client->roteirizarPracasPedagio($pontosParam, $opcoesParam, $token);
 ```
 
-**Testes bem-sucedidos:**
-- Rota SP→RJ: **6 praças** encontradas
-- Rota 183 + Pacote 3043368 (19 pontos): **12 praças** encontradas
+**Why:** PHP SoapClient has quirks with Progress SOAP services. These patterns are battle-tested.
 
-**Documentação:** `SEMPARAR_FASE1B_COMPLETO.md`
+### 4. Vuexy Template Usage (MANDATORY)
 
----
-
-### ✅ FASE 2A: SemParar Trip Purchase - COMPLETA (2025-10-27)
-
-**Status:** Compra de viagens SemParar funcional
-
-**Implementado:**
-- ✅ `comprarViagem()` no SemPararService (105 linhas)
-- ✅ Endpoint REST `POST /api/semparar/comprar-viagem`
-- ✅ Validação de dados de compra
-- ✅ Interface de teste com confirmação
-
-**Fluxo completo:**
-1. Roteirizar praças → 2. Cadastrar rota temporária → 3. Obter custo → 4. **Comprar viagem**
-
-**Endpoint:**
-```bash
-POST /api/semparar/comprar-viagem
-{
-  "nome_rota": "TESTE_SP_RJ",
-  "placa": "ABC1234",
-  "eixos": 2,
-  "data_inicio": "2025-10-27",
-  "data_fim": "2025-10-27",
-  "item_fin1": "PEDAGIO"
-}
-
-# Response:
-{
-  "success": true,
-  "data": {
-    "cod_viagem": "123456789",
-    "status": 0
-  }
-}
-```
-
-**⚠️ ATENÇÃO:** Esta operação EFETIVA a compra no SemParar! Use com cuidado.
-
-**Página de teste:** http://localhost:8002/test-semparar-fase1b.html
-
----
-
-### 🗺️ MIGRAÇÃO: Google Maps → Leaflet + OpenStreetMap + OSRM (100% GRATUITO!)
-
-**Data:** 2025-10-21 (Atualizado: 2025-10-27)
-**Impacto:** Sistema de mapas agora é 100% gratuito, sem dependência de API keys do Google Maps
-
-**O que mudou:**
-- ❌ **REMOVIDO:** Google Maps API (tiles + routing)
-- ✅ **ADICIONADO:** Leaflet.js + OpenStreetMap (tiles gratuitos)
-- ✅ **ADICIONADO:** OSRM OpenStreetMap.de (routing gratuito, sem API key)
-- ✅ **MANTIDO:** Google Geocoding API (apenas para IBGE → coordenadas, com cache agressivo)
-
-**Tecnologias:**
-```typescript
-// Frontend
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
-import 'leaflet-routing-machine'
-import 'leaflet-routing-machine/dist/leaflet-routing-machine.css'
-
-// Mapa
-L.map(container).setView([-14.2350, -51.9253], 4)
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
-
-// Routing GRATUITO
-const osrmRouter = L.Routing.osrmv1({
-  serviceUrl: 'https://routing.openstreetmap.de/routed-car/route/v1',
-  profile: 'driving',
-  timeout: 30000
-})
-```
-
-**Arquivos modificados:**
-- `resources/ts/pages/rotas-semparar/mapa/[id].vue` - Migrado para Leaflet
-- `resources/ts/pages/test-leaflet-pacote.vue` - Teste funcional com pacote real
-
-**Features mantidas:**
-- ✅ Marcadores numerados customizados
-- ✅ Popups com informações
-- ✅ Rotas seguindo estradas reais (não linhas retas)
-- ✅ Geocoding automático
-- ✅ Sistema de debug visual
-- ✅ Simulação de pacotes
-- ✅ Drag & drop de municípios
-- ✅ Fallback para linha reta em caso de erro
-
-**Limitações conhecidas:**
-- ⚠️ OSRM público pode ter downtime ocasional (fallback implementado)
-- ⚠️ Limite de ~25-50 waypoints por rota (limite do OSRM público)
-- ✅ Solução futura: Hospedar OSRM próprio via Docker
-
-**Benefícios:**
-- 💰 **Custo ZERO** - Sem mais custos de Google Maps API
-- 🚀 **Performance** - OpenStreetMap é rápido e confiável
-- 🔓 **Open Source** - Stack 100% open source
-
-**URLs de Teste:**
-- Rota SemParar: http://localhost:8002/rotas-semparar/mapa/204
-- Teste Pacote: http://localhost:8002/test-leaflet-pacote
-
-**Documentação:**
-- Análise completa: `ANALISE_ROTAS_SEMPARAR.md`
-- Debug system: `DEBUG_MAPA_ROTAS.md`
-
----
-
-### 1. Sistema de Debug para Mapa de Rotas SemParar
-Implementado sistema completo de debug e diagnóstico para resolver problemas de geocoding e renderização de mapas.
-
-**Arquivo principal**: `resources/ts/pages/rotas-semparar/mapa/[id].vue`
-**Documentação completa**: `DEBUG_MAPA_ROTAS.md`
-
-**Recursos implementados**:
-- 🐛 **Painel de Debug Visual**: Acessível via botão "Debug" no header
-- 📊 **Métricas em Tempo Real**: Geocodes, cache hits, atualizações do mapa
-- 📋 **Logging Estruturado**: 4 níveis (info/warn/error/success) e 6 categorias
-- ✅ **Validação de Coordenadas**: `isValidCoordinate()` e `sanitizeCoordinate()`
-- 🔄 **Controle de Sincronização**: Debounce (300ms), lock anti-concorrência, queue de geocoding
-- 🗺️ **Indicadores Visuais**: Marcadores coloridos por status, InfoWindow detalhado
-
-**Problemas solucionados**:
-- ✅ Race conditions no geocoding (processamento agora é sequencial)
-- ✅ Validação inadequada de coordenadas (validação rigorosa implementada)
-- ✅ Múltiplas atualizações do mapa (debouncing de 300ms)
-- ✅ Watch inadequado (removido, substituído por chamadas explícitas)
-- ✅ Falta de observabilidade (sistema completo de logs e métricas)
-
-**Como usar o Debug**:
-1. Acesse http://localhost:8002/rotas-semparar/mapa/{id}
-2. Clique no botão "Debug" no header
-3. Veja estatísticas, estado dos municípios e logs do sistema
-4. Use para diagnosticar problemas de geocoding ou renderização
-
-### 2. Suporte a UPDATE/INSERT/DELETE no Progress Database
-Progress JDBC **NÃO suporta transações**. Sistema atualizado para executar comandos de modificação sem transações.
-
-**Java Connector** (`storage/app/java/ProgressJDBCConnector.java`):
-- Nova ação `update` para UPDATE/INSERT/DELETE
-- Validação de segurança (apenas comandos permitidos)
-- Retorna número de linhas afetadas
-
-**ProgressService** (`app/Services/ProgressService.php`):
-- **Novo método**: `executeUpdate($sql)` - Executa UPDATE/INSERT/DELETE
-- **Método existente**: `executeCustomQuery($sql)` - Apenas SELECT (segurança)
-- **Métodos atualizados**: `updateSemPararRota()`, `deleteSemPararRota()` agora usam `executeUpdate()`
-- **REMOVIDO**: Suporte a transações (beginTransaction/commit/rollBack não funcionam com ODBC)
-
-**Outros Services:**
-- **GeocodingService**: Converte códigos IBGE → lat/lon usando Google Geocoding API
-- **RoutingService**: Calcula rotas entre coordenadas usando Google Directions API
-
-**⚠️ IMPORTANTE**:
-```php
-// ❌ ERRADO - Progress JDBC não suporta transações
-DB::connection('progress')->beginTransaction();
-$this->executeUpdate($sql);
-DB::connection('progress')->commit();
-
-// ✅ CORRETO - Executar queries individuais
-$this->executeUpdate($sql1);
-$this->executeUpdate($sql2);
-$this->executeUpdate($sql3);
-```
-
-**SQL deve ser em linha única** (Progress não gosta de quebras de linha):
-```php
-// ❌ ERRADO - Multi-linha
-$sql = "UPDATE PUB.semPararRot SET
-  desSPararRot = 'Teste',
-  tempoViagem = 5
-  WHERE sPararRotID = 204";
-
-// ✅ CORRETO - Single-line
-$sql = "UPDATE PUB.semPararRot SET desSPararRot = 'Teste', tempoViagem = 5 WHERE sPararRotID = 204";
-```
-
-### 3. Sistema de Geocoding e Routing com Cache
-
-**Geocoding** (converte IBGE → lat/lon):
-- **API**: `POST /api/geocoding/ibge` e `POST /api/geocoding/lote`
-- **Service**: `GeocodingService.php` - Google Geocoding API + cache local
-- **Model**: `MunicipioCoordenada.php` - Cache de coordenadas por código IBGE
-- **Cache**: Tabela `municipio_coordenadas` (persistente, sem expiração)
-
-**Routing** (calcula rotas com estradas reais):
-- **API**: `POST /api/routing/calculate`
-- **Service**: `RoutingService.php` - Google Directions API + cache de segmentos
-- **Model**: `RouteSegment.php` - Cache de segmentos origem→destino
-- **Cache**: Tabela `route_segments` (30 dias, tolerância ~100m)
-- **Rate Limiting**: 200ms entre novas requisições ao Google
-
-**Benefícios**:
-- Cache reduz 80%+ de chamadas à API do Google após primeira visualização
-- Rotas são desenhadas com estradas reais, não linhas retas
-- Segmentos são reutilizados entre diferentes rotas
-
-## Architecture Overview
-
-```
-Vue/Vuexy ← REST API → Laravel ← ODBC → Progress Database
-```
-
-- **Frontend**: Vue 3.5.14 + TypeScript + Vuexy template + Vuetify 3.8.5
-- **Backend**: Laravel 12.15.0 + Laravel Sanctum authentication
-- **Database**: Progress OpenEdge via ODBC (direct connection, no Kafka)
-- **Build**: Vite 6.3.5 + PNPM package manager
-
-## Critical Development Rules
-
-### 1. Vuexy Template Usage (MANDATORY)
 **NEVER create UI from scratch. ALWAYS copy from existing Vuexy templates:**
-- Lists: `resources/ts/pages/apps/user/list/index.vue`
-- Forms: `resources/ts/pages/apps/user/view/UserBioPanel.vue`
-- Dashboards: `resources/ts/pages/apps/logistics/dashboard.vue`
+
+```
+Lists:       resources/ts/pages/apps/user/list/index.vue
+Forms:       resources/ts/pages/apps/user/view/UserBioPanel.vue
+Dashboards:  resources/ts/pages/apps/logistics/dashboard.vue
+```
 
 **Use Vuexy components:**
 - `AppTextField` instead of `VTextField`
@@ -367,1053 +142,1776 @@ Vue/Vuexy ← REST API → Laravel ← ODBC → Progress Database
 - `VDataTableServer` for paginated tables
 - Theme classes: `text-high-emphasis`, `text-medium-emphasis`
 
-### 2. Progress Database Access
-**ALWAYS use JDBC direct connection, NOT Eloquent for Progress tables:**
+### 5. Progress vs. Eloquent
+
 ```php
-// ✅ CORRECT - Direct JDBC for Progress tables
+// ✅ CORRECT - Progress tables (PUB.*) → Raw JDBC
 DB::connection('progress')->select('SELECT * FROM PUB.pacote WHERE codpac = ?', [$id]);
 $this->progressService->executeCustomQuery($sql);
 
 // ❌ WRONG - Never use Eloquent for Progress tables
 Pacote::find(123);  // Won't work with JDBC!
 
-// ✅ CORRECT - Eloquent CAN be used for Laravel internal tables (SQLite, MySQL)
-$coords = MunicipioCoordenada::where('cdibge', $codigoIBGE)->first();  // Cache table (SQLite)
-$user = User::find($userId);  // Laravel users table
-$segment = RouteSegment::where('origin_lat', $lat)->first();  // Cache table (SQLite)
+// ✅ CORRECT - Laravel tables → Eloquent ORM
+$coords = MunicipioCoordenada::where('cdibge', $codigoIBGE)->first();  // Cache table
+$user = User::find($userId);  // Laravel users
 ```
 
 **Summary:**
 - **Progress tables (PUB.*)** → Raw JDBC via ProgressService ✅
-- **Laravel tables (users, cache, etc)** → Eloquent ORM ✅
+- **Laravel tables (users, cache, etc.)** → Eloquent ORM ✅
 
-### 3. Git Commits
-- **NEVER** mention Claude, AI, or use emojis in commits
-- Use technical, descriptive messages
-- Configure: `git config --global user.name "Psykhepathos"`
+### 6. Git Commits
 
-## Key Services & APIs
+```bash
+# Configure user
+git config --global user.name "Psykhepathos"
+git config --global user.email "your-email@example.com"
 
-### ProgressService Methods
-**Core Connection:**
-- `testConnection()` - Test JDBC connection
-- `executeCustomQuery($sql)` - Run custom SQL (SELECT only, for security)
-- `executeUpdate($sql)` - Run UPDATE/INSERT/DELETE (NEW in 2025-09-30)
-- `executeJavaConnector($action, ...$params)` - Execute JDBC Java connector
+# Commit style
+git commit -m "Fix: Correct OSRM routing proxy timeout handling"
+git commit -m "Add: Vehicle validation endpoint for trip purchase"
+git commit -m "Update: Enhance geocoding cache hit rate"
 
-**Transportes:**
-- `getTransportesPaginated($filters)` - Get transporters with pagination
-- `getTransporteById($id)` - Get specific transporter
-- `getMotoristasPorTransportador($id)` - Get drivers by transporter
-- `getVeiculosPorTransportador($id)` - Get vehicles by transporter
+# NEVER mention AI/Claude in commits
+# NEVER use emojis in commits
+```
 
-**Pacotes:**
-- `getPacotesPaginated($filters)` - Get packages with pagination
-- `getPacoteById($id)` - Get specific package
-- `getItinerarioPacote($codPac)` - Get full package itinerary with deliveries
+---
 
-**Rotas & Autocomplete:**
-- `getRotas($search)` - Autocomplete for routes
-- `getMunicipiosForAutocomplete($search, $estadoId)` - City search
-- `getEstadosForAutocomplete()` - State list
+## 🏗️ Architecture
+
+```
+Vue/Vuexy Frontend (Port 5173/4/6)
+        ↓ HTTP API
+Laravel Backend (Port 8002)
+        ↓ JDBC Direct
+Progress OpenEdge Database (192.168.80.113)
+
+External APIs:
+- Google Geocoding (IBGE → coordinates, cached 80%+)
+- OSRM Public Servers (free routing, 3 servers with retry)
+- SemParar SOAP (toll management, 2 WSDLs)
+- Python Flask (PDF generation + WhatsApp/Email)
+```
+
+**Stack:**
+- **Frontend:** Vue 3.5.14 + TypeScript 5.8.3 + Vuexy + Vuetify 3.8.5
+- **Backend:** Laravel 12.15.0 + Sanctum authentication
+- **Database:** Progress OpenEdge (JDBC) + SQLite (cache)
+- **Maps:** Leaflet + OpenStreetMap + OSRM (100% FREE!)
+- **Build:** Vite 6.3.5 + PNPM
+
+**Key Metrics:**
+- 18 Controllers
+- 11 Services (ProgressService: 2574 lines!)
+- 21 Progress Tables (via JDBC, NO transactions)
+- 11 Laravel Tables (SQLite/MySQL)
+- 50+ API Endpoints
+- 15+ Vue Pages
+
+---
+
+## 🎯 Backend Controllers (18 Controllers)
+
+### Authentication & Core
+
+#### **AuthController**
+```
+POST   /api/auth/login      - Sanctum token auth
+POST   /api/auth/register   - User registration
+POST   /api/auth/logout     - Invalidate token (protected)
+GET    /api/auth/user       - Current user (protected)
+```
+**Response:** `{accessToken, userData, userAbilityRules}`
+**Tables:** `users` (SQLite/MySQL)
+
+#### **ProgressController**
+```
+GET    /api/progress/test-connection       - JDBC health check
+GET    /api/progress/transportes           - Raw transporter list
+GET    /api/progress/transportes/{id}      - Specific transporter
+POST   /api/progress/query                 - Custom SQL (protected, admin, 5 req/min)
+```
+**Tables:** All via ProgressService
+**Rate Limit:** 10 req/min (test), 5 req/min (custom queries)
+
+---
+
+### Transport Management
+
+#### **TransporteController** (PRIMARY CRUD)
+```
+GET    /api/transportes?page=1&per_page=10&search=...&tipo=autonomo
+       &natureza=T&status_ativo=true        - Paginated list (60 req/min)
+GET    /api/transportes/{id}                - Detailed view + drivers + vehicles
+GET    /api/transportes/test-connection     - JDBC test (10 req/min)
+GET    /api/transportes/statistics          - Aggregated stats (10 req/min)
+GET    /api/transportes/schema              - Table schema (10 req/min)
+POST   /api/transportes/query               - Custom SQL (protected, admin, 5 req/min)
+```
+
+**ProgressService Methods:**
+- `getTransportesPaginated($filters)` - Keyset pagination
+- `getTransporteById($id)` - Full data
+- `getMotoristasPorTransportador($id)` - Associated drivers
+- `getVeiculosPorTransportador($id)` - Associated vehicles
+
+**Progress Tables:** `PUB.transporte`, `PUB.trnmot`
+**Frontend:** `resources/ts/pages/transportes/index.vue`
+
+#### **MotoristaController**
+```
+GET    /api/motoristas                      - List drivers
+GET    /api/motoristas/{id}                 - Driver details
+POST   /api/motoristas                      - Create driver
+PUT    /api/motoristas/{id}                 - Update driver
+DELETE /api/motoristas/{id}                 - Delete driver
+GET    /api/motoristas/progress/{codigo}    - Find by Progress code
+```
+**Tables:** `motoristas` (SQLite/MySQL - local cache)
+
+---
+
+### Package Management
+
+#### **PacoteController**
+```
+GET    /api/pacotes?page=1&per_page=15&search=...&codigo=...
+       &transportador=...&situacao=...&apenas_recentes=1
+       &data_inicio=...&data_fim=...        - Paginated packages (60 req/min)
+GET    /api/pacotes/{id}                    - Package details
+POST   /api/pacotes/itinerario              - Full itinerary with GPS (for map simulation)
+GET    /api/pacotes/autocomplete?search=304 - Quick search
+GET    /api/pacotes/statistics              - Stats
+```
+
+**ProgressService Methods:**
+- `getPacotesPaginated($filters)` - Includes TCD flag (`flg_tcd`)
+- `getPacoteById($id)` - Full package data
+- `getItinerarioPacote($codPac)` - **CRITICAL for map** - Returns deliveries with GPS
+
+**Progress Tables:** `PUB.pacote`, `PUB.transporte`, `PUB.paccd`, `PUB.carga`, `PUB.pedido`
+**Frontend:** `resources/ts/pages/pacotes/index.vue`
+
+**Itinerário Response:**
+```json
+{
+  "pedidos": [
+    {"razcli": "Cliente A", "gps_lat": "230876543", "gps_lon": "460123456", ...}
+  ]
+}
+```
+**GPS Processing:** "230876543" → -23.0876543 (divide by 10^7)
+
+---
+
+### Geographic & Routing Services
+
+#### **RotaController**
+```
+GET    /api/rotas?search=SP                 - Autocomplete for routes
+```
+**Progress Tables:** `PUB.introt`
+**ProgressService:** `getRotas($search)`
+
+#### **GeocodingController** (CRITICAL for Maps)
+```
+POST   /api/geocoding/ibge                  - Single municipality coordinates
+POST   /api/geocoding/lote                  - Batch geocoding (multiple municipalities)
+```
+
+**Request:**
+```json
+{
+  "codigo_ibge": "3550308",
+  "nome_municipio": "SÃO PAULO",
+  "uf": "SP"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "lat": -23.5505,
+    "lon": -46.6333,
+    "fonte": "google_geocoding",
+    "cached": false
+  }
+}
+```
+
+**Service:** `GeocodingService`
+**Cache:** `municipio_coordenadas` (SQLite, PERSISTENT, no expiration)
+**Rate Limit:** 200ms between Google API calls
+**Cache Hit Rate:** 80%+ after first use
+**Frontend:** Used by ALL map pages
+
+#### **RoutingController** (OSRM Proxy - CRITICAL!)
+```
+POST   /api/routing/route                   - OSRM proxy (2 points) ✅ RECOMMENDED
+POST   /api/routing/calculate               - Google Directions (DEPRECATED)
+GET    /api/routing/test                    - Service test
+```
+
+**OSRM Request:**
+```json
+{
+  "start": [-46.6333, -23.5505],  // [lng, lat]
+  "end": [-43.1729, -22.9068]
+}
+```
+
+**OSRM Response:**
+```json
+{
+  "success": true,
+  "coordinates": [[-23.5505, -46.6333], ...],  // [[lat, lng], ...] - INVERTED!
+  "distance_km": 356.7,
+  "duration_minutes": 280
+}
+```
+
+**Servers Tried (in order):**
+1. `https://router.project-osrm.org`
+2. `https://routing.openstreetmap.de/routed-car`
+3. `http://router.project-osrm.org` (HTTP fallback)
+
+**Retry:** 2 retries/server, 15s timeout, 1s delay
+**Fallback:** `{success: false, fallback: "usar_linha_reta"}`
+**Frontend Reference:** `resources/ts/pages/rotas-padrao/mapa/[id].vue:449-610`
+
+#### **MapController** (Unified Service)
+```
+POST   /api/map/route                       - Calculate route (100 req/min)
+POST   /api/map/geocode-batch               - Batch geocoding (60 req/min)
+POST   /api/map/cluster-points              - Proximity clustering (60 req/min)
+GET    /api/map/cache-stats                 - Cache stats (30 req/min)
+POST   /api/map/clear-expired-cache         - Admin cleanup (5 req/min)
+GET    /api/map/providers                   - Available providers
+```
+**Service:** `MapService` (abstraction over OSRM/Google)
+
+---
+
+### SemParar Integration (Toll Management)
+
+#### **SemPararRotaController** (Route Management)
+```
+GET    /api/semparar-rotas?page=1&per_page=10&search=...
+       &flg_cd=true&flg_retorno=true
+       &tempo_minimo=1&tempo_maximo=5       - List routes (60 req/min)
+GET    /api/semparar-rotas/{id}             - Route details
+GET    /api/semparar-rotas/{id}/municipios  - Route + municipalities
+POST   /api/semparar-rotas                  - Create route
+PUT    /api/semparar-rotas/{id}             - Update route
+PUT    /api/semparar-rotas/{id}/municipios  - Update municipalities (drag & drop)
+DELETE /api/semparar-rotas/{id}             - Delete route
+GET    /api/semparar-rotas/municipios?search=...&estado_id=... - Municipality autocomplete
+GET    /api/semparar-rotas/estados          - State list
+```
+
+**ProgressService Methods:**
+- `getSemPararRotas($filters)` - Paginated routes
+- `getSemPararRotaWithMunicipios($id)` - Route + ordered municipalities
+- `createSemPararRota($data)` - Create with municipalities
+- `updateSemPararRota($id, $data)` - Update metadata
+- `updateSemPararRotaMunicipios($id, $municipios)` - **⚠️ CRITICAL: DELETE + INSERT (data loss risk!)**
+- `deleteSemPararRota($id)` - Cascading delete
+
+**Progress Tables:** `PUB.semPararRot`, `PUB.semPararRotMu`, `PUB.municipio`, `PUB.estado`
+
+**Frontend:**
+- `resources/ts/pages/rotas-padrao/index.vue` - List view
+- `resources/ts/pages/rotas-padrao/mapa/[id].vue` - Interactive map (Leaflet + OSRM)
+
+**Known Issue:** `updateSemPararRotaMunicipios` can lose data if INSERT fails after DELETE (no transactions!)
+
+#### **SemPararController** (SOAP API Integration)
+```
+FASE 1A - Core:
+GET    /api/semparar/test-connection        - Auth test (10 req/min)
+POST   /api/semparar/status-veiculo         - Vehicle status (60 req/min)
+GET    /api/semparar/debug/token            - Get cached token
+POST   /api/semparar/debug/clear-cache      - Force re-auth
+
+FASE 1B - Routing:
+POST   /api/semparar/roteirizar             - Find toll plazas (20 req/min)
+POST   /api/semparar/rota-temporaria        - Create temp route (20 req/min)
+POST   /api/semparar/custo-rota             - Get route cost (60 req/min)
+
+FASE 2A - Purchase:
+POST   /api/semparar/comprar-viagem         - ⚠️ PURCHASE TRIP! REAL MONEY! (10 req/min)
+
+FASE 2C - Receipt:
+POST   /api/semparar/obter-recibo           - Get receipt data (60 req/min)
+POST   /api/semparar/gerar-recibo           - Generate PDF + WhatsApp/Email (20 req/min)
+
+FASE 3A - Management:
+POST   /api/semparar/consultar-viagens      - List trips by period (60 req/min)
+POST   /api/semparar/cancelar-viagem        - ⚠️ CANCEL TRIP! IRREVERSIBLE! (20 req/min)
+POST   /api/semparar/reemitir-viagem        - Reissue with new plate (20 req/min)
+```
+
+**Service:** `SemPararService` → `SemPararSoapClient`
+
+**SOAP Methods:**
+- `autenticarUsuario()` - Get session token (cached 1 hour)
+- `statusVeiculo($placa)` - Check vehicle registration
+- `roteirizarPracasPedagio($pontos, $alternativas)` - Find toll plazas
+- `cadastrarRotaTemporaria($pracaIds, $nomeRota)` - Register temp route
+- `obterCustoRota($nomeRota, $placa, $eixos, $dataInicio, $dataFim)` - Get cost
+- `comprarViagem(...)` - **Purchase trip (REAL MONEY!)**
+- `obterRecibo($codViagem)` - Get receipt data (SOAP only, NOT PDF!)
+- `gerarRecibo($codViagem, $telefone, $email)` - Generate PDF + send
+- `consultarViagens($dataInicio, $dataFim)` - Query trips (uses `vpextrato` WSDL)
+- `cancelarViagem($codViagem)` - Cancel trip
+- `reemitirViagem($codViagem, $placa)` - Reissue trip
+
+**WSDL URLs:**
+- Main: `https://app.viafacil.com.br/wsvp/ValePedagio?wsdl` (purchase, cancel, reissue, receipt)
+- Extrato: `https://app.viafacil.com.br/vpextrato/ValePedagio?wsdl` (query trips)
+
+**Progress Tables:** `PUB.sPararViagem` (trip purchase records)
+
+**External Services:**
+- Python Flask: `http://192.168.19.35:5001/gerar-vale-pedagio` (PDF generation)
+- Z-API: WhatsApp messaging
+- SMTP: Email (always uses `naoresponda@tambasa.com.br`)
+
+**Test Interfaces:**
+- `http://localhost:8002/test-semparar-fase1b.html` - Complete workflow
+- `http://localhost:8002/test-semparar-fase3a.html` - Trip management
+
+#### **CompraViagemController** (Trip Purchase Wizard)
+```
+GET    /api/compra-viagem/initialize        - Get config
+GET    /api/compra-viagem/statistics        - Stats
+GET    /api/compra-viagem/health            - Health check
+POST   /api/compra-viagem/viagens           - List purchased trips
+POST   /api/compra-viagem/validar-pacote    - STEP 1: Validate package
+POST   /api/compra-viagem/validar-placa     - STEP 2: Validate vehicle
+GET    /api/compra-viagem/rotas             - STEP 3: List routes
+POST   /api/compra-viagem/validar-rota      - STEP 3: Validate route
+POST   /api/compra-viagem/verificar-preco   - STEP 4: Check price
+POST   /api/compra-viagem/comprar           - STEP 5: Purchase trip
+```
+
+**Environment Variables (CRITICAL):**
+```env
+ALLOW_SOAP_QUERIES=true      # Enable validations/queries (safe)
+ALLOW_SOAP_PURCHASE=false    # ⚠️ BLOCK REAL PURCHASES (default: false!)
+```
+
+**ProgressService Methods:**
+- `isPacoteTCD($codPac)` - Check TCD status
+- `validatePackageForCompraViagem($codPac, $flgcd)` - Validate package
+- `getRotaSugeridaPorPacsoc($codPac)` - Suggest route (method 1)
+- `getRotaSugeridaPorIntrot($codPac, $flgcd)` - Suggest route (method 2)
+- `salvarViagemSemParar(...)` - Save trip to Progress (109 lines!)
+
+**Progress Tables:** `PUB.pacote`, `PUB.paccd`, `PUB.pacsoc`, `PUB.introt`, `PUB.sPararViagem`
+
+**Frontend:**
+- `resources/ts/pages/compra-viagem/index.vue` - Trip list
+- `resources/ts/pages/compra-viagem/nova.vue` - Purchase wizard (5 steps)
+- `resources/ts/pages/compra-viagem/components/CompraViagemStep*.vue` - Step components
+
+**Workflow:** Package → Vehicle → Route → Price → Confirmation → Purchase → Progress Save
+
+---
+
+### Toll Plaza Management
+
+#### **PracaPedagioController**
+```
+GET    /api/pracas-pedagio?situacao=Ativo&rodovia=BR-116
+       &uf=SP&lat=-23.5&lon=-46.6&raio_km=50
+       &sort_by=rodovia&per_page=15          - List with filters (60 req/min)
+GET    /api/pracas-pedagio/{id}             - Specific plaza
+GET    /api/pracas-pedagio/estatisticas     - Statistics (30 req/min)
+POST   /api/pracas-pedagio/proximidade      - Find near coordinates (60 req/min)
+POST   /api/pracas-pedagio/importar         - Import ANTT CSV (5 req/min)
+DELETE /api/pracas-pedagio/limpar           - ⚠️ Clear all! (2 req/min)
+```
+
+**Service:** `PracaPedagioImportService`
+**Tables:** `pracas_pedagio` (SQLite/MySQL - ANTT official data)
+**CSV Format:** ANTT official (18+ columns)
+**Frontend:** `resources/ts/pages/pracas-pedagio/index.vue`
+
+---
+
+## 🔧 Services Layer
+
+### ProgressService (MASSIVE - 2574 lines!)
+
+**Path:** `app/Services/ProgressService.php`
+**Role:** PRIMARY interface to Progress OpenEdge via JDBC
+**Java Connector:** `storage/app/java/ProgressJDBCConnector.java`
+
+**Connection:**
+- Host: `192.168.80.113`
+- Database: `tambasa`
+- Driver: `c:/Progress/OpenEdge/java/openedge.jar`
+- **NO TRANSACTIONS SUPPORT!**
+
+**Core Methods:**
+- `testConnection()` - JDBC health check
+- `executeJavaConnector($action, ...$params)` - Raw JDBC
+- `executeCustomQuery($sql)` - SELECT only (security)
+- `executeUpdate($sql)` - UPDATE/INSERT/DELETE (NO TRANSACTIONS!)
+- `escapeSqlString($value)` - SQL injection protection
+
+**Transporters:**
+- `getTransportesPaginated($filters)` - Keyset pagination
+- `getTransporteById($id)` - Full data + drivers + vehicles
+- `getMotoristasPorTransportador($id)` - Drivers
+- `getVeiculosPorTransportador($id)` - Vehicles
+
+**Packages:**
+- `getPacotesPaginated($filters)` - With TCD flag
+- `getPacoteById($id)` - Details
+- `getItinerarioPacote($codPac)` - **CRITICAL** - Returns GPS deliveries
 
 **SemParar Routes:**
-- `getSemPararRotas($filters)` - List SemParar routes with pagination
-- `getSemPararRota($id)` - Get specific route with municipalities
-- `createSemPararRota($data)` - Create new route
-- `updateSemPararRota($id, $data)` - Update route
-- `deleteSemPararRota($id)` - Delete route
-- `updateSemPararRotaMunicipios($id, $municipios)` - Update municipalities
+- `getSemPararRotas($filters)` - List routes
+- `getSemPararRotaWithMunicipios($id)` - Route + municipalities
+- `createSemPararRota($data)` - Create
+- `updateSemPararRota($id, $data)` - Update metadata
+- `updateSemPararRotaMunicipios($id, $municipios)` - **⚠️ DELETE + INSERT (data loss risk!)**
+- `deleteSemPararRota($id)` - Cascading delete
 
-### API Endpoints
-**Progress Database:**
-- `GET /api/progress/test-connection` - Test database connection
-- `POST /api/progress/query` - Execute custom SQL queries
-- `GET /api/progress/transportes` - List transporters
-- `GET /api/progress/transportes/{id}` - Get specific transporter
+**Trip Purchase:**
+- `isPacoteTCD($codPac)` - Check TCD status
+- `validatePackageForCompraViagem($codPac, $flgcd)` - Validation
+- `getRotaSugeridaPorPacsoc($codPac)` - Route suggestion
+- `getRotaSugeridaPorIntrot($codPac, $flgcd)` - Route suggestion (alt)
+- `salvarViagemSemParar(...)` - Save trip (109 lines!)
 
-**Transportes:**
-- `GET /api/transportes` - List transporters (paginated)
-- `GET /api/transportes/{id}` - Get transporter details
-- `GET /api/transportes/statistics` - Get statistics
-- `GET /api/transportes/schema` - Get table schema
+**Geographic:**
+- `getMunicipiosForAutocomplete($search, $estadoId)` - Cities
+- `getEstadosForAutocomplete()` - States
 
-**Pacotes:**
-- `GET /api/pacotes` - List packages (paginated with filters)
-- `GET /api/pacotes/{id}` - Get package details
-- `POST /api/pacotes/itinerario` - Get package itinerary with deliveries
-- `GET /api/pacotes/statistics` - Get statistics
+**Progress SQL Conventions:**
+```sql
+-- ✅ CORRECT
+SELECT TOP 10 codtrn, nomtrn FROM PUB.transporte WHERE flgati = 1
 
-**Rotas:**
-- `GET /api/rotas?search={term}` - Autocomplete for routes
+-- Schema: ALWAYS PUB.tablename
+-- Limit: TOP N (not LIMIT)
+-- Strings: Single quotes 'value'
+-- Case-sensitive: codtrn, NOT CodTrn
+-- Single-line preferred (multi-line causes issues)
 
-**SemParar Rotas:**
-- `GET /api/semparar-rotas` - List routes (paginated with filters)
-- `GET /api/semparar-rotas/{id}` - Get specific route
-- `GET /api/semparar-rotas/{id}/municipios` - Get route with municipalities
-- `POST /api/semparar-rotas` - Create new route
-- `PUT /api/semparar-rotas/{id}` - Update route
-- `PUT /api/semparar-rotas/{id}/municipios` - Update municipalities
-- `DELETE /api/semparar-rotas/{id}` - Delete route
-- `GET /api/semparar-rotas/municipios?search={term}` - City autocomplete
-- `GET /api/semparar-rotas/estados` - List states
+-- ❌ WRONG - No OFFSET support
+SELECT * FROM PUB.transporte LIMIT 10 OFFSET 20
 
-**Geocoding:**
-- `POST /api/geocoding/ibge` - Get coordinates from single IBGE code
-- `POST /api/geocoding/lote` - Get coordinates from multiple IBGE codes (batch)
+-- ❌ NEVER use transactions
+DB::connection('progress')->beginTransaction();
+```
 
-**Routing & Maps:**
-- `GET /api/routing/test` - Test routing service
-- `POST /api/routing/route` - Calculate route
-- `POST /api/routing/calculate` - Calculate route with waypoints
-- `POST /api/route-cache/find` - Find cached route
-- `POST /api/route-cache/save` - Save route to cache
-- `GET /api/route-cache/stats` - Cache statistics
-- `DELETE /api/route-cache/clear-expired` - Clear expired cache entries
+### GeocodingService
 
-**Google Maps Quota:**
-- `GET /api/google-maps/quota` - Get current API usage statistics
-- `POST /api/google-maps/reset-counters` - Reset usage counters (admin)
+**Path:** `app/Services/GeocodingService.php`
 
-### Progress SQL Conventions
-- **Schema:** Always use `PUB.tablename` (e.g., `PUB.transporte`, `PUB.pacote`)
-- **Limit:** Use `SELECT TOP 10` (not LIMIT)
-- **Offset:** Progress lacks native OFFSET - simulate with subqueries or fetch all + array_slice in PHP
-- **Case:** Progress is case-sensitive for table/column names
-- **Strings:** Use single quotes `'value'`
-- **Joins:** Use `LEFT JOIN` syntax, not nested subqueries
-- **Transactions:** ⚠️ **NUNCA USE TRANSAÇÕES** - Progress JDBC não suporta `beginTransaction()/commit()/rollBack()`
-- **SQL Format:** Use single-line queries (Progress JDBC tem problemas com quebras de linha)
+**Methods:**
+- `getCoordenadasByIbge($codigoIbge, $nomeMunicipio, $uf)` - Single geocoding
+- `geocodeByGoogle($nomeMunicipio, $uf)` - Direct Google API
+- `getCoordenadasLote($municipios)` - Batch processing
 
-**Common Tables:**
-- `PUB.transporte` - Transporters (codtrn, nomtrn, flgautonomo, codcnpjcpf)
-- `PUB.pacote` - Packages (codpac, codtrn, codmot, sitpac, datforpac)
+**Cache Strategy:**
+1. Check `municipio_coordenadas` (SQLite, persistent)
+2. If miss → Google Geocoding API
+3. Save to `municipio_coordenadas` AND `progress_municipios_gps`
+4. Rate limit: 200ms between API calls
+
+**Cache Hit Rate:** 80%+ after first use
+
+### SemPararService (Business Logic)
+
+**Path:** `app/Services/SemParar/SemPararService.php`
+**Dependencies:** `SemPararSoapClient`, `PontosParadaBuilder`
+
+**FASE 1A - Core:**
+- `testConnection()` - SOAP health
+- `statusVeiculo($placa)` - Vehicle status
+- `getToken()` - Get cached token (1 hour TTL)
+
+**FASE 1B - Routing:**
+- `roteirizarPracasPedagio($pontos, $alternativas)` - Find toll plazas
+- `cadastrarRotaTemporaria($pracaIds, $nomeRota)` - Register temp route
+- `obterCustoRota($nomeRota, $placa, $eixos, $dataInicio, $dataFim)` - Get cost
+
+**FASE 2A - Purchase:**
+- `comprarViagem(...)` - **REAL PURCHASE!**
+
+**FASE 2C - Receipt:**
+- `obterRecibo($codViagem)` - Get data (NOT PDF!)
+- `gerarRecibo($codViagem, $telefone, $email, $flgImprime)` - Generate PDF + send
+
+**FASE 3A - Management:**
+- `consultarViagens($dataInicio, $dataFim)` - Query trips
+- `cancelarViagem($codViagem)` - Cancel (IRREVERSIBLE)
+- `reemitirViagem($codViagem, $placa)` - Reissue
+
+### SemPararSoapClient (Low-level SOAP)
+
+**Path:** `app/Services/SemParar/SemPararSoapClient.php`
+
+**Methods:**
+- `getSoapClient()` - Main WSDL (lazy-loaded)
+- `getSoapExtratoClient()` - Extrato WSDL (lazy-loaded)
+- `autenticarUsuario()` - Get token (cached 1h)
+
+**SOAP Options:**
+- TLS 1.2/1.3
+- 60s timeout
+- Exceptions enabled
+- Trace enabled
+
+### MapService (Unified Abstraction)
+
+**Path:** `app/Services/Map/MapService.php`
+
+**Providers:**
+- `OsrmProvider` - OSRM routing (FREE)
+- `GoogleMapsProvider` - Geocoding only (routing deprecated)
+
+**Methods:**
+- `calculateRoute($waypoints, $options)` - Auto provider
+- `geocodeBatch($municipalities, $options)` - Batch geocoding
+- `clusterPoints($points, $options)` - Proximity clustering
+- `getCacheStats()` - Cache statistics
+
+**Utilities:**
+- `CoordinateConverter` - Transformations
+- `DistanceCalculator` - Haversine distance
+- `CacheManager` - Unified cache
+
+---
+
+## 🎨 Frontend Modules
+
+### Transport Management
+
+#### Transportes (Transporters)
+**Path:** `resources/ts/pages/transportes/index.vue`
+
+**API Endpoints:**
+- `GET /api/transportes` - Paginated list
+- `GET /api/transportes/statistics` - Stats
+
+**Features:**
+- Multi-filter search (code, name, type, status)
+- Tri-state filters (All/Autônomo/Empresa)
+- VDataTableServer (server-side pagination)
+
+#### Pacotes (Packages)
+**Path:** `resources/ts/pages/pacotes/index.vue`
+
+**API Endpoints:**
+- `GET /api/pacotes` - List with filters
+- `GET /api/pacotes/statistics` - Stats
+- `GET /api/pacotes/autocomplete` - Search
+
+**Features:**
+- Date range filters
+- Status filters
+- "Apenas recentes" toggle (codpac > 800000)
+- TCD badge display
+
+---
+
+### Route Management (COMPLEX!)
+
+#### Rotas Padrão - Index
+**Path:** `resources/ts/pages/rotas-padrao/index.vue`
+
+**API:** `GET /api/semparar-rotas`
+
+**Features:**
+- Tri-state filters (Type: All/CD/Route, Return: All/Yes/No)
+- Statistics cards
+- Actions: View map, Edit, Delete
+
+#### Rotas Padrão - Interactive Map (CRITICAL MODULE!)
+**Path:** `resources/ts/pages/rotas-padrao/mapa/[id].vue`
+
+**API Endpoints:**
+- `GET /api/semparar-rotas/{id}/municipios` - Load route
+- `PUT /api/semparar-rotas/{id}` - Save metadata
+- `PUT /api/semparar-rotas/{id}/municipios` - Save municipalities
+- `POST /api/geocoding/lote` - Batch geocoding
+- `POST /api/routing/route` - OSRM routing (segmented)
+- `POST /api/pacotes/itinerario` - Load package deliveries
+- `GET /api/pacotes/autocomplete` - Package search
+
+**Technologies:**
+- **Leaflet** - Map rendering
+- **OpenStreetMap** - Free tiles
+- **OSRM** - Free routing (via Laravel proxy!)
+- **vuedraggable** - Drag & drop
+
+**Features:**
+1. **Route Display:**
+   - Custom numbered markers (`L.divIcon`)
+   - Polyline routing (OSRM via proxy)
+   - Popups with municipality info
+
+2. **Editing:**
+   - Drag & drop to reorder
+   - Add/remove municipalities
+   - Save changes to Progress
+
+3. **Package Simulation:**
+   - Load real package itinerary
+   - Overlay deliveries on map
+   - Combined routing (route + deliveries)
+   - Color-coded markers:
+     - Blue: Route municipalities
+     - Green: First delivery
+     - Orange: Middle deliveries
+     - Red: Last delivery
+
+4. **Debug System:**
+   - Toggle debug panel (button in header)
+   - Logs & metrics
+   - Geocoding stats
+   - Map update tracking
+
+**Routing Implementation (CRITICAL!):**
+```typescript
+// Segment-by-segment to avoid OSRM limits
+const allCoordinates = []
+for (let i = 0; i < waypoints.length - 1; i++) {
+  const response = await fetch('/api/routing/route', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      start: [waypoints[i].lng, waypoints[i].lat],  // [lng, lat]
+      end: [waypoints[i+1].lng, waypoints[i+1].lat]
+    })
+  })
+
+  const data = await response.json()
+
+  if (data.success) {
+    allCoordinates.push(...data.coordinates)  // [[lat, lng], ...]
+  } else {
+    // Fallback: dashed line
+    L.polyline(
+      [[waypoints[i].lat, waypoints[i].lng], [waypoints[i+1].lat, waypoints[i+1].lng]],
+      {color: '#999', dashArray: '10, 10', opacity: 0.5}
+    ).addTo(map)
+  }
+}
+
+// Draw final polyline
+L.polyline(allCoordinates, {color: '#E91E63', weight: 4}).addTo(map)
+```
+
+**Composables:** `resources/ts/composables/usePackageSimulation.ts`
+
+**Known Issues:**
+- OSRM public servers can have downtime (fallback implemented)
+- ~25-50 waypoint limit per route (public server limit)
+
+---
+
+### Trip Purchase System
+
+#### Compra Viagem - Index (Trip List)
+**Path:** `resources/ts/pages/compra-viagem/index.vue`
+
+**API:** `POST /api/compra-viagem/viagens`
+
+**Features:**
+- Trip history
+- Status badges
+- Receipt download
+
+#### Compra Viagem - Nova (Purchase Wizard)
+**Path:** `resources/ts/pages/compra-viagem/nova.vue`
+
+**Workflow (5 Steps):**
+
+**Step 1 - Package:**
+- API: `POST /api/compra-viagem/validar-pacote`
+- Validate package, check TCD status, load transporter
+
+**Step 2 - Vehicle:**
+- API: `POST /api/compra-viagem/validar-placa`
+- Select vehicle, verify SemParar registration
+
+**Step 3 - Route:**
+- API: `GET /api/compra-viagem/rotas` + `POST /api/compra-viagem/validar-rota`
+- Choose suggested route or select manually
+
+**Step 4 - Price:**
+- API: `POST /api/compra-viagem/verificar-preco`
+- Set date range, verify cost via SemParar SOAP
+
+**Step 5 - Confirmation:**
+- API: `POST /api/compra-viagem/comprar`
+- Review all data, confirm purchase, save to Progress
+
+**Components:**
+- `CompraViagemStep1Pacote.vue`
+- `CompraViagemStep2Placa.vue`
+- `CompraViagemStep3Rota.vue`
+- `CompraViagemStep4Preco.vue`
+- `CompraViagemStep5Confirmacao.vue`
+- `CompraViagemMapaFixo.vue` - Static map preview
+
+**Safety:**
+- `ALLOW_SOAP_PURCHASE` flag (default: false)
+- Double confirmation modal
+- Test mode warnings
+
+---
+
+### Other Modules
+
+#### Vale Pedágio (Toll Pass Calculator)
+**Path:** `resources/ts/pages/vale-pedagio/index.vue`
+
+**API:**
+- `GET /api/pracas-pedagio`
+- `POST /api/pracas-pedagio/proximidade`
+
+**Features:**
+- Calculate toll costs
+- Filter by highway, state
+- Proximity search
+
+#### Praças Pedágio (Toll Plaza Management)
+**Path:** `resources/ts/pages/pracas-pedagio/index.vue`
+
+**API:**
+- `GET /api/pracas-pedagio` - List
+- `POST /api/pracas-pedagio/importar` - Import CSV
+- `DELETE /api/pracas-pedagio/limpar` - Clear all
+- `GET /api/pracas-pedagio/estatisticas` - Stats
+
+**Features:**
+- CRUD operations
+- ANTT CSV import
+- Map preview
+- Proximity search
+
+---
+
+## 💾 Database Architecture
+
+### Progress OpenEdge (Main Database)
+
+**Connection:** JDBC via Java connector
+**Host:** 192.168.80.113
+**Database:** tambasa
+
+**Characteristics:**
+- ⚠️ **NO TRANSACTIONS** - JDBC driver doesn't support `beginTransaction()/commit()/rollBack()`
+- ⚠️ **NO OFFSET** - Must use keyset/cursor pagination
+- ⚠️ **Case-sensitive** - Table/column names
+- ⚠️ **Single-line SQL preferred** - Multi-line queries cause issues
+- ✅ **Schema prefix required** - Always `PUB.tablename`
+
+**Tables (21 tables):**
+
+**Transport:**
+- `PUB.transporte` - Transporters (codtrn, nomtrn, flgautonomo, codcnpjcpf, numpla, flgati)
+- `PUB.trnmot` - Transporter-Driver relationship
+
+**Packages:**
+- `PUB.pacote` - Packages (codpac, codtrn, codmot, sitpac, datforpac, codrot)
+- `PUB.paccd` - TCD Packages (codpaccd)
+- `PUB.pacsoc` - Package associations
 - `PUB.carga` - Loads (codcar, codpac)
-- `PUB.pedido` - Orders/Deliveries (numseqped, codcar, codcli)
+- `PUB.pedido` - Deliveries (numseqped, codcar, codcli, **gps_lat, gps_lon**)
+
+**Routes:**
 - `PUB.introt` - Routes (codrot, desrot)
-- `PUB.semPararRot` - SemParar Routes (sPararRotID, desSPararRot, flgCD)
-- `PUB.semPararRotMu` - SemParar Municipalities (sPararRotID, codMun, codEst)
-- `PUB.municipio` - Cities (codmun, desmun, cdibge)
+- `PUB.semPararRot` - SemParar Routes (sPararRotID, desSPararRot, flgCD, flgRetorno, tempoViagem)
+- `PUB.semPararRotMu` - Route Municipalities (sPararRotID, sPararMuSeq, codMun, codEst, cdibge)
+- `PUB.semPararRotMuLog` - Municipality logs
+- `PUB.semPararIntrot` - Route integrations
+- `PUB.semPararStatus` - Status tracking
+
+**Geographic:**
+- `PUB.municipio` - Cities (codmun, desmun, **cdibge**)
 - `PUB.estado` - States (codest, nomest, siglaest)
 
-## API Rate Limiting & Security
+**SemParar:**
+- `PUB.sPararViagem` - Purchased trips (codviagem, codpac, numpla, nomrotsemparar, valviagem, datacompra, flgcancelado)
 
-**Rate limits configured in `routes/api.php`:**
-- **Test endpoints**: 10 req/min (`/api/transportes/test-connection`)
-- **Statistics/Schema**: 10 req/min (expensive queries)
-- **CRUD operations**: 60 req/min (standard operations)
-- **Custom queries**: 5 req/min (admin-only, requires authentication)
+**Other:**
+- `PUB.cliente` - Customers
+- `PUB.bairro` - Neighborhoods
+- `PUB.arqrdnt` - Archives
+- `PUB.caixafech` - Cash close
+- `PUB.cxapacote` - Cash package
 
-**Authentication:**
-- **Public endpoints** (no auth required):
-  - All Progress test connections
-  - Transporter/package listings
-  - Geocoding and routing services
-  - SemParar routes (read-only)
+### SQLite/MySQL (Laravel Tables)
 
-- **Protected endpoints** (require `auth:sanctum`):
-  - `POST /api/transportes/query` - Custom SQL queries (admin-only)
-  - `POST /api/auth/logout`
-  - `GET /api/auth/user`
+**Migrations (11 tables):**
+- `users` - Laravel users + Sanctum
+- `cache` - Application cache
+- `jobs` - Queue jobs
+- `motoristas` - Drivers (local cache)
+- `personal_access_tokens` - Sanctum tokens
+- `municipio_coordenadas` - **Geocoding cache (PERSISTENT, no expiration)**
+- `progress_municipios_gps` - Progress-compatible GPS cache
+- `pracas_pedagio` - ANTT toll plaza data
+- `route_segments` - Route segment cache (30 days, DEPRECATED)
+- `route_cache` - Route cache (DEPRECATED)
 
-**Auth flow:**
-1. `POST /api/auth/login` → Returns Sanctum token
-2. Include token in header: `Authorization: Bearer {token}`
-3. `POST /api/auth/logout` when done
+---
 
-## Project Structure
+## 🔐 Authentication & Security
+
+### Authentication Flow
+
+**System:** Laravel Sanctum (token-based)
+
+```
+1. POST /api/auth/login {email, password}
+2. Server validates credentials
+3. Returns: {accessToken, userData, userAbilityRules}
+4. Client stores token in localStorage
+5. Client sends: Authorization: Bearer {token}
+```
+
+**Protected Endpoints:**
+- `POST /api/auth/logout`
+- `GET /api/auth/user`
+- `POST /api/transportes/query` (admin-only)
+
+**Most endpoints are public** (for now)
+
+### Rate Limiting Tiers
+
+```
+Test/Debug:              10 req/min
+Expensive Ops:           10 req/min  (stats, schema)
+Admin Ops:               5 req/min   (custom SQL)
+Standard CRUD:           60 req/min
+Map Operations:          100 req/min (route), 60 req/min (geocode)
+
+SemParar SOAP:
+  Queries:               60 req/min
+  Routing:               20 req/min
+  Purchase:              10 req/min  (CRITICAL!)
+  Management:            20 req/min  (cancel/reissue)
+
+Toll Plaza:
+  List:                  60 req/min
+  Import:                5 req/min
+  Clear:                 2 req/min   (CRITICAL!)
+```
+
+### Security Measures
+
+**SQL Injection:**
+- `escapeSqlString()` in ProgressService
+- Regex validation for search terms
+- Integer casting for IDs
+- Whitelist for enum values
+
+**SOAP Security:**
+- Token caching (1 hour)
+- TLS 1.2/1.3 enforcement
+- Timeout controls (60s)
+- Retry limits
+
+**File Upload:**
+- CSV only (10MB max)
+- MIME type validation
+- Temporary file cleanup
+
+---
+
+## 💡 Critical Implementation Patterns
+
+### 1. Progress JDBC Transactions
+
+```php
+// ❌ NEVER DO THIS
+try {
+    DB::connection('progress')->beginTransaction();
+    $this->executeUpdate("UPDATE PUB.semPararRot SET tempoViagem = 5 WHERE sPararRotID = 204");
+    $this->executeUpdate("INSERT INTO PUB.semPararRotMu VALUES (...)");
+    DB::connection('progress')->commit();
+} catch (\Exception $e) {
+    DB::connection('progress')->rollBack();  // DOESN'T WORK!
+}
+
+// ✅ ALWAYS DO THIS
+try {
+    // Execute sequentially, handle errors manually
+    $this->executeUpdate("UPDATE PUB.semPararRot SET tempoViagem = 5 WHERE sPararRotID = 204");
+    $this->executeUpdate("INSERT INTO PUB.semPararRotMu VALUES (...)");
+} catch (\Exception $e) {
+    Log::error('Progress update failed', ['error' => $e->getMessage()]);
+    // Manual compensating actions if needed
+}
+```
+
+**Why:** Progress JDBC driver doesn't implement `PDO::beginTransaction()`, `commit()`, or `rollBack()`. Any attempt will fail.
+
+**Workarounds:**
+- Validate ALL data before any UPDATE/INSERT/DELETE
+- Log all operations extensively
+- Consider using Progress ABL procedures for critical multi-step operations
+
+### 2. OSRM Routing Proxy
+
+```typescript
+// ❌ NEVER use leaflet-routing-machine directly
+import L from 'leaflet'
+import 'leaflet-routing-machine'
+
+const osrmRouter = L.Routing.osrmv1({
+  serviceUrl: 'https://routing.openstreetmap.de/routed-car/route/v1'
+})
+
+L.Routing.control({
+  router: osrmRouter,
+  waypoints: [
+    L.latLng(-23.5505, -46.6333),
+    L.latLng(-22.9068, -43.1729)
+  ]
+}).addTo(map)
+// ❌ FAILS with CORS errors or timeouts!
+
+// ✅ ALWAYS use Laravel proxy (segment-by-segment)
+async function drawRoute(waypoints) {
+  const allCoordinates = []
+
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    try {
+      const response = await fetch('http://localhost:8002/api/routing/route', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          start: [waypoints[i].lng, waypoints[i].lat],
+          end: [waypoints[i+1].lng, waypoints[i+1].lat]
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        allCoordinates.push(...data.coordinates)
+      } else {
+        // Fallback: straight dashed line
+        allCoordinates.push(
+          [waypoints[i].lat, waypoints[i].lng],
+          [waypoints[i+1].lat, waypoints[i+1].lng]
+        )
+      }
+    } catch (error) {
+      console.error('Routing failed:', error)
+      // Fallback
+      allCoordinates.push(
+        [waypoints[i].lat, waypoints[i].lng],
+        [waypoints[i+1].lat, waypoints[i+1].lng]
+      )
+    }
+  }
+
+  // Draw polyline
+  L.polyline(allCoordinates, {
+    color: '#E91E63',
+    weight: 4,
+    opacity: 0.8
+  }).addTo(map)
+}
+```
+
+**Why:** Public OSRM servers block direct browser requests (CORS) and have rate limits. Laravel proxy:
+- Tries 3 different OSRM servers
+- Implements retry logic (2 retries/server, 15s timeout)
+- Handles CORS properly
+- Provides fallback mechanisms
+
+**Reference:** `resources/ts/pages/rotas-padrao/mapa/[id].vue:449-610`
+
+### 3. SemParar SOAP Parameters
+
+```php
+// ❌ WRONG - Named parameters cause "Array to string conversion"
+$response = $this->soapClient->autenticarUsuario([
+    'cnpj' => $cnpj,
+    'login' => $user,
+    'senha' => $password
+]);
+// PHP Fatal error: Uncaught Error: Array to string conversion
+
+// ✅ CORRECT - Positional parameters
+$response = $this->soapClient->autenticarUsuario($cnpj, $user, $password);
+// Returns: stdClass { sessao: "3642419762017373443", status: 0 }
+
+// ❌ WRONG - XML as string (sends EMPTY XML in SOAP body!)
+$pontosXml = '<PontosParada><PontoParada>...</PontoParada></PontosParada>';
+$opcoesXml = '<OpcoesRota><alternativas>false</alternativas></OpcoesRota>';
+$response = $this->soapClient->roteirizarPracasPedagio($pontosXml, $opcoesXml, $token);
+// SOAP request contains empty <pontos/> and <opcoes/>!
+
+// ✅ CORRECT - Use SoapVar with XSD_ANYXML
+$pontosParam = new \SoapVar($pontosXml, XSD_ANYXML);
+$opcoesParam = new \SoapVar($opcoesXml, XSD_ANYXML);
+$response = $this->soapClient->roteirizarPracasPedagio($pontosParam, $opcoesParam, $token);
+// SOAP request contains full XML content
+```
+
+**Why:**
+- PHP SoapClient expects positional params for Progress SOAP services
+- XML parameters need `SoapVar` wrapper to prevent HTML encoding
+- These patterns are battle-tested against actual SemParar SOAP API
+
+**Documentation:** `CHECKPOINT_FASE_1A.md`, `SEMPARAR_FASE1B_COMPLETO.md`
+
+### 4. Geocoding Cache Strategy
+
+```php
+public function getCoordenadasByIbge($codigoIbge, $nomeMunicipio, $uf) {
+    // 1. Check persistent cache (SQLite)
+    $cached = MunicipioCoordenada::where('cdibge', $codigoIbge)->first();
+
+    if ($cached) {
+        Log::info('Geocoding cache HIT', ['cdibge' => $codigoIbge]);
+        return [
+            'lat' => $cached->latitude,
+            'lon' => $cached->longitude,
+            'fonte' => $cached->fonte,
+            'cached' => true
+        ];
+    }
+
+    // 2. Cache MISS - Call Google Geocoding API
+    Log::info('Geocoding cache MISS', ['cdibge' => $codigoIbge]);
+    $coordenadas = $this->geocodeByGoogle($nomeMunicipio, $uf);
+
+    if (!$coordenadas) {
+        return null;
+    }
+
+    // 3. Save to BOTH caches (SQLite + Progress-compatible)
+    MunicipioCoordenada::create([
+        'cdibge' => $codigoIbge,
+        'latitude' => $coordenadas['lat'],
+        'longitude' => $coordenadas['lon'],
+        'fonte' => 'google_geocoding',
+        'nome_municipio' => $nomeMunicipio,
+        'uf' => $uf
+    ]);
+
+    ProgressMunicipioGps::updateOrCreate(
+        ['cod_mun' => $codMun, 'cod_est' => $codEst],
+        ['gps_lat' => $coordenadas['lat'], 'gps_lon' => $coordenadas['lon']]
+    );
+
+    // 4. Rate limiting (200ms delay between API calls)
+    usleep(200000);
+
+    return [
+        'lat' => $coordenadas['lat'],
+        'lon' => $coordenadas['lon'],
+        'fonte' => 'google_geocoding',
+        'cached' => false
+    ];
+}
+```
+
+**Cache Performance:**
+- First run: 100% API calls
+- After first run: 80%+ cache hits
+- No expiration (geographic data doesn't change)
+- Dual cache: SQLite (fast) + Progress-compatible (legacy)
+
+### 5. GPS Coordinate Processing
+
+```typescript
+// Progress stores GPS as INTEGER (lat/lon * 10^7)
+// Example: -23.5505° → -235505000 (stored as string "230505000" with - implied)
+
+function processGpsCoordinate(gpsString: string): number | null {
+  if (!gpsString || gpsString === '0') return null
+
+  // Parse as integer
+  const value = parseInt(gpsString, 10)
+  if (isNaN(value)) return null
+
+  // Determine sign (if starts with 2 or 3, it's negative for latitude)
+  // Brazil coordinates: lat -5 to -35, lon -35 to -75
+  const isNegative = (gpsString[0] === '2' || gpsString[0] === '3')
+
+  // Convert from integer to decimal
+  const decimal = Math.abs(value) / 10_000_000
+
+  return isNegative ? -decimal : decimal
+}
+
+// Usage in itinerary processing
+const entregas = itinerarioData.pedidos
+  .map(pedido => ({
+    razcli: pedido.razcli,
+    lat: processGpsCoordinate(pedido.gps_lat),
+    lon: processGpsCoordinate(pedido.gps_lon)
+  }))
+  .filter(entrega => entrega.lat !== null && entrega.lon !== null)
+
+// Examples:
+// "230876543" → -23.0876543
+// "460123456" → -46.0123456
+```
+
+### 6. Drag & Drop Municipality Reordering
+
+```vue
+<template>
+  <draggable
+    v-model="municipios"
+    @end="onDragEnd"
+    handle=".drag-handle"
+    item-key="sPararMuSeq"
+  >
+    <template #item="{ element, index }">
+      <div class="municipio-item">
+        <v-icon class="drag-handle">mdi-drag</v-icon>
+        <span>{{ index + 1 }}. {{ element.desMun }} - {{ element.desEst }}</span>
+      </div>
+    </template>
+  </draggable>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import draggable from 'vuedraggable'
+
+const municipios = ref([...])
+
+async function onDragEnd() {
+  // Update sequence numbers
+  municipios.value = municipios.value.map((m, index) => ({
+    ...m,
+    sPararMuSeq: index + 1
+  }))
+
+  // Save to backend
+  await fetch(`/api/semparar-rotas/${rotaId}/municipios`, {
+    method: 'PUT',
+    body: JSON.stringify({ municipios: municipios.value })
+  })
+}
+</script>
+```
+
+**Backend Handler (ProgressService):**
+```php
+public function updateSemPararRotaMunicipios($id, array $municipios): bool
+{
+    try {
+        // ⚠️ CRITICAL: DELETE + INSERT without transaction!
+        // Validate EVERYTHING before DELETE
+
+        // 1. Validate all municipalities exist
+        foreach ($municipios as $mun) {
+            if (!$mun['codMun'] || !$mun['codEst']) {
+                throw new \Exception("Invalid municipality data");
+            }
+        }
+
+        // 2. Delete existing municipalities
+        $deleteSql = "DELETE FROM PUB.semPararRotMu WHERE sPararRotID = {$id}";
+        $this->executeUpdate($deleteSql);
+
+        // 3. Insert new municipalities with sequence
+        foreach ($municipios as $index => $mun) {
+            $seq = $index + 1;
+            $insertSql = "INSERT INTO PUB.semPararRotMu (sPararRotID, sPararMuSeq, codMun, codEst, desMun, desEst, cdibge) VALUES ({$id}, {$seq}, {$mun['codMun']}, {$mun['codEst']}, '{$mun['desMun']}', '{$mun['desEst']}', {$mun['cdibge']})";
+            $this->executeUpdate($insertSql);
+        }
+
+        return true;
+    } catch (\Exception $e) {
+        Log::error('Failed to update municipalities', [
+            'rota_id' => $id,
+            'error' => $e->getMessage()
+        ]);
+
+        // ⚠️ Data may be lost if INSERT fails after DELETE!
+        // No way to rollback with Progress JDBC
+        return false;
+    }
+}
+```
+
+**Known Issue:** If any INSERT fails after DELETE, municipalities are lost. No transactions available.
+
+**Mitigation:**
+- Extensive validation before DELETE
+- Detailed error logging
+- Consider implementing backup/restore mechanism
+
+---
+
+## 🐛 Troubleshooting
+
+### Progress Connection Issues
+
+```bash
+# 1. Test JDBC connection
+curl http://localhost:8002/api/progress/test-connection
+
+# Expected response:
+# {"success": true, "message": "Conexão bem-sucedida!", ...}
+
+# 2. Check Java is installed
+java -version
+# Expected: Java Runtime Environment (build 1.8.0_xxx or higher)
+
+# 3. Check Progress driver exists
+dir "c:\Progress\OpenEdge\java\openedge.jar"
+# OR on Linux/Mac:
+ls -la /path/to/Progress/OpenEdge/java/openedge.jar
+
+# 4. Test Java connector manually
+cd storage/app/java
+java -cp "c:/Progress/OpenEdge/java/openedge.jar;gson-2.8.9.jar;." ProgressJDBCConnector query "SELECT TOP 1 * FROM PUB.transporte"
+
+# 5. View Laravel logs
+php artisan pail
+# OR
+tail -f storage/logs/laravel.log
+```
+
+**Common Errors:**
+
+**"Class not found" or "No driver found":**
+- Check `PROGRESS_HOST` in `.env`
+- Verify Progress driver path in `config/database.php`
+- Ensure Java connector is compiled: `javac -cp ... ProgressJDBCConnector.java`
+
+**"Connection refused":**
+- Check Progress server is running
+- Verify firewall allows connection to port 2574
+- Test with telnet: `telnet 192.168.80.113 2574`
+
+**"SQL syntax error":**
+- Ensure single-line SQL (no newlines)
+- Check case sensitivity (codtrn, NOT CodTrn)
+- Always use `PUB.` schema prefix
+
+### Frontend Issues
+
+```bash
+# TypeScript errors
+pnpm run typecheck
+# Fix errors before committing
+
+# Linting issues
+pnpm run lint
+# Auto-fix most issues
+
+# Clear Vite cache
+rm -rf node_modules/.vite
+pnpm run dev
+
+# Frontend shows 404 for new route
+rm -rf resources/ts/.temp
+pnpm run dev
+
+# Hot reload not working
+# Check vite.config.ts port settings
+# Restart both servers
+```
+
+**Common Errors:**
+
+**"Cannot find module" in Vue:**
+- Run `pnpm install`
+- Check import paths (use `@/` for `resources/ts/`)
+- Clear Vite cache
+
+**"Unexpected token" in browser:**
+- Check TypeScript compilation: `pnpm run typecheck`
+- Ensure Vite is running: `pnpm run dev`
+
+**"CORS error" when calling API:**
+- ALWAYS use `http://localhost:8002` (NOT port 5173/4/6!)
+- Check `config/cors.php` settings
+
+### SOAP Errors
+
+```bash
+# 1. Test SemParar connection
+curl http://localhost:8002/api/semparar/test-connection
+
+# Expected:
+# {"success": true, "token_length": 19, ...}
+
+# 2. View cached token (debug)
+curl http://localhost:8002/api/semparar/debug/token
+
+# 3. Clear token cache (force re-auth)
+curl -X POST http://localhost:8002/api/semparar/debug/clear-cache
+
+# 4. View SOAP traces
+tail -f storage/logs/laravel.log | grep -i soap
+```
+
+**Common SOAP Errors:**
+
+**"Array to string conversion":**
+- Using named params → Switch to positional params
+- See [Critical Rule #3](#3-semparar-soap---positional-parameters--soapvar)
+
+**"Empty XML in SOAP request":**
+- Sending XML as string → Wrap with `SoapVar($xml, XSD_ANYXML)`
+- See [Critical Rule #3](#3-semparar-soap---positional-parameters--soapvar)
+
+**"Session expired" or "Invalid token":**
+- Token cache expired → Will auto-refresh on next call
+- Force refresh: `curl -X POST http://localhost:8002/api/semparar/debug/clear-cache`
+
+**"consultarViagens returns empty":**
+- Using wrong WSDL → Use `vpextrato` WSDL for trip queries
+- Check `SemPararSoapClient::getSoapExtratoClient()`
+
+### Map Issues
+
+```bash
+# 1. Test OSRM routing proxy
+curl -X POST http://localhost:8002/api/routing/route \
+  -H "Content-Type: application/json" \
+  -d '{"start":[-46.63,-23.55],"end":[-43.17,-22.91]}'
+
+# Expected:
+# {"success": true, "coordinates": [[...]], "distance_km": 356.7}
+
+# 2. Test geocoding
+curl -X POST http://localhost:8002/api/geocoding/ibge \
+  -H "Content-Type: application/json" \
+  -d '{"codigo_ibge":"3550308","nome_municipio":"SÃO PAULO","uf":"SP"}'
+
+# Expected:
+# {"success": true, "data": {"lat": -23.5505, "lon": -46.6333, "cached": ...}}
+```
+
+**Common Map Errors:**
+
+**"Map not loading / blank screen":**
+1. Check OSRM proxy: `curl http://localhost:8002/api/routing/test`
+2. Open browser console for JavaScript errors
+3. Verify coordinates are valid: lat -90 to 90, lon -180 to 180
+4. Check Leaflet CSS is loaded: `import 'leaflet/dist/leaflet.css'`
+
+**"Routing failed / straight lines instead of roads":**
+- OSRM public servers down → Fallback to dashed lines (expected behavior)
+- Too many waypoints (>50) → Split route into segments
+- Check network tab for 503/429 errors from OSRM
+
+**"Markers not showing":**
+- Leaflet default marker images missing → Use custom markers with `L.divIcon()`
+- Check z-index CSS conflicts
+
+**"CORS error from OSRM":**
+- Using leaflet-routing-machine directly → ALWAYS use Laravel proxy!
+- See [Critical Rule #2](#2-osrm-routing---always-use-laravel-proxy)
+
+### Performance Issues
+
+```bash
+# 1. Check database query performance
+# Enable query logging in .env:
+DB_LOG_QUERIES=true
+
+# 2. Monitor slow queries
+tail -f storage/logs/laravel.log | grep -i "slow query"
+
+# 3. Check cache hit rates
+curl http://localhost:8002/api/map/cache-stats
+
+# Expected:
+# {"geocoding_hit_rate": "82%", "route_hit_rate": "45%"}
+
+# 4. Clear expired caches
+curl -X POST http://localhost:8002/api/map/clear-expired-cache
+```
+
+**Common Performance Issues:**
+
+**"Progress queries very slow":**
+- Check query uses TOP instead of LIMIT
+- Verify indexes exist on PUB tables
+- Use keyset pagination (NOT offset-based)
+- Avoid SELECT * (specify columns)
+
+**"Geocoding slow":**
+- First run is slow (no cache) → Expected
+- Subsequent runs should hit cache (80%+)
+- Check `municipio_coordenadas` table has data
+
+**"Map rendering slow":**
+- Too many markers (>100) → Implement clustering
+- Too many polyline points (>5000) → Simplify route
+- Check network tab for slow API calls
+
+### Development Workflow Issues
+
+```bash
+# "Class not found" after adding new service
+composer dump-autoload
+
+# "Route not found" after adding API endpoint
+php artisan route:clear
+php artisan route:cache
+
+# "Config cached" preventing .env changes
+php artisan config:clear
+
+# "Permission denied" on storage/logs
+chmod -R 775 storage
+chown -R www-data:www-data storage  # Linux
+# OR on Windows: Check folder permissions
+
+# Git merge conflicts in auto-generated files
+# These files can be safely regenerated:
+git checkout --theirs auto-imports.d.ts
+git checkout --theirs typed-router.d.ts
+git checkout --theirs components.d.ts
+pnpm run dev  # Regenerates files
+```
+
+### Port Conflicts
+
+```bash
+# Check what's using port 8002
+netstat -ano | findstr :8002
+# OR on Linux/Mac:
+lsof -i :8002
+
+# Kill process by PID (Windows)
+taskkill /PID [PID] /F
+
+# Kill process (Linux/Mac)
+kill -9 [PID]
+
+# Check Vite port (5173/5174/5176)
+netstat -ano | findstr :5173
+```
+
+---
+
+## 📁 Project Structure
 
 ```
 ndd-vuexy/
 ├── app/
 │   ├── Http/Controllers/Api/
 │   │   ├── AuthController.php              # Authentication
-│   │   ├── TransporteController.php        # Transporters
+│   │   ├── TransporteController.php        # Transporters (PRIMARY)
 │   │   ├── PacoteController.php            # Packages
 │   │   ├── MotoristaController.php         # Drivers
 │   │   ├── RotaController.php              # Routes autocomplete
 │   │   ├── SemPararRotaController.php      # SemParar routes CRUD
-│   │   ├── GeocodingController.php         # IBGE → lat/lon conversion
-│   │   ├── RoutingController.php           # Route calculation proxy
-│   │   ├── RouteCacheController.php        # Route cache management
-│   │   ├── GoogleMapsQuotaController.php   # API quota monitoring
+│   │   ├── SemPararController.php          # SemParar SOAP API
+│   │   ├── CompraViagemController.php      # Trip purchase wizard
+│   │   ├── GeocodingController.php         # IBGE → lat/lon
+│   │   ├── RoutingController.php           # OSRM routing proxy (CRITICAL!)
+│   │   ├── MapController.php               # Unified map service
+│   │   ├── PracaPedagioController.php      # Toll plazas
+│   │   ├── GoogleMapsQuotaController.php   # API quota tracking
 │   │   └── ProgressController.php          # Raw Progress queries
 │   └── Services/
-│       ├── ProgressService.php             # Main Progress DB service (1500+ lines)
-│       ├── GeocodingService.php            # Google Geocoding API integration
-│       └── RoutingService.php              # Google Directions API integration
+│       ├── ProgressService.php             # Progress JDBC (2574 lines!)
+│       ├── GeocodingService.php            # Google Geocoding + cache
+│       ├── RoutingService.php              # DEPRECATED - use RoutingController
+│       ├── Map/
+│       │   ├── MapService.php              # Unified map orchestrator
+│       │   ├── CacheManager.php            # Cache management
+│       │   ├── Providers/
+│       │   │   ├── OsrmProvider.php        # OSRM routing (FREE)
+│       │   │   └── GoogleMapsProvider.php  # Google (geocoding only)
+│       │   └── Utils/
+│       │       ├── CoordinateConverter.php # Coordinate transforms
+│       │       └── DistanceCalculator.php  # Haversine distance
+│       ├── SemParar/
+│       │   ├── SemPararService.php         # Business logic
+│       │   ├── SemPararSoapClient.php      # Low-level SOAP
+│       │   └── XmlBuilders/
+│       │       └── PontosParadaBuilder.php # Progress dataset XML
+│       └── PracaPedagioImportService.php   # ANTT CSV import
 ├── resources/ts/
 │   ├── pages/
 │   │   ├── transportes/                    # Transporters module
+│   │   │   └── index.vue                   # List page
 │   │   ├── pacotes/                        # Packages module
-│   │   ├── vale-pedagio/                   # Toll pass calculator
-│   │   ├── rotas-semparar/                 # SemParar routes with map
-│   │   └── apps/                           # Vuexy example pages (reference templates)
+│   │   │   └── index.vue                   # List + filters
+│   │   ├── vale-pedagio/                   # Toll calculator
+│   │   │   └── index.vue
+│   │   ├── pracas-pedagio/                 # Toll plaza management
+│   │   │   └── index.vue
+│   │   ├── rotas-padrao/                   # SemParar routes (COMPLEX!)
+│   │   │   ├── index.vue                   # List view
+│   │   │   ├── nova.vue                    # Create route
+│   │   │   └── mapa/
+│   │   │       └── [id].vue                # Interactive map (Leaflet + OSRM)
+│   │   ├── compra-viagem/                  # Trip purchase wizard
+│   │   │   ├── index.vue                   # Trip list
+│   │   │   ├── nova.vue                    # Purchase wizard (5 steps)
+│   │   │   └── components/
+│   │   │       ├── CompraViagemStep1Pacote.vue
+│   │   │       ├── CompraViagemStep2Placa.vue
+│   │   │       ├── CompraViagemStep3Rota.vue
+│   │   │       ├── CompraViagemStep4Preco.vue
+│   │   │       ├── CompraViagemStep5Confirmacao.vue
+│   │   │       └── CompraViagemMapaFixo.vue
+│   │   └── apps/                           # Vuexy template examples (REFERENCE!)
+│   │       ├── user/list/index.vue         # List template
+│   │       └── user/view/UserBioPanel.vue  # Form template
+│   ├── composables/
+│   │   └── usePackageSimulation.ts         # Package simulation logic
 │   ├── @layouts/                           # Layout components
 │   ├── navigation/vertical/ndd.ts          # Left sidebar menu
 │   └── plugins/                            # Vue plugins (router, vuetify, etc)
-├── routes/api.php                          # API routes
+├── routes/
+│   ├── api.php                             # API routes (50+ endpoints)
+│   ├── web.php                             # Web routes (Vue SPA)
+│   └── console.php                         # Artisan commands
 ├── storage/app/java/
-│   ├── ProgressJDBCConnector.java          # JDBC connector for Progress
-│   └── gson-2.8.9.jar                      # JSON library for Java
-└── database/migrations/                    # SQLite migrations (NOT Progress)
-
-## Development Workflow
-
-### Creating New Features
-1. Check Progress table structure via `/api/progress/query`
-2. Add method to `ProgressService.php`
-3. Create controller in `app/Http/Controllers/Api/`
-4. Register route in `routes/api.php`
-5. Copy similar Vuexy template for frontend
-6. Test with curl before frontend integration
-
-### Testing Checklist
-- [ ] ODBC connection: `curl http://localhost:8002/api/progress/test-connection`
-- [ ] TypeScript: `pnpm run typecheck`
-- [ ] Linting: `pnpm run lint`
-- [ ] Backend tests: `php artisan test`
-- [ ] Manual testing in browser
-
-## Common Issues & Solutions
-
-### Port conflicts
-```bash
-netstat -ano | findstr :8002  # Check port usage
-taskkill /PID [PID] /F        # Kill process
+│   ├── ProgressJDBCConnector.java          # JDBC connector (auto-compiled)
+│   └── gson-2.8.9.jar                      # JSON library
+├── database/
+│   └── migrations/                         # SQLite/MySQL migrations (NOT Progress!)
+├── config/
+│   ├── database.php                        # Database connections
+│   ├── cors.php                            # CORS settings
+│   └── services.php                        # External services (Google, SemParar)
+├── public/
+│   ├── test-semparar-fase1b.html           # SemParar workflow test
+│   └── test-semparar-fase3a.html           # Trip management test
+├── docs/                                   # Additional documentation
+│   ├── semparar-phases/                    # SemParar phase docs
+│   └── archive/                            # Historical analysis
+├── .env                                    # Environment config (NOT in repo!)
+├── .env.example                            # Environment template
+├── composer.json                           # PHP dependencies
+├── package.json                            # Node dependencies
+├── vite.config.ts                          # Vite build config
+├── tsconfig.json                           # TypeScript config
+└── CLAUDE.md                               # This file!
 ```
 
-### Vue compilation errors
-```bash
-rm -rf node_modules/.vite     # Clear Vite cache
-pnpm run dev                  # Restart
-```
+---
 
-### Progress connection issues
-```bash
-# Test via API
-curl "http://localhost:8002/api/progress/test-connection"
-```
+## 📚 Additional Documentation
 
-## Environment Configuration
+**Main Docs:**
+- `README.md` - Project overview
+- `DOCUMENTATION_INDEX.md` - Complete documentation map
+- `REFACTOR_CLEANUP_2025-11-28.md` - Recent refactoring
+
+**SemParar Integration:**
+- `docs/semparar-phases/CHECKPOINT_FASE_1A.md` - SOAP core
+- `docs/semparar-phases/SEMPARAR_FASE1B_COMPLETO.md` - Routing
+- `SEMPARAR_IMPLEMENTATION_ROADMAP.md` - Complete roadmap
+
+**Architecture Analysis:**
+- `docs/archive/ANALISE_ROTAS_SEMPARAR.md` - Route system
+- `docs/archive/COMPRA_VIAGEM_ANALISE.md` - Trip purchase
+- `DEBUG_MAPA_ROTAS.md` - Map debugging
+
+**Progress References:**
+- `SEMPARAR_AI_REFERENCE.md` - Progress ABL code
+- `Rota.cls` - Progress class (lines 110-606)
+
+---
+
+## 🚀 Next Steps / Roadmap
+
+### FASE 3B - Frontend Integration
+- Complete trip purchase wizard UI
+- Receipt download/print interface
+- Trip history dashboard
+- WhatsApp/Email notification UI
+
+### FASE 4 - Advanced Management
+- Bulk trip operations
+- Reporting & analytics
+- Advanced filters
+- Export to Excel/PDF
+
+### Performance Improvements
+- Self-hosted OSRM instance (Docker)
+- Redis for route caching
+- Database query optimization
+- Frontend lazy loading
+
+### Security Enhancements
+- Role-based access control (RBAC)
+- API key rotation
+- Audit logging
+- Two-factor authentication (2FA)
+
+---
+
+## 🔗 Important Links
+
+**Repository:**
+- GitHub: https://github.com/Psykhepathos/ndd-vuexy.git
+- Branch: `master`
+- Developer: Psykhepathos
+
+**Deprecated Systems:**
+- ndd-laravel (old backend)
+- ndd-flutter (old mobile app)
+
+**Key URLs:**
+- **Dashboard:** http://localhost:8002/ndd-dashboard
+- **Transporters:** http://localhost:8002/transportes
+- **Packages:** http://localhost:8002/pacotes
+- **Toll Calculator:** http://localhost:8002/vale-pedagio
+- **Routes (with map):** http://localhost:8002/rotas-padrao
+- **Trip Purchase:** http://localhost:8002/compra-viagem
+
+**Test Interfaces:**
+- SemParar Workflow: http://localhost:8002/test-semparar-fase1b.html
+- SemParar Management: http://localhost:8002/test-semparar-fase3a.html
+
+**External Services:**
+- Progress Database: 192.168.80.113:2574
+- Python Flask (PDF): http://192.168.19.35:5001
+- OSRM Public: https://router.project-osrm.org
+
+---
+
+## ⚙️ Environment Configuration
 
 ```env
-# Progress Database
+# Application
+APP_NAME="NDD Transport"
+APP_ENV=local
+APP_DEBUG=true
+APP_URL=http://localhost:8002
+
+# Database - Progress OpenEdge
 PROGRESS_HOST=192.168.80.113
+PROGRESS_PORT=2574
 PROGRESS_DATABASE=tambasa
 PROGRESS_USERNAME=sysprogress
 PROGRESS_PASSWORD=sysprogress
 
-# Google Maps API (for geocoding and routing)
+# Database - Laravel (SQLite/MySQL)
+DB_CONNECTION=sqlite
+# OR for MySQL:
+# DB_CONNECTION=mysql
+# DB_HOST=127.0.0.1
+# DB_PORT=3306
+# DB_DATABASE=ndd_laravel
+# DB_USERNAME=root
+# DB_PASSWORD=
+
+# Google Maps API (only geocoding now)
 GOOGLE_MAPS_API_KEY=your_api_key_here
+
+# SemParar SOAP
+SEMPARAR_CNPJ=your_cnpj
+SEMPARAR_USER=your_user
+SEMPARAR_PASSWORD=your_password
+
+# Trip Purchase Safety
+ALLOW_SOAP_QUERIES=true       # Enable validations/queries (safe)
+ALLOW_SOAP_PURCHASE=false     # ⚠️ BLOCK REAL PURCHASES! (default: false)
+
+# External Services
+PYTHON_FLASK_URL=http://192.168.19.35:5001
+Z_API_TOKEN=your_whatsapp_token
+SMTP_HOST=your_smtp_host
+SMTP_PORT=587
+SMTP_USERNAME=your_smtp_user
+SMTP_PASSWORD=your_smtp_password
+SMTP_FROM_ADDRESS=naoresponda@tambasa.com.br
+SMTP_FROM_NAME="NDD Transport"
 
 # API URLs
 LARAVEL_API=http://localhost:8002
 VUE_FRONTEND=http://localhost:5174
+VITE_API_BASE_URL=http://localhost:8002
 ```
-
-## 🛒 Sistema de Compra de Viagem SemParar - API Backend (FASE 1A + 1B + 2A + 2B + 2C ✅)
-
-**Status:** Backend completo e funcional (roteirização, compra, persistência, recibo). Frontend em desenvolvimento.
-
-**Visão Geral:**
-Sistema de compra de viagens integrado com API SOAP SemParar para gestão de pedágios e rotas de transporte. O backend está 100% funcional e testado.
-
-### FASE 1A - SOAP Core (✅ COMPLETA)
-**Implementação:** `app/Services/SemParar/SemPararService.php`, `app/Services/SemParar/SoapClient.php`
-
-**Funcionalidades:**
-- ✅ Autenticação SOAP (`autenticarUsuario()`)
-- ✅ Cache de token (duração da sessão)
-- ✅ Status de veículo (`statusVeiculo()`)
-- ✅ Gestão de sessão SOAP
-
-**Endpoints:**
-- `GET /api/semparar/test-connection` - Test SOAP connection
-- `POST /api/semparar/status-veiculo` - Verify vehicle status
-- `GET /api/semparar/debug/token` - Get cached token (debug only)
-- `POST /api/semparar/debug/clear-cache` - Clear token cache
-
-### FASE 1B - Roteirização (✅ COMPLETA)
-**Funcionalidades:**
-- ✅ Roteirizar praças de pedágio entre municípios (`roteirizarPracasPedagio()`)
-- ✅ Cadastrar rota temporária (`cadastrarRotaTemporaria()`)
-- ✅ Obter custo da rota (`obterCustoRota()`)
-- ✅ Suporte a SoapVar para parâmetros XML
-
-**Endpoints:**
-- `POST /api/semparar/roteirizar` - Route toll plazas between municipalities
-- `POST /api/semparar/rota-temporaria` - Create temporary route
-- `POST /api/semparar/custo-rota` - Get route cost
-
-**Exemplo de uso:**
-```bash
-# 1. Roteirizar municípios
-curl -X POST http://localhost:8002/api/semparar/roteirizar \
-  -H "Content-Type: application/json" \
-  -d '{"pontos": [{"cod_ibge": 3118601, "desc": "CONTAGEM", "latitude": -19.9384589, "longitude": -44.0518344}], "alternativas": false}'
-
-# 2. Cadastrar rota temporária
-curl -X POST http://localhost:8002/api/semparar/rota-temporaria \
-  -H "Content-Type: application/json" \
-  -d '{"praca_ids": [1030, 1028, 1026], "nome_rota": "ROTA_TEMP_123456"}'
-
-# 3. Obter custo
-curl -X POST http://localhost:8002/api/semparar/custo-rota \
-  -H "Content-Type: application/json" \
-  -d '{"nome_rota": "ROTA_TEMP_123456", "placa": "ABC1234", "eixos": 2, "data_inicio": "2025-10-27", "data_fim": "2025-11-03"}'
-```
-
-### FASE 2A - Compra de Viagem (✅ COMPLETA)
-**Implementação:** `app/Services/SemParar/SemPararService.php` - `comprarViagem()` (105 lines)
-
-**Funcionalidades:**
-- ✅ Comprar viagem via SOAP (`comprarViagem()`)
-- ✅ Extração do código da viagem do XML response
-- ✅ Tratamento de erros SOAP
-- ✅ Rate limiting (10 req/min)
-
-**Endpoint:**
-- `POST /api/semparar/comprar-viagem` - Purchase trip
-
-**Parâmetros obrigatórios:**
-- `nome_rota` (string) - Nome da rota temporária criada
-- `placa` (string) - Placa do veículo (7-8 chars)
-- `eixos` (int) - Número de eixos (2-9)
-- `data_inicio` (date) - Data início formato YYYY-MM-DD
-- `data_fim` (date) - Data fim (>= data_inicio)
-- `item_fin1` (string, opcional) - Item financeiro 1 (default: "")
-
-**Retorno:**
-```json
-{
-  "success": true,
-  "message": "Viagem comprada com sucesso",
-  "data": {
-    "success": true,
-    "cod_viagem": "68470838",
-    "status": "0"
-  }
-}
-```
-
-### FASE 2B - Persistência no Progress Database (✅ COMPLETA)
-**Implementação:**
-- `app/Services/ProgressService.php` - `salvarViagemSemParar()` (109 lines)
-- `app/Http/Controllers/Api/SemPararController.php` - Integration (lines 325-344)
-
-**Funcionalidades:**
-- ✅ Salvar viagem no Progress após compra bem-sucedida
-- ✅ Validação de campos obrigatórios
-- ✅ SQL escaping para prevenir injection
-- ✅ Persistência opcional (só salva se `cod_pac` fornecido)
-- ✅ Non-blocking (compra funciona mesmo se Progress falhar)
-
-**Tabela Progress:**
-```sql
-PUB.sPararViagem
-├── codviagem (string) - Código da viagem no SemParar
-├── codpac (int) - Código do pacote
-├── numpla (string) - Placa do veículo
-├── nomrotsemparar (string) - Nome da rota
-├── valviagem (decimal) - Valor da viagem
-├── codtrn (int) - Código do transportador
-├── codrotcreatesp (string) - Código da rota criada
-├── spararrotid (int) - ID da rota SemParar
-├── rescompra (string) - Responsável pela compra
-├── datacompra (date) - Data da compra
-├── flgcancelado (bool) - Flag de cancelamento
-└── rescancel (string) - Responsável pelo cancelamento
-```
-
-**Endpoint (integrado):**
-- `POST /api/semparar/comprar-viagem` - Purchase trip + save to Progress
-
-**Parâmetros opcionais (FASE 2B):**
-- `cod_pac` (int) - Package ID (triggers Progress save)
-- `cod_trn` (int) - Transporter ID
-- `s_parar_rot_id` (int) - SemParar route ID
-- `cod_rota_create_sp` (string) - Route creation code
-- `valor_viagem` (decimal) - Trip cost
-- `res_compra` (string) - Purchase responsible
-
-**Retorno com Progress:**
-```json
-{
-  "success": true,
-  "message": "Viagem comprada com sucesso",
-  "data": {
-    "success": true,
-    "cod_viagem": "68470838",
-    "status": "0",
-    "progress_saved": true
-  }
-}
-```
-
-**Exemplo completo (FASE 2A + 2B):**
-```bash
-curl -X POST http://localhost:8002/api/semparar/comprar-viagem \
-  -H "Content-Type: application/json" \
-  -d '{
-    "nome_rota": "ROTA_TEMP_123456",
-    "placa": "ABC1234",
-    "eixos": 2,
-    "data_inicio": "2025-10-27",
-    "data_fim": "2025-11-03",
-    "item_fin1": "PEDAGIO",
-    "cod_pac": 3043368,
-    "cod_trn": 5576,
-    "s_parar_rot_id": 204,
-    "cod_rota_create_sp": "ROTA_TEMP_123456",
-    "valor_viagem": 123.45,
-    "res_compra": "sistema"
-  }'
-```
-
-### ✅ FASE 2C: Receipt Generation & WhatsApp - COMPLETA (2025-10-28)
-
-**Status:** Geração de recibo PDF + envio por WhatsApp funcional
-
-**Implementado:**
-- ✅ `obterRecibo()` - Obtém dados do recibo via SOAP (não retorna PDF diretamente)
-- ✅ `gerarRecibo()` - Gera PDF e envia por WhatsApp/Email via Python Flask service
-- ✅ Estrutura de payload compatível com `app.py` (Python service)
-- ✅ Conversão de valores numéricos string→float para formatação Python
-- ✅ Wrapper `pracastwo` para estrutura DATASET Progress
-
-**Descoberta importante:**
-```php
-// ❌ ERRADO - SOAP NÃO retorna PDF, retorna dados da viagem
-$reciboPDF = $response->reciboPDF;  // Este campo não existe!
-
-// ✅ CORRETO - SOAP retorna trip data (pracas, total, viagem, etc.)
-$responseData = json_decode(json_encode($response), true);
-// Contém: catVeiculo, cnpjEmissor, pracas[], total, viagem, etc.
-```
-
-**Integração Python Flask:**
-```php
-// Python app.py (linha 132) espera: info["pracastwo"][0]["pracas"]
-$mainData['pracastwo'] = [
-    [
-        'pracas' => $pracasArray  // Array de praças de pedágio
-    ]
-];
-
-// Converter strings para float (formatar_reais do Python)
-$mainData['total'] = floatval($mainData['total']);
-foreach ($pracasArray as &$praca) {
-    $praca['tarifa'] = floatval($praca['tarifa']);
-}
-```
-
-**Endpoints:**
-
-#### 1. Obter Dados do Recibo (uso interno)
-- `POST /api/semparar/obter-recibo` - Get trip receipt data from SOAP
-
-**Retorno:**
-```json
-{
-  "success": true,
-  "message": "Dados do recibo obtidos com sucesso",
-  "data": {
-    "catVeiculo": "02 EIXOS ROD DUPLA",
-    "total": "131.46",
-    "pracas": [...]
-  },
-  "note": "SOAP retorna dados, não PDF. Use /gerar-recibo para PDF+WhatsApp"
-}
-```
-
-**Status codes SemParar:**
-- `0` - Sucesso (PDF disponível)
-- `15` - Recibo não disponível (viagem antiga/usada/inválida)
-- `999` - Erro desconhecido
-
-**Exemplo de uso:**
-```bash
-curl -X POST http://localhost:8002/api/semparar/obter-recibo \
-  -H "Content-Type: application/json" \
-  -d '{"cod_viagem": "68470838"}'
-```
-
-#### 2. Gerar e Enviar Recibo por WhatsApp/Email (recomendado)
-- `POST /api/semparar/gerar-recibo` - Generate receipt and send via WhatsApp/Email
-
-**Parâmetros:**
-- `cod_viagem` (string, obrigatório) - Trip code
-- `telefone` (string, obrigatório) - Phone in format 5531988892076 (country+ddd+number)
-- `email` (string, opcional) - Email address
-- `flg_imprime` (boolean, opcional) - Print/display flag (default: true)
-
-**Retorno com sucesso:**
-```json
-{
-  "success": true,
-  "message": "Recibo gerado e enviado com sucesso",
-  "data": {
-    "success": true,
-    "message": "Recibo gerado e enviado com sucesso",
-    "status": "success",
-    "telefone": "5531988892076",
-    "email": "user@example.com"
-  }
-}
-```
-
-**Fluxo interno (seguindo Progress):**
-1. PHP chama SOAP `obterReciboViagem()` para pegar dados da viagem
-2. PHP formata payload com estrutura `pracastwo` + conversão float
-3. PHP envia para Python Flask service (`http://192.168.19.35:5001/gerar-vale-pedagio`)
-4. Python gera PDF usando ReportLab e envia por WhatsApp (Z-API) + Email (SMTP)
-
-**Exemplo de uso:**
-```bash
-# Teste com viagem 91154383 (comprada em 2025-10-28)
-curl -X POST http://localhost:8002/api/semparar/gerar-recibo \
-  -H "Content-Type: application/json" \
-  -d '{
-    "cod_viagem": "91154383",
-    "telefone": "5531988892076",
-    "email": "usuario@tambasa.com.br",
-    "flg_imprime": false
-  }'
-```
-
-**Observações:**
-- ⚠️ **Requer Python Flask service rodando em 192.168.19.35:5001** (`app.py`)
-- 📱 **WhatsApp:** Envio automático via Z-API (sempre funciona!)
-- 📧 **Email:** SEMPRE usa `naoresponda@tambasa.com.br` (ignora email do usuário)
-  - **Motivo:** SMTP pode rejeitar domínios, causando falha 500
-  - **Prioridade:** WhatsApp é principal, email é secundário
-- 🖨️ **Impressão:** Se `flg_imprime: true`, envia para impressora `transp4`
-- ⏱️ **Rate limit:** 20 req/min (protege contra spam)
-- ✅ **Testado:** Todos cenários (sem email, vazio, inválido, válido) → sucesso!
 
 ---
 
-### ✅ FASE 3A: Trip Query & Management - COMPLETA (2025-10-29)
+## 📊 System Statistics
 
-**Status:** Consulta e gerenciamento de viagens funcional
+**Backend:**
+- 18 Controllers
+- 11 Services (ProgressService: 2574 lines!)
+- 50+ API Endpoints
+- 21 Progress Tables (JDBC, no transactions)
+- 11 Laravel Tables (SQLite/MySQL)
 
-**Implementado:**
-- ✅ `consultarViagens()` - Lista viagens por período (obterExtratoCreditos)
-- ✅ `cancelarViagem()` - Cancela uma viagem comprada
-- ✅ `reemitirViagem()` - Reemite viagem com nova placa
-- ✅ 3 endpoints REST com validação e rate limiting
+**Frontend:**
+- 15+ Vue Pages
+- 20+ Components
+- TypeScript 5.8.3
+- Vuetify 3.8.5
+- Vuexy Template
 
-**Métodos SOAP identificados:**
-1. **`obterExtratoCreditos(inicio, fim, token)`** - Lista viagens por período
-   - ⚠️ Funciona mas retorna status 999 (pode precisar WSDL `vpextrato` conforme Progress)
-   - Progress usa: `https://app.viafacil.com.br/vpextrato/ValePedagio?wsdl`
-   - Nosso código usa: `https://app.viafacil.com.br/wsvp/ValePedagio?wsdl`
-2. **`cancelarViagem(codViagem, token)`** - Cancela viagem
-3. **`reemitirViagem(codViagem, placa, pracas, token)`** - Reemite com nova placa
+**Database:**
+- Progress OpenEdge (main)
+- SQLite (cache, 80%+ hit rate)
+- 6,913+ Transporters
+- 800,000+ Packages
 
-**Endpoints:**
+**External APIs:**
+- Google Geocoding (IBGE → coordinates)
+- OSRM Public (free routing, 3 servers)
+- SemParar SOAP (toll management, 2 WSDLs)
+- Python Flask (PDF generation)
 
-#### 1. Consultar Viagens por Período
-- `POST /api/semparar/consultar-viagens`
-
-**Parâmetros:**
-```json
-{
-  "data_inicio": "2025-10-01",  // YYYY-MM-DD
-  "data_fim": "2025-10-31"      // YYYY-MM-DD
-}
-```
-
-**Retorno:**
-```json
-{
-  "success": true,
-  "message": "Viagens consultadas com sucesso",
-  "data": {
-    "viagens": [...],
-    "periodo": {
-      "inicio": "2025-10-01",
-      "fim": "2025-10-31"
-    }
-  }
-}
-```
-
-**Exemplo:**
-```bash
-curl -X POST http://localhost:8002/api/semparar/consultar-viagens \
-  -H "Content-Type: application/json" \
-  -d '{"data_inicio":"2025-10-28","data_fim":"2025-10-28"}'
-```
-
-#### 2. Cancelar Viagem
-- `POST /api/semparar/cancelar-viagem`
-
-**Parâmetros:**
-```json
-{
-  "cod_viagem": "91154383"
-}
-```
-
-**Retorno:**
-```json
-{
-  "success": true,
-  "message": "Viagem cancelada com sucesso",
-  "data": {
-    "cod_viagem": "91154383",
-    "status": 0,
-    "status_mensagem": "Sucesso"
-  }
-}
-```
-
-**Exemplo:**
-```bash
-curl -X POST http://localhost:8002/api/semparar/cancelar-viagem \
-  -H "Content-Type: application/json" \
-  -d '{"cod_viagem":"91154383"}'
-```
-
-**⚠️ ATENÇÃO:** Operação irreversível! Use com cuidado.
-
-#### 3. Reemitir Viagem com Nova Placa
-- `POST /api/semparar/reemitir-viagem`
-
-**Parâmetros:**
-```json
-{
-  "cod_viagem": "91154383",
-  "placa": "ABC1234"  // Nova placa (7 caracteres)
-}
-```
-
-**Retorno:**
-```json
-{
-  "success": true,
-  "message": "Viagem reemitida com sucesso",
-  "data": {
-    "cod_viagem": "91154383",
-    "placa": "ABC1234",
-    "status": 0,
-    "status_mensagem": "Sucesso"
-  }
-}
-```
-
-**Exemplo:**
-```bash
-curl -X POST http://localhost:8002/api/semparar/reemitir-viagem \
-  -H "Content-Type: application/json" \
-  -d '{"cod_viagem":"91154383","placa":"XYZ5678"}'
-```
-
-**Observações:**
-- ⏱️ **Rate limits:**
-  - `consultar-viagens`: 60 req/min
-  - `cancelar-viagem`: 20 req/min (operação sensível)
-  - `reemitir-viagem`: 20 req/min (operação sensível)
-- ✅ **consultarViagens:** Usa WSDL `vpextrato` separado (lazy-loaded)
-- 📝 **Status codes:** 0 = sucesso, null = normal para consultas
-- 🔄 **Implementação:** Baseada em Rota.cls linhas 99-1017
-
-**🔧 Solução Técnica - Dual WSDL:**
-
-Progress usa **2 WSDLs separados** para diferentes operações:
-- **`wsvp/ValePedagio`** - Compra, cancelamento, reemissão, recibos
-- **`vpextrato/ValePedagio`** - Consulta de viagens e extratos
-
-**Implementação PHP:**
-```php
-// SemPararSoapClient.php
-protected ?SoapClient $soapClient = null;         // Main WSDL (wsvp)
-protected ?SoapClient $soapExtratoClient = null;  // Extrato WSDL (vpextrato)
-
-// Lazy-load extrato client quando necessário
-public function getSoapExtratoClient(): SoapClient {
-    if ($this->soapExtratoClient === null) {
-        $this->soapExtratoClient = new SoapClient(
-            'https://app.viafacil.com.br/vpextrato/ValePedagio?wsdl',
-            $this->soapOptions
-        );
-    }
-    return $this->soapExtratoClient;
-}
-```
-
-**Resultado:** `consultarViagens` agora retorna **37+ viagens reais** com todos os campos preenchidos!
-
-**🧪 Interface de Teste FASE 3A:**
-- **URL:** http://localhost:8002/test-semparar-fase3a.html
-- **Recursos:**
-  - ✅ Formulários interativos para todos os 3 endpoints
-  - ✅ Validação de campos e placa brasileira
-  - ✅ Confirmações duplas para operações irreversíveis
-  - ✅ Display de JSON formatado com syntax highlighting
-  - ⚠️ Avisos de segurança para cancelamento/reemissão
+**Performance:**
+- Map queries: <500ms avg
+- Geocoding: 80%+ cache hit rate
+- Routing: 100% free (OSRM)
+- Zero Google Maps tile costs!
 
 ---
 
-### 🧪 Teste Completo (FASE 1A → 1B → 2A → 2B → 2C + 3A)
-**Interface HTML:** `public/test-semparar-fase1b.html`
+## 🎓 Learning Resources
 
-**Acesso:** http://localhost:8002/test-semparar-fase1b.html
+**Laravel:**
+- Official Docs: https://laravel.com/docs
+- Sanctum: https://laravel.com/docs/sanctum
 
-**Workflow de teste:**
-1. **Teste 1:** Roteirizar municípios (FASE 1B)
-2. **Teste 2:** Cadastrar rota temporária (FASE 1B)
-3. **Teste 3:** Obter custo da rota (FASE 1B)
-4. **Teste 4:** Comprar viagem (FASE 2A + 2B)
-5. **Teste 5:** Baixar recibo PDF (FASE 2C) ← NOVO!
-6. **Verificar Progress:** Query `PUB.sPararViagem` (FASE 2B)
+**Vue.js:**
+- Vue 3 Guide: https://vuejs.org/guide/
+- TypeScript: https://vuejs.org/guide/typescript/overview.html
 
-**Scripts de teste:**
-- `test-fase2b-completo.ps1` - PowerShell test script (Windows)
-- `test-roteirizar.json` - Simple route test data
-- `test-roteirizar-completo.json` - Complete route test data (4 municipalities)
+**Vuexy Template:**
+- Documentation: https://pixinvent.com/vuexy-vuejs-admin-template/
+- **ALWAYS reference template examples!**
 
-### 📋 Próximas Fases (Planejadas)
-- **FASE 3B:** Frontend Vue.js integration (`resources/ts/pages/compra-viagem/`)
-- **FASE 4:** Advanced trip management (bulk operations, reports)
+**Leaflet & Maps:**
+- Leaflet Docs: https://leafletjs.com/reference.html
+- OSRM API: http://project-osrm.org/docs/v5.24.0/api/
 
-### 🔗 Documentação Adicional
-- `SEMPARAR_IMPLEMENTATION_ROADMAP.md` - Complete implementation plan
-- `COMPRA_VIAGEM_ANALISE.md` - Business analysis and requirements
+**Progress OpenEdge:**
+- JDBC Driver: Progress documentation
+- SQL Reference: Progress ABL documentation
 
 ---
 
-## 🗺️ Sistema de Rotas SemParar (Módulo Completo)
-
-**Visão Geral:**
-Sistema de gestão de rotas pré-cadastradas no Progress Database com visualização em mapa interativo (Leaflet + OpenStreetMap) e capacidade de simular entregas reais de pacotes sobre essas rotas.
-
-### Arquitetura
-
-```
-Frontend (Vue)                Backend (Laravel)              Database (Progress)
-┌──────────────┐             ┌──────────────────┐          ┌──────────────────┐
-│ index.vue    │────────────▶│ SemPararRota     │─────────▶│ PUB.semPararRot  │
-│ (Listagem)   │             │ Controller       │          │ (Rotas)          │
-└──────────────┘             └──────────────────┘          └──────────────────┘
-                                      │                              │
-┌──────────────┐                      │                              │
-│ mapa/[id].vue│                      ▼                              ▼
-│ (Visualizar/ │             ┌──────────────────┐          ┌──────────────────┐
-│  Editar)     │────────────▶│ ProgressService  │─────────▶│ PUB.semPararRotMu│
-└──────────────┘             │ (JDBC Connector) │          │ (Municípios)     │
-       │                     └──────────────────┘          └──────────────────┘
-       │
-       ▼
-┌──────────────────┐
-│ usePackage       │
-│ Simulation       │
-│ (Composable)     │
-└──────────────────┘
-       │
-       ▼
-┌──────────────────┐
-│ Leaflet +        │
-│ OpenStreetMap +  │
-│ OSRM Routing     │
-└──────────────────┘
-```
-
-### Componentes Principais
-
-#### 1. **index.vue** - Listagem de Rotas
-**Path:** `resources/ts/pages/rotas-semparar/index.vue`
-
-**Features:**
-- ✅ VDataTableServer com paginação server-side
-- ✅ Filtros tri-state (Tipo: All/CD/Rota, Retorno: All/Sim/Não)
-- ✅ Busca por nome com debounce (500ms)
-- ✅ Estatísticas (total, CDs, rotas com retorno)
-- ✅ Ações: Visualizar, Editar, Deletar
-
-**Endpoints usados:**
-- `GET /api/semparar-rotas?page=1&per_page=10&flg_cd=true`
-
-#### 2. **mapa/[id].vue** - Visualização + Edição + Simulação
-**Path:** `resources/ts/pages/rotas-semparar/mapa/[id].vue`
-
-**Features:**
-- ✅ Mapa interativo Leaflet + OpenStreetMap (100% gratuito)
-- ✅ Marcadores numerados customizados (L.divIcon)
-- ✅ Roteamento real via OSRM (routing.openstreetmap.de)
-- ✅ Geocoding automático (Google API + cache SQLite)
-- ✅ Drag & drop para reordenar municípios (vuedraggable)
-- ✅ Adicionar/remover municípios via autocomplete
-- ✅ Simulação de pacotes sobre a rota
-- ✅ Debug panel com logs e métricas
-
-**Endpoints usados:**
-- `GET /api/semparar-rotas/{id}/municipios`
-- `PUT /api/semparar-rotas/{id}`
-- `PUT /api/semparar-rotas/{id}/municipios`
-- `POST /api/geocoding/lote`
-- `POST /api/pacotes/itinerario`
-
-**Tecnologias de Mapa:**
-```typescript
-// Inicialização
-map = L.map(container).setView([-14.2350, -51.9253], 4)
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
-
-// Routing GRATUITO
-const osrmRouter = L.Routing.osrmv1({
-  serviceUrl: 'https://routing.openstreetmap.de/routed-car/route/v1',
-  profile: 'driving'
-})
-
-// Marcadores customizados
-const icon = L.divIcon({
-  html: `<div style="background: #2196F3; ...">1</div>`
-})
-```
-
-#### 3. **usePackageSimulation.ts** - Composable de Simulação
-**Path:** `resources/ts/composables/usePackageSimulation.ts`
-
-**Responsabilidades:**
-- Autocomplete de pacotes
-- Carregar itinerário de pacote
-- Processar coordenadas GPS do Progress ("230876543" → -23.0876543)
-- Gerenciar estado da simulação
-- Criar marcadores e waypoints combinados (rota + entregas)
-
-**Exemplo de uso:**
-```typescript
-const {
-  selectedPacote,
-  entregas,
-  simulationActive,
-  startSimulation,
-  stopSimulation
-} = usePackageSimulation()
-
-// Iniciar simulação
-await startSimulation()
-// entregas = [{lat: -23.08, lon: -46.01, razcli: "Cliente A", ...}, ...]
-
-// Parar simulação
-stopSimulation()
-```
-
-### Tabelas Progress
-
-#### PUB.semPararRot (Rotas)
-```sql
-CREATE TABLE PUB.semPararRot (
-  sPararRotID INTEGER PRIMARY KEY,
-  desSPararRot VARCHAR(60),     -- Nome da rota
-  tempoViagem INTEGER,          -- Dias de viagem
-  flgCD LOGICAL,                -- É Centro de Distribuição?
-  flgRetorno LOGICAL,           -- Tem retorno?
-  datAtu DATE,                  -- Data última atualização
-  resAtu VARCHAR(15)            -- Responsável atualização
-)
-```
-
-#### PUB.semPararRotMu (Municípios da Rota)
-```sql
-CREATE TABLE PUB.semPararRotMu (
-  sPararRotID INTEGER,          -- FK para semPararRot
-  sPararMuSeq INTEGER,          -- Sequência do município (1, 2, 3...)
-  codMun INTEGER,               -- Código do município
-  codEst INTEGER,               -- Código do estado
-  desMun VARCHAR(60),           -- Nome do município
-  desEst VARCHAR(60),           -- Nome do estado
-  cdibge INTEGER                -- Código IBGE (para geocoding)
-)
-```
-
-### Fluxo de Simulação
-
-```
-1. Usuário seleciona pacote no autocomplete
-   └─▶ POST /api/pacotes/itinerario {codPac: 3043368}
-
-2. Backend retorna pedidos com GPS
-   └─▶ {pedidos: [{gps_lat: "230876543", gps_lon: "460123456", ...}]}
-
-3. Composable processa coordenadas
-   └─▶ processGpsCoordinate("230876543") → -23.0876543
-
-4. Entregas filtradas (apenas com GPS válido)
-   └─▶ entregas: [{lat: -23.08, lon: -46.01, ...}]
-
-5. Mapa atualizado com marcadores combinados
-   └─▶ Azul: Municípios da rota SemParar
-   └─▶ Verde: Primeira entrega
-   └─▶ Laranja: Entregas intermediárias
-   └─▶ Vermelho: Última entrega
-
-6. OSRM calcula rota combinada
-   └─▶ waypoints: [rota1, rota2, ..., entrega1, entrega2, ...]
-   └─▶ Polyline desenhada em rosa (#E91E63)
-```
-
-### Problemas Conhecidos e Soluções
-
-#### ⚠️ CRÍTICO: `updateSemPararRotaMunicipios()` Pode Perder Dados
-
-**Problema:**
-```php
-// Progress JDBC NÃO suporta transações
-DELETE FROM PUB.semPararRotMu WHERE sPararRotID = 204;  // ✅ OK
-// Se falhar aqui, municípios são perdidos!
-INSERT INTO PUB.semPararRotMu VALUES (...);  // ❌ Falha
-```
-
-**Mitigação Atual:**
-- Validação prévia de dados
-- Logging detalhado
-
-**Solução Futura:**
-- Strategy pattern (UPDATE/INSERT/DELETE granular)
-- Validação completa antes de DELETE
-
-#### ⚠️ OSRM Público Pode Falhar
-
-**Problema:** Servidor público pode ter downtime
-
-**Mitigação:**
-```typescript
-.on('routingerror', (e) => {
-  // Fallback: desenhar linha reta tracejada
-  L.polyline(waypoints, {
-    dashArray: '10, 10',
-    opacity: 0.5
-  }).addTo(map)
-})
-```
-
-**Solução Futura:**
-- Hospedar OSRM próprio via Docker
-- Cache de rotas no banco
-
-### URLs Importantes
-
-- **Listagem:** http://localhost:8002/rotas-semparar
-- **Mapa (Rota 204):** http://localhost:8002/rotas-semparar/mapa/204
-- **Teste Pacote:** http://localhost:8002/test-leaflet-pacote
-
-### Documentação Adicional
-
-- **Análise Completa:** `ANALISE_ROTAS_SEMPARAR.md` (arquitetura, problemas, melhorias)
-- **Sistema de Debug:** `DEBUG_MAPA_ROTAS.md` (como usar debug panel)
+**Last Updated:** 2024-12-01
+**Version:** 2.0.0
+**Maintainer:** Psykhepathos
 
 ---
 
-## Important Notes
+**🚛 NDD Transport Management System - Complete Architecture Reference**
 
-- **Repository:** https://github.com/Psykhepathos/ndd-vuexy.git
-- **Old systems (deprecated):** ndd-laravel, ndd-flutter repos
-- **Key features:**
-  - Dashboard NDD: http://localhost:8002/ndd-dashboard
-  - Transportes: http://localhost:8002/transportes (transporter management)
-  - Pacotes: http://localhost:8002/pacotes (package tracking)
-  - Vale Pedágio: http://localhost:8002/vale-pedagio (toll pass calculator)
-  - Rotas Padrão: http://localhost:8002/rotas-padrao (CRUD + interactive map with Leaflet/OSM)
-  - Compra Viagem: http://localhost:8002/compra-viagem (SemParar trip purchase - in development)
-- **Progress JDBC:** Located in `c:/Progress/OpenEdge/java/openedge.jar`
-- **Java Connector:** Auto-compiled on first use in `storage/app/java/`
-- **Pagination:** Progress lacks OFFSET - use subquery pattern in ProgressService
-- **Always test functionality before committing**
-- **Use Progress API endpoints for schema exploration, not tinker**
-
-## OSRM Routing Proxy (100% FREE!)
-
-**🎯 Sistema de routing GRATUITO via proxy Laravel + OSRM público**
-
-**❌ NÃO use leaflet-routing-machine direto no frontend!**
-- Servidores OSRM bloqueiam requisições diretas (CORS/timeouts)
-- Use o proxy Laravel que JÁ EXISTE no projeto
-
-**✅ Proxy Laravel:**
-- **Controller:** `app/Http/Controllers/Api/RoutingController.php`
-- **Endpoint:** `POST /api/routing/route` (2 pontos) ou `POST /api/routing/calculate` (múltiplos)
-- **Features:**
-  - Tenta 3 servidores OSRM diferentes
-  - Retry automático com 15s timeout
-  - Fallback inteligente se todos falharem
-  - Sem problemas de CORS
-  - 100% GRATUITO
-
-**Uso no frontend:**
-```typescript
-// Calcular rota ponto a ponto
-const response = await fetch('http://localhost:8002/api/routing/route', {
-  method: 'POST',
-  body: JSON.stringify({
-    start: [lng1, lat1], // [longitude, latitude]
-    end: [lng2, lat2]
-  })
-})
-const data = await response.json()
-// { success: true, coordinates: [[lat,lng],...], distance_km: 123.4 }
-
-// Desenhar com Leaflet
-L.polyline(data.coordinates, { color: 'blue' }).addTo(map)
-```
-
-**Referência completa:** `resources/ts/pages/rotas-padrao/mapa/[id].vue` (linhas 449-610)
-
----
-
-## Google Maps Integration
-
-**Cache Strategy:**
-- **Geocoding cache**: SQLite table `municipio_coordenadas` (persistent, no expiration)
-- **Routing cache**: SQLite table `route_segments` (30 days TTL, ~100m tolerance) - **DEPRECATED**, use OSRM proxy
-- **Rate limiting**: 200ms delay between new Google API requests
-- **Cache hit rate**: 80%+ after first visualization of routes
-
-**Services:**
-- `GeocodingService` - Converts IBGE codes → lat/lon coordinates (ainda usado)
-- `RoutingService` - Calculates real road routes between points (**DEPRECATED**, use OSRM proxy)
-- Both services use local cache to minimize API calls
-
-**Quota monitoring:**
-- Monitor usage: `GET /api/google-maps/quota`
-- Reset counters: `POST /api/google-maps/reset-counters`
-
-## Debugging Tips
-
-**Progress connection issues:**
-```bash
-# Test connection
-curl http://localhost:8002/api/progress/test-connection
-
-# Check Java is installed
-java -version
-
-# Check Progress driver exists
-dir "c:\Progress\OpenEdge\java\openedge.jar"
-
-# View Laravel logs
-php artisan pail
-```
-
-**Frontend issues:**
-```bash
-# Check TypeScript errors
-pnpm run typecheck
-
-# Check for linting issues
-pnpm run lint
-
-# Clear Vite cache
-rm -rf node_modules/.vite && pnpm run dev
-```
-
-**Database queries:**
-```bash
-# Test custom SQL via API
-curl -X POST http://localhost:8002/api/progress/query \
-  -H "Content-Type: application/json" \
-  -d '{"sql":"SELECT TOP 5 * FROM PUB.transporte"}'
-```
+_This document is the definitive guide for development. All developers must read the [Critical Rules](#-critical-rules) section before coding._

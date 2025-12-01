@@ -148,18 +148,12 @@ class PacoteController extends Controller
             $sql = "SELECT TOP 20 p.codpac, p.codrot, p.datforpac, p.sitpac, p.nroped, t.nomtrn FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn WHERE 1=1";
 
             if (!empty($search)) {
-                // Se for número, buscar por código exato ou range
+                // Se for número, buscar por código que comece com o termo
                 if (is_numeric($search)) {
-                    $searchInt = (int)$search;
-                    $nextInt = $searchInt + 1;
-
-                    // Usar range para simular LIKE em integer
-                    // Ex: search=304 -> codpac >= 304 AND codpac < 305
-                    $multiplier = pow(10, 7 - strlen($search)); // Ajustar para tamanho do código
-                    $rangeStart = $searchInt * $multiplier;
-                    $rangeEnd = $nextInt * $multiplier;
-
-                    $sql .= " AND p.codpac >= " . $rangeStart . " AND p.codpac < " . $rangeEnd;
+                    // Usar CAST para converter integer em string e fazer LIKE
+                    // Ex: search="80" encontra 800000, 801234, etc.
+                    $searchEscaped = addslashes($search);
+                    $sql .= " AND CAST(p.codpac AS VARCHAR) LIKE '" . $searchEscaped . "%'";
                 }
             }
 

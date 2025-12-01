@@ -232,7 +232,14 @@ watch([selectedTipo, selectedRetorno], () => {
   fetchRotas()
 })
 
-watch([page, itemsPerPage], () => {
+// Watcher separado para itemsPerPage (reseta página)
+watch(itemsPerPage, () => {
+  page.value = 1
+  fetchRotas()
+})
+
+// Watcher para page apenas
+watch(page, () => {
   fetchRotas()
 })
 
