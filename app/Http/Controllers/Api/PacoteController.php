@@ -150,10 +150,23 @@ class PacoteController extends Controller
             if (!empty($search)) {
                 // Se for número, buscar por código que comece com o termo
                 if (is_numeric($search)) {
-                    // Usar CAST para converter integer em string e fazer LIKE
-                    // Ex: search="80" encontra 800000, 801234, etc.
-                    $searchEscaped = addslashes($search);
-                    $sql .= " AND CAST(p.codpac AS VARCHAR) LIKE '" . $searchEscaped . "%'";
+                    $searchInt = (int)$search;
+                    $searchLen = strlen($search);
+
+                    // Abordagem híbrida para performance:
+                    // - Para códigos pequenos (1-3 dígitos): usar range numérico (mais rápido, usa índice)
+                    // - Para códigos maiores (4+ dígitos): usar CAST (mais preciso)
+                    if ($searchLen <= 3) {
+                        // Range numérico: 80 → 8000000-8999999 (assumindo códigos de 7 dígitos)
+                        $multiplier = pow(10, 7 - $searchLen);
+                        $rangeStart = $searchInt * $multiplier;
+                        $rangeEnd = ($searchInt + 1) * $multiplier;
+                        $sql .= " AND p.codpac >= " . $rangeStart . " AND p.codpac < " . $rangeEnd;
+                    } else {
+                        // CAST para maior precisão em buscas longas
+                        $searchEscaped = addslashes($search);
+                        $sql .= " AND CAST(p.codpac AS VARCHAR) LIKE '" . $searchEscaped . "%'";
+                    }
                 }
             }
 
