@@ -16,11 +16,12 @@ use App\Http\Controllers\Api\TransporteController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-// Rotas de autenticação (públicas) com rate limiting
+// Rotas de autenticação (públicas) com rate limiting por IP
+// Nota: Aumentado para 10/min pois escritórios compartilham IP
 Route::post('auth/login', [AuthController::class, 'login'])
-    ->middleware('throttle:5,1'); // 5 tentativas por minuto
+    ->middleware('throttle:10,1'); // 10 tentativas por minuto por IP
 Route::post('auth/register', [AuthController::class, 'register'])
-    ->middleware('throttle:3,1'); // 3 registros por minuto
+    ->middleware('throttle:5,1'); // 5 registros por minuto por IP
 
 // Rotas protegidas por autenticação
 Route::middleware(['auth:sanctum'])->group(function () {
