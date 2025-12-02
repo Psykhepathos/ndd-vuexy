@@ -208,9 +208,16 @@ watchDebounced([filtroUF, filtroRodovia, filtroSituacao], () => {
   loadPracas()
 }, { debounce: 300 })
 
-watchDebounced(options, () => {
+// Watcher separado para itemsPerPage (reseta página)
+watchDebounced(() => options.value.itemsPerPage, () => {
+  options.value.page = 1
   loadPracas()
-}, { debounce: 300, deep: true })
+}, { debounce: 300 })
+
+// Watcher para page apenas
+watchDebounced(() => options.value.page, () => {
+  loadPracas()
+}, { debounce: 300 })
 
 // ============================================================================
 // LIFECYCLE
