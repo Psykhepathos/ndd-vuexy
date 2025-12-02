@@ -390,7 +390,7 @@ onMounted(() => {
               { value: 100, title: '100' }
             ]"
             style="inline-size: 5rem;"
-            @update:model-value="options.itemsPerPage = parseInt($event, 10)"
+            @update:model-value="(value: string | number) => { options.itemsPerPage = parseInt(String(value), 10); options.page = 1; cursors = { next: null, prev: null, hasNext: false, hasPrev: false }; fetchTransportes(null); }"
           />
 
           <!-- Filtro Tipo -->

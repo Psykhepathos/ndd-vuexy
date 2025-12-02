@@ -39,7 +39,7 @@ const refVForm = ref<VForm>()
 
 const credentials = ref({
   email: 'admin@ndd.com',
-  password: '123456',
+  password: 'Admin@123',
 })
 
 const rememberMe = ref(false)
@@ -149,10 +149,10 @@ const onSubmit = () => {
             variant="tonal"
           >
             <p class="text-sm mb-2">
-              Email Admin: <strong>admin@ndd.com</strong> / Senha: <strong>123456</strong>
+              Email Admin: <strong>admin@ndd.com</strong> / Senha: <strong>Admin@123</strong>
             </p>
             <p class="text-sm mb-0">
-              Email Cliente: <strong>test@ndd.com</strong> / Senha: <strong>123456</strong>
+              Email Cliente: <strong>user@ndd.com</strong> / Senha: <strong>User@123</strong>
             </p>
           </VAlert>
         </VCardText>
