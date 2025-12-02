@@ -12,8 +12,11 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->string('role')->default('user')->after('email');
+            $table->enum('role', ['admin', 'user'])->default('user')->after('email');
         });
+
+        // Backfill existing users with 'user' role
+        DB::table('users')->whereNull('role')->update(['role' => 'user']);
     }
 
     /**

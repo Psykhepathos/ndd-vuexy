@@ -7,4 +7,20 @@ export const $api = ofetch.create({
     if (accessToken)
       options.headers.append('Authorization', `Bearer ${accessToken}`)
   },
+  async onResponseError({ response }) {
+    if (response.status === 401) {
+      const accessTokenCookie = useCookie('accessToken')
+      const userDataCookie = useCookie('userData')
+      const userAbilityRulesCookie = useCookie('userAbilityRules')
+
+      accessTokenCookie.value = null
+      userDataCookie.value = null
+      userAbilityRulesCookie.value = null
+
+      if (typeof window !== 'undefined') {
+        const router = useRouter()
+        router.push('/login')
+      }
+    }
+  },
 })
