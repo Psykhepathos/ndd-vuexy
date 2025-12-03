@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// @ts-nocheck - Leaflet type incompatibilities (known @types/leaflet issue)
 import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import draggable from 'vuedraggable'

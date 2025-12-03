@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(typecheck-output.txt)"
+      "Bash(typecheck-output.txt)",
+      "Bash(cut:*)"
     ],
     "deny": [],
     "ask": []

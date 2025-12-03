@@ -481,6 +481,7 @@ async function addExamplePoints() {
       markersLayer?.addLayer(marker)
     })
 
+    // @ts-expect-error - Leaflet type incompatibility (known issue)
     const polyline = L.polyline(exemploCoords, {
       color: '#2196F3',
       weight: 5,

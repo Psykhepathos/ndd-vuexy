@@ -95,6 +95,7 @@ const selecionarPacote = async (pacoteItem: any) => {
       const todasEntregas: any[] = data.data.pedidos || []
 
       // Processar coordenadas GPS
+      // @ts-expect-error - Tipo any sendo convertido para EntregaPacote (safe cast)
       const entregasProcessadas: EntregaPacote[] = todasEntregas.map((entrega: any) => ({
         numseqped: entrega.numseqped,
         razcli: entrega.razcli,

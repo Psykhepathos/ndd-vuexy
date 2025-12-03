@@ -71,12 +71,16 @@
     "./shims.d.ts",
     "./resources/ts/**/*",
     "./resources/ts/**/*.vue",
+    "./resources/ts/@core/types/**/*.d.ts",
     "./themeConfig.ts",
     "./auto-imports.d.ts",
     "./components.d.ts"
   ],
   "exclude": [
     "./dist",
-    "./node_modules"
+    "./node_modules",
+    "./resources/ts/**/*-old-backup.vue",
+    "./resources/ts/**/*-old.vue",
+    "./resources/ts/**/index-new.vue"
   ]
 }
