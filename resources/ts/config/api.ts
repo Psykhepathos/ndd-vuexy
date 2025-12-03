@@ -38,11 +38,11 @@ export const API_ENDPOINTS = {
   semPararRota: (id: number) => `${API_BASE_URL}/api/semparar-rotas/${id}`,
   semPararRotaMunicipios: (id: number) => `${API_BASE_URL}/api/semparar-rotas/${id}/municipios`,
 
-  // Routing & Geocoding
-  routingCalculate: `${API_BASE_URL}/api/routing/calculate`,
+  // Routing & Geocoding (OSRM gratuito)
+  // routingCalculate: DEPRECATED - Use osrmRoute instead (Google Directions removido)
   geocodingIbge: `${API_BASE_URL}/api/geocoding/ibge`,
   geocodingLote: `${API_BASE_URL}/api/geocoding/lote`,
-  osrmRoute: `${API_BASE_URL}/api/osrm/route`,
+  osrmRoute: `${API_BASE_URL}/api/routing/route`, // Proxy OSRM gratuito
 
   // Rotas (autocomplete)
   rotas: `${API_BASE_URL}/api/rotas`,

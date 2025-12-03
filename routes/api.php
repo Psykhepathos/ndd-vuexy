@@ -71,11 +71,11 @@ Route::middleware('api')->group(function () {
     // Rotas para RotaController (JDBC Progress) - para autocomplete
     Route::get('rotas', [RotaController::class, 'index']);
     
-    // Rotas para proxy de roteamento (contorna CORS)
+    // Rotas para proxy de roteamento OSRM (100% gratuito, contorna CORS)
     Route::prefix('routing')->group(function () {
         Route::get('test', [\App\Http\Controllers\Api\RoutingController::class, 'testConnection']);
         Route::post('route', [\App\Http\Controllers\Api\RoutingController::class, 'getRoute']);
-        Route::post('calculate', [\App\Http\Controllers\Api\RoutingController::class, 'calculateRoute']);
+        // Route::post('calculate', ...) - DEPRECATED - Google Directions removido
     });
     
     // Rotas para monitoramento Google Maps
