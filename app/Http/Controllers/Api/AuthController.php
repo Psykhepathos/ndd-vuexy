@@ -30,6 +30,21 @@ class AuthController extends Controller
 
         if (Auth::attempt($credentials)) {
             $user = Auth::user();
+
+            // Validar integridade de role (não usar fallback silencioso)
+            if (!$user->role || !in_array($user->role, ['admin', 'user'], true)) {
+                \Log::error('Usuário com role inválido ou nulo detectado', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'role' => $user->role
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Erro de integridade de dados do usuário. Contate o administrador.'
+                ], 500);
+            }
+
             $token = $user->createToken('auth_token')->plainTextToken;
 
             return response()->json([
@@ -38,7 +53,7 @@ class AuthController extends Controller
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
-                    'role' => $user->role ?? 'user',
+                    'role' => $user->role,
                     'avatar' => null,
                 ],
                 'userAbilityRules' => [
@@ -89,6 +104,7 @@ class AuthController extends Controller
                 'regex:/[0-9]/',      // Pelo menos um número
                 'regex:/[@$!%*#?&]/', // Pelo menos um caractere especial
             ],
+            'password_confirmation' => 'required|string|min:8',
         ]);
 
         if ($validator->fails()) {
@@ -96,6 +112,17 @@ class AuthController extends Controller
                 'success' => false,
                 'message' => 'Dados inválidos',
                 'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Double-check: validação manual adicional para garantir senhas iguais
+        if ($request->password !== $request->password_confirmation) {
+            return response()->json([
+                'success' => false,
+                'message' => 'As senhas não correspondem',
+                'errors' => [
+                    'password_confirmation' => ['As senhas não correspondem']
+                ]
             ], 422);
         }
 
