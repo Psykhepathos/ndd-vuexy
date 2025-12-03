@@ -19,6 +19,7 @@ defineOptions({
 })
 
 const props = defineProps({
+  modelValue: [String, null] as PropType<string | null>,
   autofocus: Boolean,
   counter: [Boolean, Number, String] as PropType<true | number | string>,
   counterValue: Function as PropType<(value: any) => number>,

@@ -9,7 +9,7 @@ import { AppContentLayoutNav, ContentWidth, FooterType, NavbarType } from '@layo
 
 export const { themeConfig, layoutConfig } = defineThemeConfig({
   app: {
-    title: 'Vale Pedágio',
+    title: 'Vale Pedágio' as Lowercase<string>,
     logo: h('img', { 
       src: '/iconetambasa.png', 
       style: 'line-height:0; width: 26px; height: 26px;' 
