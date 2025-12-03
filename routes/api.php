@@ -26,7 +26,10 @@ Route::post('auth/register', [AuthController::class, 'register'])
 // Rotas protegidas por autenticação
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('auth/logout', [AuthController::class, 'logout']);
-    Route::get('auth/user', [AuthController::class, 'user']);
+
+    // CORREÇÃO #6: Rate limiting para prevenir token enumeration
+    Route::get('auth/user', [AuthController::class, 'user'])
+        ->middleware('throttle:60,1');  // 60 req/min
 });
 
 Route::middleware('api')->group(function () {
