@@ -133,7 +133,7 @@ class ProgressController extends Controller
                 'data_inicio' => 'nullable|date',
                 'data_fim' => 'nullable|date|after_or_equal:data_inicio',
                 'status' => 'nullable|string|max:20',
-                'limit' => 'nullable|integer|min:1|max:1000'
+                'limit' => 'nullable|integer|min:1|max:100'  // CORREÇÃO #6: Reduzir limite para prevenir timeout
             ]);
 
             if ($validator->fails()) {
@@ -276,22 +276,154 @@ class ProgressController extends Controller
             }
 
             $sql = $request->input('sql');
+
+            // CORREÇÃO #3: Validar segurança da query ANTES de executar
+            $securityCheck = $this->validateQuerySecurity($sql);
+            if (!$securityCheck['valid']) {
+                // CORREÇÃO #5: Registrar tentativa rejeitada para auditoria
+                Log::warning('Query rejeitada por validação de segurança', [
+                    'user_id' => $request->user()->id ?? null,
+                    'user_email' => $request->user()->email ?? null,
+                    'ip' => $request->ip(),
+                    'sql_preview' => substr($sql, 0, 100) . '...',
+                    'error' => $securityCheck['error'],
+                    'timestamp' => now()->toIso8601String()
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Query rejeitada por validação de segurança',
+                    'error' => $securityCheck['error']
+                ], 403);  // 403 Forbidden
+            }
+
+            // CORREÇÃO #5: Registrar auditoria ANTES de executar
+            Log::info('Executando query customizada', [
+                'user_id' => $request->user()->id ?? null,
+                'user_email' => $request->user()->email ?? null,
+                'ip' => $request->ip(),
+                'sql_preview' => substr($sql, 0, 200) . (strlen($sql) > 200 ? '...' : ''),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
             $bindings = $request->input('bindings', []);
-            
+
             $result = $this->progressService->executeCustomQuery($sql, $bindings);
-            
+
+            // CORREÇÃO #5: Registrar resultado da auditoria
+            Log::info('Query executada com sucesso', [
+                'user_id' => $request->user()->id ?? null,
+                'total_registros' => $result['data']['total'] ?? 0
+            ]);
+
             return response()->json($result, $result['success'] ? 200 : 400);
-            
+
         } catch (\Exception $e) {
+            // CORREÇÃO #5: Incluir user_id e IP em logs de erro
             Log::error('Erro na execução de consulta customizada', [
+                'user_id' => $request->user()->id ?? null,
+                'user_email' => $request->user()->email ?? null,
+                'ip' => $request->ip(),
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'error' => 'Erro interno na execução da consulta'
             ], 500);
         }
+    }
+
+    /**
+     * CORREÇÃO #3: Valida segurança da query customizada
+     *
+     * Regras de segurança:
+     * - Apenas tabelas whitelisted podem ser acessadas
+     * - Não pode usar SELECT * (deve especificar colunas)
+     * - Não pode acessar colunas sensíveis (CPF, CNPJ, senhas)
+     * - Limite de 100 registros por query
+     *
+     * @param string $sql SQL query a ser validada
+     * @return array ['valid' => bool, 'error' => string|null]
+     */
+    private function validateQuerySecurity(string $sql): array
+    {
+        $sql_upper = strtoupper($sql);
+
+        // Regra 1: Whitelist de tabelas permitidas para usuários autenticados
+        $allowedTables = [
+            'PUB.TRANSPORTE',
+            'PUB.PACOTE',
+            'PUB.INTROT',       // Rotas
+            'PUB.SEMPARATOT',   // Rotas SemParar (apenas leitura de metadados)
+            'PUB.MUNICIPIO',
+            'PUB.ESTADO'
+        ];
+
+        $tablesInQuery = [];
+        foreach ($allowedTables as $table) {
+            if (str_contains($sql_upper, $table)) {
+                $tablesInQuery[] = $table;
+            }
+        }
+
+        // Se não encontrou nenhuma tabela permitida, verificar se está tentando acessar tabela não permitida
+        if (empty($tablesInQuery)) {
+            // Detectar se está tentando acessar tabela proibida
+            $forbiddenTables = ['TRNMOT', 'USUARIO', 'SPARARVIAGEM', 'FUNCIONARIO', 'CONTAPAGAR'];
+            foreach ($forbiddenTables as $forbidden) {
+                if (str_contains($sql_upper, $forbidden)) {
+                    return [
+                        'valid' => false,
+                        'error' => 'Acesso negado: Tabela não permitida para usuários. Contate o administrador.'
+                    ];
+                }
+            }
+
+            return [
+                'valid' => false,
+                'error' => 'Nenhuma tabela permitida encontrada na query. Tabelas permitidas: ' . implode(', ', $allowedTables)
+            ];
+        }
+
+        // Regra 2: Proibir SELECT * (deve especificar colunas)
+        if (preg_match('/SELECT\s+\*/i', $sql)) {
+            return [
+                'valid' => false,
+                'error' => 'SELECT * não é permitido. Especifique as colunas desejadas.'
+            ];
+        }
+
+        // Regra 3: Detectar acesso a colunas sensíveis (mesmo que whitelisted)
+        $sensitiveCols = ['CODCNPJCPF', 'CODCPF', 'SENHA', 'PASSWORD', 'TOKEN'];
+        foreach ($sensitiveCols as $col) {
+            if (str_contains($sql_upper, $col)) {
+                return [
+                    'valid' => false,
+                    'error' => "Acesso à coluna sensível '{$col}' não é permitido."
+                ];
+            }
+        }
+
+        // Regra 4: Limitar quantidade de registros (máximo 100)
+        if (!preg_match('/TOP\s+\d+/i', $sql)) {
+            return [
+                'valid' => false,
+                'error' => 'Query deve incluir TOP N (máximo 100 registros). Exemplo: SELECT TOP 100 ...'
+            ];
+        }
+
+        // Extrair número do TOP
+        preg_match('/TOP\s+(\d+)/i', $sql, $matches);
+        $topLimit = (int)($matches[1] ?? 0);
+        if ($topLimit > 100) {
+            return [
+                'valid' => false,
+                'error' => 'TOP não pode ser maior que 100. Use paginação para grandes volumes.'
+            ];
+        }
+
+        return ['valid' => true];
     }
 }

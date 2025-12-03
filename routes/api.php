@@ -33,11 +33,23 @@ Route::middleware('api')->group(function () {
     Route::apiResource('motoristas', MotoristaController::class);
     Route::get('motoristas/progress/{codigo}', [MotoristaController::class, 'findByProgressCode']);
 
+    // CORREÇÃO #1+#2: Rate limiting + Autenticação para ProgressController
     Route::prefix('progress')->group(function () {
-        Route::get('test-connection', [ProgressController::class, 'testConnection']);
-        Route::get('transportes', [ProgressController::class, 'getTransportes']);
-        Route::get('transportes/{id}', [ProgressController::class, 'getTransporteById']);
-        Route::post('query', [ProgressController::class, 'executeCustomQuery']);
+        // Endpoints públicos com rate limiting (CORREÇÃO #2: Prevenir DoS)
+        Route::get('test-connection', [ProgressController::class, 'testConnection'])
+            ->middleware('throttle:10,1');  // 10 req/min - health check
+
+        Route::get('transportes', [ProgressController::class, 'getTransportes'])
+            ->middleware('throttle:60,1');  // 60 req/min - listagem
+
+        Route::get('transportes/{id}', [ProgressController::class, 'getTransporteById'])
+            ->middleware('throttle:60,1');  // 60 req/min - leitura específica
+
+        // CORREÇÃO #1: Custom query APENAS para usuários autenticados + rate limiting agressivo
+        Route::middleware(['auth:sanctum'])->group(function () {
+            Route::post('query', [ProgressController::class, 'executeCustomQuery'])
+                ->middleware('throttle:5,1');  // 5 req/min - apenas admins
+        });
     });
     
     // Rotas para TransporteController (JDBC Progress) - específicas primeiro
@@ -212,32 +224,53 @@ Route::middleware('api')->group(function () {
 
     // ⚠️ Compra de Viagem SemParar - MODO DE TESTE ATIVO ⚠️
     // IMPORTANTE: Todas as chamadas estão em modo simulação para evitar compras acidentais
+
+    // ENDPOINTS PÚBLICOS (sem autenticação necessária)
+    // CORREÇÃO #4: Rate limiting para prevenir DoS
     Route::prefix('compra-viagem')->group(function () {
-        Route::get('initialize', [CompraViagemController::class, 'initialize']);
-        Route::get('statistics', [CompraViagemController::class, 'statistics']);
-        Route::get('health', [CompraViagemController::class, 'health']);
+        Route::get('initialize', [CompraViagemController::class, 'initialize'])
+            ->middleware('throttle:120,1');  // 120 req/min - informações leves
+        Route::get('health', [CompraViagemController::class, 'health'])
+            ->middleware('throttle:120,1');  // 120 req/min - health check
+    });
+
+    // ENDPOINTS PROTEGIDOS (requerem autenticação via Laravel Sanctum)
+    // CORREÇÃO #3: Adicionar autenticação para prevenir acesso não autorizado
+    // CORREÇÃO #4: Rate limiting para prevenir DoS e brute force
+    Route::middleware(['auth:sanctum'])->prefix('compra-viagem')->group(function () {
+        // ESTATÍSTICAS (operação cara no Progress)
+        Route::get('statistics', [CompraViagemController::class, 'statistics'])
+            ->middleware('throttle:10,1');  // 10 req/min - query complexa
 
         // LISTAGEM: Busca viagens do Progress (tabela PUB.sPararViagem)
-        Route::post('viagens', [CompraViagemController::class, 'listarViagens']);
+        Route::post('viagens', [CompraViagemController::class, 'listarViagens'])
+            ->middleware('throttle:60,1');  // 60 req/min - operação padrão
 
         // FASE 2: Validação de pacote
-        Route::post('validar-pacote', [CompraViagemController::class, 'validarPacote']);
+        Route::post('validar-pacote', [CompraViagemController::class, 'validarPacote'])
+            ->middleware('throttle:60,1');  // 60 req/min - operação padrão
 
         // FASE 3: Validação de placa/veículo
-        Route::post('validar-placa', [CompraViagemController::class, 'validarPlaca']);
+        Route::post('validar-placa', [CompraViagemController::class, 'validarPlaca'])
+            ->middleware('throttle:60,1');  // 60 req/min - operação padrão
 
         // FASE 4: Seleção de rota
-        Route::get('rotas', [CompraViagemController::class, 'listarRotas']);
-        Route::post('validar-rota', [CompraViagemController::class, 'validarRota']);
+        Route::get('rotas', [CompraViagemController::class, 'listarRotas'])
+            ->middleware('throttle:60,1');  // 60 req/min - autocomplete
+        Route::post('validar-rota', [CompraViagemController::class, 'validarRota'])
+            ->middleware('throttle:60,1');  // 60 req/min - validação
 
-        // FASE 5: Verificação de preço
-        Route::post('verificar-preco', [CompraViagemController::class, 'verificarPreco']);
+        // FASE 5: Verificação de preço (chamada SOAP externa)
+        Route::post('verificar-preco', [CompraViagemController::class, 'verificarPreco'])
+            ->middleware('throttle:30,1');  // 30 req/min - SOAP call
 
-        // FASE 6: Compra de viagem
-        Route::post('comprar', [CompraViagemController::class, 'comprarViagem']);
+        // FASE 6: Compra de viagem (CRÍTICO - Operação financeira)
+        Route::post('comprar', [CompraViagemController::class, 'comprarViagem'])
+            ->middleware('throttle:10,1');  // 10 req/min - previne compras duplicadas
 
         // DEBUG: Análise completa do fluxo
-        Route::post('debug-flow', [\App\Http\Controllers\Api\DebugSemPararController::class, 'debugFlow']);
+        Route::post('debug-flow', [\App\Http\Controllers\Api\DebugSemPararController::class, 'debugFlow'])
+            ->middleware('throttle:10,1');  // 10 req/min - debug apenas
 
         // TODO: Adicionar rotas das próximas fases aqui
         // Route::post('gerar-recibo', [CompraViagemController::class, 'gerarRecibo']);
