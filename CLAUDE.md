@@ -349,11 +349,12 @@ POST   /api/geocoding/lote                  - Batch geocoding (multiple municipa
 **Cache Hit Rate:** 80%+ after first use
 **Frontend:** Used by ALL map pages
 
-#### **RoutingController** (OSRM Proxy - CRITICAL!)
+#### **RoutingController** (OSRM Proxy - 100% FREE!)
 ```
-POST   /api/routing/route                   - OSRM proxy (2 points) ✅ RECOMMENDED
-POST   /api/routing/calculate               - Google Directions (DEPRECATED)
+POST   /api/routing/route                   - OSRM proxy (2 points) ✅ USE THIS
 GET    /api/routing/test                    - Service test
+
+❌ REMOVED: POST /api/routing/calculate (Google Directions API - deprecated 2025-12-03)
 ```
 
 **OSRM Request:**
@@ -1722,7 +1723,7 @@ ndd-vuexy/
 │   └── Services/
 │       ├── ProgressService.php             # Progress JDBC (2574 lines!)
 │       ├── GeocodingService.php            # Google Geocoding + cache
-│       ├── RoutingService.php              # DEPRECATED - use RoutingController
+│       ├── RoutingService.php.deprecated   # ❌ REMOVED (Google Directions API)
 │       ├── Map/
 │       │   ├── MapService.php              # Unified map orchestrator
 │       │   ├── CacheManager.php            # Cache management
