@@ -399,9 +399,7 @@ async function loadRotaFromDatabase() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        Pacote: {
-          codPac: 3043368
-        }
+        codPac: 3043368
       })
     })
 
