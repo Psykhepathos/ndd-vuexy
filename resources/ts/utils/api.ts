@@ -12,7 +12,10 @@ export const $api = ofetch.create({
     }
   },
   async onResponseError({ response }) {
-    if (response.status === 401) {
+    const status = response.status
+
+    // 401 Unauthorized - Token inválido/expirado
+    if (status === 401) {
       const accessTokenCookie = useCookie('accessToken')
       const userDataCookie = useCookie('userData')
       const userAbilityRulesCookie = useCookie('userAbilityRules')
@@ -32,6 +35,39 @@ export const $api = ofetch.create({
           isRedirecting = false
         }, 1000)
       }
+    }
+
+    // 403 Forbidden - Sem permissão para acessar recurso
+    else if (status === 403) {
+      console.error('Acesso negado: Você não tem permissão para acessar este recurso')
+
+      // Notificar usuário via toast (se disponível)
+      if (typeof window !== 'undefined' && (window as any).$toast) {
+        (window as any).$toast.error('Acesso negado. Você não tem permissão para esta ação.')
+      }
+    }
+
+    // 500 Internal Server Error - Erro no servidor
+    else if (status === 500) {
+      console.error('Erro no servidor:', response._data?.message || 'Erro interno do servidor')
+
+      if (typeof window !== 'undefined' && (window as any).$toast) {
+        (window as any).$toast.error('Erro no servidor. Tente novamente mais tarde.')
+      }
+    }
+
+    // 503 Service Unavailable - Servidor indisponível
+    else if (status === 503) {
+      console.error('Serviço temporariamente indisponível')
+
+      if (typeof window !== 'undefined' && (window as any).$toast) {
+        (window as any).$toast.error('Serviço temporariamente indisponível. Aguarde alguns instantes.')
+      }
+    }
+
+    // Log de outros erros não tratados
+    else if (status >= 400) {
+      console.error(`Erro HTTP ${status}:`, response._data?.message || 'Erro desconhecido')
     }
   },
 })

@@ -21,6 +21,7 @@ const { showError, showSuccess, showWarning, toast } = useToast()
 
 // Estados reativos
 const loading = ref(false)
+const deleting = ref(false)
 const searchQuery = ref('')
 const itemsPerPage = ref(10)
 const page = ref(1)
@@ -266,9 +267,11 @@ const confirmDelete = (item: RotaSemParar) => {
 }
 
 const deleteRoute = async () => {
-  if (!rotaToDelete.value) return
+  if (!rotaToDelete.value || deleting.value) return
 
   try {
+    deleting.value = true
+
     const response = await apiFetch(API_ENDPOINTS.semPararRota(rotaToDelete.value.spararrotid), {
       method: 'DELETE'
     })
@@ -285,6 +288,7 @@ const deleteRoute = async () => {
     console.error('Erro ao excluir rota:', error)
     showError('Erro ao excluir rota. Verifique sua conexão e tente novamente.')
   } finally {
+    deleting.value = false
     deleteDialog.value = false
     rotaToDelete.value = null
   }
@@ -553,6 +557,8 @@ onMounted(() => {
           <VBtn
             color="error"
             variant="flat"
+            :disabled="deleting"
+            :loading="deleting"
             @click="deleteRoute"
           >
             Excluir
