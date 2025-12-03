@@ -47,4 +47,24 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    /**
+     * Mutator para validar role antes de salvar
+     *
+     * @param string $value
+     * @return void
+     * @throws \InvalidArgumentException
+     */
+    public function setRoleAttribute($value): void
+    {
+        $validRoles = ['admin', 'user'];
+
+        if (!in_array($value, $validRoles, true)) {
+            throw new \InvalidArgumentException(
+                "Role inválido: '$value'. Valores aceitos: " . implode(', ', $validRoles)
+            );
+        }
+
+        $this->attributes['role'] = $value;
+    }
 }
