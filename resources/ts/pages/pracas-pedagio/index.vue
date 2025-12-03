@@ -57,6 +57,9 @@ const options = ref({
   sortOrder: ['asc']
 })
 
+// Lock para prevenir dupla chamada de loadPracas
+let isLoadingLocked = false
+
 // ============================================================================
 // TABLE HEADERS
 // ============================================================================
@@ -199,24 +202,38 @@ const formatKm = (km: string) => {
 // ============================================================================
 
 watchDebounced(search, () => {
+  if (isLoadingLocked) return
+  isLoadingLocked = true
   options.value.page = 1
-  loadPracas()
+  loadPracas().finally(() => {
+    isLoadingLocked = false
+  })
 }, { debounce: 500 })
 
 watchDebounced([filtroUF, filtroRodovia, filtroSituacao], () => {
+  if (isLoadingLocked) return
+  isLoadingLocked = true
   options.value.page = 1
-  loadPracas()
+  loadPracas().finally(() => {
+    isLoadingLocked = false
+  })
 }, { debounce: 300 })
 
-// Watcher separado para itemsPerPage (reseta página)
 watchDebounced(() => options.value.itemsPerPage, () => {
+  if (isLoadingLocked) return
+  isLoadingLocked = true
   options.value.page = 1
-  loadPracas()
+  loadPracas().finally(() => {
+    isLoadingLocked = false
+  })
 }, { debounce: 300 })
 
-// Watcher para page apenas
 watchDebounced(() => options.value.page, () => {
-  loadPracas()
+  if (isLoadingLocked) return
+  isLoadingLocked = true
+  loadPracas().finally(() => {
+    isLoadingLocked = false
+  })
 }, { debounce: 300 })
 
 // ============================================================================

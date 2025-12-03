@@ -297,6 +297,19 @@ const viewDetails = (item: Transporte) => {
   router.push(`/transportes/${item.codtrn}`)
 }
 
+const handleItemsPerPageChange = (value: string | number) => {
+  const newValue = Number(value)
+  if (isNaN(newValue) || newValue <= 0) {
+    console.error('Invalid itemsPerPage value:', value)
+    return
+  }
+
+  options.value.itemsPerPage = newValue
+  options.value.page = 1
+  cursors.value = { next: null, prev: null, hasNext: false, hasPrev: false }
+  fetchTransportes(null)
+}
+
 const getTipoTransportador = (item: Transporte) => {
   return item.flgautonomo ? 'AUTÔNOMO' : 'EMPRESA'
 }
@@ -390,7 +403,7 @@ onMounted(() => {
               { value: 100, title: '100' }
             ]"
             style="inline-size: 5rem;"
-            @update:model-value="(value: string | number) => { options.itemsPerPage = parseInt(String(value), 10); options.page = 1; cursors = { next: null, prev: null, hasNext: false, hasPrev: false }; fetchTransportes(null); }"
+            @update:model-value="handleItemsPerPageChange"
           />
 
           <!-- Filtro Tipo -->
