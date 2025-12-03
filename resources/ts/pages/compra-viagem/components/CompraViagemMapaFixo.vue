@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// @ts-nocheck - Leaflet type incompatibilities (known @types/leaflet issue)
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
