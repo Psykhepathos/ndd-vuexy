@@ -609,6 +609,45 @@ class ProgressService
     }
 
     /**
+     * CORREÇÃO #4: Sanitiza SQL para logs (LGPD compliance)
+     *
+     * Mascara dados sensíveis antes de gravar em logs:
+     * - CPF: 123.456.789-01 → ***.***.***.--**
+     * - CNPJ: 12.345.678/0001-23 → **.***.***/****-**
+     * - Números longos em WHERE: codcnpjcpf = '12345678901234' → codcnpjcpf = '***'
+     * - Valores monetários grandes
+     * - Strings longas (nomes, endereços)
+     *
+     * @param string $sql SQL query original
+     * @return string SQL sanitizado para log
+     */
+    private function sanitizeSqlForLogging(string $sql): string
+    {
+        // Mascara CPF (11 dígitos)
+        $sql = preg_replace('/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/', '***.***.***.--**', $sql);
+        $sql = preg_replace('/\b\d{11}\b/', '***********', $sql);
+
+        // Mascara CNPJ (14 dígitos)
+        $sql = preg_replace('/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/', '**.***.***/****-**', $sql);
+        $sql = preg_replace('/\b\d{14}\b/', '**************', $sql);
+
+        // Mascara valores monetários grandes (> 1000)
+        $sql = preg_replace('/\b\d{4,}\.\d{2}\b/', '*****.--**', $sql);
+
+        // Mascara strings em aspas simples com mais de 5 caracteres (pode ser nome/endereço)
+        $sql = preg_replace_callback(
+            "/'([^']{6,})'/",
+            function($matches) {
+                $length = strlen($matches[1]);
+                return "'" . str_repeat('*', min($length, 10)) . "'";
+            },
+            $sql
+        );
+
+        return $sql;
+    }
+
+    /**
      * Executa consulta SQL customizada (para debug e testes)
      */
     public function executeCustomQuery(string $sql): array
@@ -625,7 +664,11 @@ class ProgressService
                 throw new Exception('SQL query muito grande (máximo 50.000 caracteres)');
             }
 
-            Log::info('Executando consulta SQL customizada', ['sql' => substr($sql, 0, 200) . '...']);
+            // CORREÇÃO #4: Sanitizar SQL antes de logar
+            $sanitizedSql = $this->sanitizeSqlForLogging($sql);
+            Log::info('Executando consulta SQL customizada', [
+                'sql' => substr($sanitizedSql, 0, 200) . (strlen($sanitizedSql) > 200 ? '...' : '')
+            ]);
 
             // Validação 3: Limitar a apenas SELECT por segurança
             $sql_upper = strtoupper($sql);
@@ -646,7 +689,7 @@ class ProgressService
                 throw new Exception('Comentários SQL não são permitidos em consultas customizadas');
             }
 
-            $result = $this->executeJavaConnector('query', $sql);
+            $result = $this->executeJavaConnector('query', $sql);  // Executa SQL original (não sanitizado)
 
             Log::info('Consulta SQL executada com sucesso', [
                 'total_registros' => $result['data']['total'] ?? 0
@@ -655,8 +698,10 @@ class ProgressService
             return $result;
 
         } catch (Exception $e) {
+            // CORREÇÃO #4: Sanitizar SQL em logs de erro
+            $sanitizedSql = $this->sanitizeSqlForLogging($sql ?? 'null');
             Log::error('Erro na execução da consulta SQL', [
-                'sql' => substr($sql ?? 'null', 0, 200),
+                'sql' => substr($sanitizedSql, 0, 200),
                 'error' => $e->getMessage()
             ]);
 
