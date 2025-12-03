@@ -148,24 +148,28 @@ class PacoteController extends Controller
             $sql = "SELECT TOP 20 p.codpac, p.codrot, p.datforpac, p.sitpac, p.nroped, t.nomtrn FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn WHERE 1=1";
 
             if (!empty($search)) {
-                // Se for número, buscar por código que comece com o termo
+                // Se for número, buscar por código usando range numérico
+                // IMPORTANTE: Progress JDBC não suporta CAST(codpac AS VARCHAR) LIKE
+                // Usa range numérico que funciona com índices: 304 → 3040000-3049999
                 if (is_numeric($search)) {
                     $searchInt = (int)$search;
                     $searchLen = strlen($search);
 
-                    // Abordagem híbrida para performance:
-                    // - Para códigos pequenos (1-3 dígitos): usar range numérico (mais rápido, usa índice)
-                    // - Para códigos maiores (4+ dígitos): usar CAST (mais preciso)
-                    if ($searchLen <= 3) {
-                        // Range numérico: 80 → 8000000-8999999 (assumindo códigos de 7 dígitos)
+                    // Para código exato (7 dígitos), busca exata: 3043368 → 3043368-3043368
+                    // Para código parcial, busca por range: 304 → 3040000-3049999
+                    if ($searchLen >= 7) {
+                        // Busca exata (código completo)
+                        $sql .= " AND p.codpac = " . $searchInt;
+                    } else {
+                        // Range numérico para busca parcial
+                        // Exemplo: "304" com códigos de 7 dígitos
+                        // 304 * 10^(7-3) = 3040000
+                        // (304 + 1) * 10^(7-3) = 3050000
+                        // Result: 3040000 <= codpac < 3050000
                         $multiplier = pow(10, 7 - $searchLen);
                         $rangeStart = $searchInt * $multiplier;
                         $rangeEnd = ($searchInt + 1) * $multiplier;
                         $sql .= " AND p.codpac >= " . $rangeStart . " AND p.codpac < " . $rangeEnd;
-                    } else {
-                        // CAST para maior precisão em buscas longas
-                        $searchEscaped = addslashes($search);
-                        $sql .= " AND CAST(p.codpac AS VARCHAR) LIKE '" . $searchEscaped . "%'";
                     }
                 }
             }
