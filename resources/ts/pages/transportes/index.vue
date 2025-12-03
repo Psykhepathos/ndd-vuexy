@@ -27,9 +27,9 @@ const totalItems = ref(0)
 const serverItems = ref<Transporte[]>([])
 
 // Filtros - valor padrão: mostrar apenas ativos
-const filtroTipo = ref()
-const filtroNatureza = ref()
-const filtroStatus = ref('ativo')
+const filtroTipo = ref<string | undefined>()
+const filtroNatureza = ref<string | undefined>()
+const filtroStatus = ref<string | undefined>('ativo')
 
 // Opções de paginação (padrão Vuexy)
 const options = ref({

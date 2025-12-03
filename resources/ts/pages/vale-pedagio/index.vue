@@ -272,6 +272,13 @@ import L from 'leaflet'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import draggable from 'vuedraggable'
 
+// Interfaces
+interface Pedido {
+  gps_lat: string
+  gps_lon: string
+  [key: string]: any
+}
+
 // Definição da página usando o padrão Vuexy
 definePage({
   meta: {
@@ -408,11 +415,11 @@ async function loadRotaFromDatabase() {
 
     if (data.success && data.data && data.data.pedidos && data.data.pedidos.length > 0) {
       // Extrair coordenadas GPS dos pedidos e converter vírgulas para pontos
-      const coordenadas = data.data.pedidos.map(pedido => {
+      const coordenadas = data.data.pedidos.map((pedido: Pedido) => {
         const lat = parseFloat(pedido.gps_lat.replace(',', '.'))
         const lon = parseFloat(pedido.gps_lon.replace(',', '.'))
         return [lat, lon]
-      }).filter(coords => !isNaN(coords[0]) && !isNaN(coords[1]))
+      }).filter((coords: number[]) => !isNaN(coords[0]) && !isNaN(coords[1]))
 
       console.log('Coordenadas extraídas do banco:', coordenadas.length, 'pontos')
       return coordenadas
@@ -488,7 +495,7 @@ async function addExamplePoints() {
   const latlngs: L.LatLng[] = []
 
   // Adicionar marcadores para cada ponto da rota
-  apiData.forEach((coord, index) => {
+  apiData.forEach((coord: number[], index: number) => {
     const [lat, lng] = coord
 
     if (lat && lng) {
@@ -545,7 +552,7 @@ async function addExamplePoints() {
   // Buscar e adicionar rota real seguindo as ruas (igual ao itinerário)
   if (apiData.length > 1) {
     // Converter para formato Google Maps: [longitude, latitude]
-    const routeCoordinates = apiData.map(coord => [coord[1], coord[0]]) // [lng, lat]
+    const routeCoordinates = apiData.map((coord: number[]) => [coord[1], coord[0]]) // [lng, lat]
 
     // Mostrar um indicador de carregamento na rota
     const loadingPolyline = L.polyline(latlngs, {
