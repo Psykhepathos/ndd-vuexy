@@ -614,12 +614,36 @@ class ProgressService
     public function executeCustomQuery(string $sql): array
     {
         try {
-            Log::info('Executando consulta SQL customizada', ['sql' => $sql]);
+            // Validação 1: SQL não pode ser vazio
+            $sql = trim($sql);
+            if (empty($sql)) {
+                throw new Exception('SQL query não pode ser vazio');
+            }
 
-            // Limitar a apenas SELECT por segurança
-            $sql_upper = strtoupper(trim($sql));
+            // Validação 2: Tamanho máximo (prevenir consultas gigantes)
+            if (strlen($sql) > 50000) {
+                throw new Exception('SQL query muito grande (máximo 50.000 caracteres)');
+            }
+
+            Log::info('Executando consulta SQL customizada', ['sql' => substr($sql, 0, 200) . '...']);
+
+            // Validação 3: Limitar a apenas SELECT por segurança
+            $sql_upper = strtoupper($sql);
             if (!str_starts_with($sql_upper, 'SELECT')) {
                 throw new Exception('Apenas consultas SELECT são permitidas');
+            }
+
+            // Validação 4: Prevenir comandos perigosos embutidos
+            $dangerous_keywords = ['DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE', 'EXEC'];
+            foreach ($dangerous_keywords as $keyword) {
+                if (str_contains($sql_upper, $keyword)) {
+                    throw new Exception("Palavra-chave não permitida detectada: {$keyword}");
+                }
+            }
+
+            // Validação 5: Prevenir comentários SQL que podem esconder código malicioso
+            if (str_contains($sql, '--') || str_contains($sql, '/*') || str_contains($sql, '*/')) {
+                throw new Exception('Comentários SQL não são permitidos em consultas customizadas');
             }
 
             $result = $this->executeJavaConnector('query', $sql);
@@ -632,7 +656,7 @@ class ProgressService
 
         } catch (Exception $e) {
             Log::error('Erro na execução da consulta SQL', [
-                'sql' => $sql,
+                'sql' => substr($sql ?? 'null', 0, 200),
                 'error' => $e->getMessage()
             ]);
 
@@ -645,18 +669,50 @@ class ProgressService
 
     /**
      * Executa UPDATE, INSERT ou DELETE no banco Progress
+     *
+     * IMPORTANTE: Progress JDBC NÃO suporta transações!
+     * Cada comando é executado imediatamente e não pode ser revertido.
      */
     public function executeUpdate(string $sql): array
     {
         try {
-            Log::info('Executando comando UPDATE/INSERT/DELETE', ['sql' => $sql]);
+            // Validação 1: SQL não pode ser vazio
+            $sql = trim($sql);
+            if (empty($sql)) {
+                throw new Exception('SQL command não pode ser vazio');
+            }
 
-            // Validar que é um comando permitido
-            $sql_upper = strtoupper(trim($sql));
+            // Validação 2: Tamanho máximo
+            if (strlen($sql) > 50000) {
+                throw new Exception('SQL command muito grande (máximo 50.000 caracteres)');
+            }
+
+            Log::info('Executando comando UPDATE/INSERT/DELETE', ['sql' => substr($sql, 0, 200) . '...']);
+
+            // Validação 3: Validar que é um comando permitido
+            $sql_upper = strtoupper($sql);
             if (!str_starts_with($sql_upper, 'UPDATE') &&
                 !str_starts_with($sql_upper, 'INSERT') &&
                 !str_starts_with($sql_upper, 'DELETE')) {
                 throw new Exception('Apenas comandos UPDATE, INSERT e DELETE são permitidos');
+            }
+
+            // Validação 4: Prevenir comandos perigosos
+            $dangerous_keywords = ['DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE', 'EXEC'];
+            foreach ($dangerous_keywords as $keyword) {
+                if (str_contains($sql_upper, $keyword)) {
+                    throw new Exception("Palavra-chave não permitida detectada: {$keyword}");
+                }
+            }
+
+            // Validação 5: Prevenir comentários SQL
+            if (str_contains($sql, '--') || str_contains($sql, '/*') || str_contains($sql, '*/')) {
+                throw new Exception('Comentários SQL não são permitidos');
+            }
+
+            // Validação 6: DELETE sem WHERE é perigoso
+            if (str_starts_with($sql_upper, 'DELETE') && !str_contains($sql_upper, 'WHERE')) {
+                throw new Exception('DELETE sem cláusula WHERE não é permitido (prevenir exclusão em massa acidental)');
             }
 
             $result = $this->executeJavaConnector('update', $sql);
@@ -671,7 +727,7 @@ class ProgressService
 
         } catch (Exception $e) {
             Log::error('Erro na execução do comando SQL', [
-                'sql' => $sql,
+                'sql' => substr($sql ?? 'null', 0, 200),
                 'error' => $e->getMessage()
             ]);
 
