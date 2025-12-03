@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use App\Models\User;
 
@@ -45,6 +46,15 @@ class AuthController extends Controller
                 ], 500);
             }
 
+            // CORREÇÃO #1: Logging de login bem-sucedido (LGPD Art. 46)
+            \Log::info('Login bem-sucedido', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
             $token = $user->createToken('auth_token')->plainTextToken;
 
             return response()->json([
@@ -64,6 +74,14 @@ class AuthController extends Controller
                 ]
             ]);
         }
+
+        // CORREÇÃO #1: Logging de tentativa falhada (CRÍTICO para detecção de brute force)
+        \Log::warning('Tentativa de login falhada', [
+            'email' => $request->input('email'),
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'timestamp' => now()->toIso8601String()
+        ]);
 
         return response()->json([
             'success' => false,
@@ -105,6 +123,11 @@ class AuthController extends Controller
                 'regex:/[@$!%*#?&]/', // Pelo menos um caractere especial
             ],
             'password_confirmation' => 'required|string|min:8',
+        ], [
+            // CORREÇÃO #9: Mensagens customizadas mais claras
+            'password.regex' => 'A senha deve conter: 1 letra minúscula, 1 maiúscula, 1 número e 1 caractere especial (@$!%*#?&)',
+            'password.min' => 'A senha deve ter no mínimo 8 caracteres',
+            'password.confirmed' => 'As senhas não correspondem',
         ]);
 
         if ($validator->fails()) {
@@ -115,22 +138,26 @@ class AuthController extends Controller
             ], 422);
         }
 
-        // Double-check: validação manual adicional para garantir senhas iguais
-        if ($request->password !== $request->password_confirmation) {
-            return response()->json([
-                'success' => false,
-                'message' => 'As senhas não correspondem',
-                'errors' => [
-                    'password_confirmation' => ['As senhas não correspondem']
-                ]
-            ], 422);
-        }
+        // CORREÇÃO #5: Removido double-check redundante
+        // Laravel 'confirmed' rule já valida que password === password_confirmation
+        // Se validator passou, senhas já são iguais!
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => 'user',
+        ]);
+
+        // CORREÇÃO #4: Logging de novo registro (LGPD Art. 46 compliance)
+        Log::info('Novo usuário registrado', [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'name' => $user->name,
+            'role' => $user->role,
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'timestamp' => now()->toIso8601String()
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
