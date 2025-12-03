@@ -14,7 +14,7 @@ export const $api = ofetch.create({
   async onResponseError({ response }) {
     const status = response.status
 
-    // 401 Unauthorized - Token inválido/expirado
+    // 401 Não Autorizado - Token inválido/expirado
     if (status === 401) {
       const accessTokenCookie = useCookie('accessToken')
       const userDataCookie = useCookie('userData')
@@ -37,7 +37,7 @@ export const $api = ofetch.create({
       }
     }
 
-    // 403 Forbidden - Sem permissão para acessar recurso
+    // 403 Proibido - Sem permissão para acessar recurso
     else if (status === 403) {
       console.error('Acesso negado: Você não tem permissão para acessar este recurso')
 
@@ -47,7 +47,7 @@ export const $api = ofetch.create({
       }
     }
 
-    // 500 Internal Server Error - Erro no servidor
+    // 500 Erro Interno do Servidor
     else if (status === 500) {
       console.error('Erro no servidor:', response._data?.message || 'Erro interno do servidor')
 
@@ -56,7 +56,7 @@ export const $api = ofetch.create({
       }
     }
 
-    // 503 Service Unavailable - Servidor indisponível
+    // 503 Serviço Indisponível
     else if (status === 503) {
       console.error('Serviço temporariamente indisponível')
 
