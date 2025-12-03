@@ -1389,7 +1389,8 @@ class ProgressService
 
             // Inserir rota principal
             // IMPORTANTE: SQL single-line (Progress JDBC não gosta de quebras de linha)
-            $insertRotaSql = "INSERT INTO PUB.semPararRot (sPararRotID, desSPararRot, tempoViagem, flgCD, flgRetorno, datAtu, resAtu) VALUES (" . $nextId . ", " . $this->escapeSqlString($data['nome']) . ", " . intval($data['tempo_viagem'] ?? 5) . ", " . ($data['flg_cd'] ? '1' : '0') . ", " . ($data['flg_retorno'] ? '1' : '0') . ", '" . date('Y-m-d') . "', " . $this->escapeSqlString(auth()->user()->name ?? 'system') . ")";
+            $userName = auth()->user()?->name ?? 'system';
+            $insertRotaSql = "INSERT INTO PUB.semPararRot (sPararRotID, desSPararRot, tempoViagem, flgCD, flgRetorno, datAtu, resAtu) VALUES (" . $nextId . ", " . $this->escapeSqlString($data['nome']) . ", " . intval($data['tempo_viagem'] ?? 5) . ", " . ($data['flg_cd'] ? '1' : '0') . ", " . ($data['flg_retorno'] ? '1' : '0') . ", '" . date('Y-m-d') . "', " . $this->escapeSqlString($userName) . ")";
 
             $insertResult = $this->executeUpdate($insertRotaSql);
 
@@ -1441,7 +1442,8 @@ class ProgressService
             Log::info('Atualizando rota SemParar', ['rota_id' => $rotaId, 'data' => $data]);
 
             // Atualizar rota principal (single line for Progress DB)
-            $updateRotaSql = "UPDATE PUB.semPararRot SET desSPararRot = " . $this->escapeSqlString($data['nome']) . ", tempoViagem = " . intval($data['tempo_viagem'] ?? 5) . ", flgCD = " . ($data['flg_cd'] ? '1' : '0') . ", flgRetorno = " . ($data['flg_retorno'] ? '1' : '0') . ", datAtu = '" . date('Y-m-d') . "', resAtu = " . $this->escapeSqlString(auth()->user()->name ?? 'system') . " WHERE sPararRotID = " . intval($rotaId);
+            $userName = auth()->user()?->name ?? 'system';
+            $updateRotaSql = "UPDATE PUB.semPararRot SET desSPararRot = " . $this->escapeSqlString($data['nome']) . ", tempoViagem = " . intval($data['tempo_viagem'] ?? 5) . ", flgCD = " . ($data['flg_cd'] ? '1' : '0') . ", flgRetorno = " . ($data['flg_retorno'] ? '1' : '0') . ", datAtu = '" . date('Y-m-d') . "', resAtu = " . $this->escapeSqlString($userName) . " WHERE sPararRotID = " . intval($rotaId);
 
             $updateResult = $this->executeUpdate($updateRotaSql);
 
