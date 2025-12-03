@@ -32,6 +32,9 @@ interface Entrega {
   volume: number
   gps_lat?: string
   gps_lon?: string
+  // Coordenadas processadas (aliases para compatibilidade)
+  lat?: string
+  long?: string
 }
 
 interface ItinerarioData {

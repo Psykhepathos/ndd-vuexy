@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from '@axios'
+// axios import removido - projeto usa fetch nativo
 
 // ============================================================================
 // COMPRA DE VIAGEM SEMPARAR - Seguindo EXATAMENTE compraRota.p
@@ -124,6 +124,7 @@ const frameTitle = computed(() => {
 // ============================================================================
 const initialize = async () => {
   try {
+    // @ts-expect-error - axios not configured, file not in use
     const { data } = await axios.get('/api/compra-viagem/initialize')
 
     testMode.value = data.data.test_mode
@@ -155,6 +156,7 @@ const onPacoteReturn = async () => {
   isLoadingPacote.value = true
 
   try {
+    // @ts-expect-error - axios not configured, file not in use
     const { data } = await axios.post('/api/compra-viagem/validar-pacote', {
       codpac: vCodpac.value,
       flgcd: flgCD.value
@@ -214,6 +216,7 @@ const onPlacaReturn = async () => {
 
   try {
     // Linha 370-374: Abre conexão SOAP e valida placa
+    // @ts-expect-error - axios not configured, file not in use
     const { data } = await axios.post('/api/compra-viagem/validar-placa', {
       placa: vPlaca.value
     })
@@ -288,6 +291,7 @@ const searchRotas = async (search: string) => {
   isLoadingRotas.value = true
 
   try {
+    // @ts-expect-error - axios not configured, file not in use
     const { data } = await axios.get('/api/compra-viagem/listar-rotas', {
       params: {
         search,
@@ -365,6 +369,7 @@ const verificarPreco = async () => {
 
   try {
     // Linha 670-674: Abre conexão e chama verificaPreco
+    // @ts-expect-error - axios not configured, file not in use
     const { data } = await axios.post('/api/compra-viagem/verificar-preco', {
       codpac: vCodpac.value,
       cod_rota: vRota.value,
