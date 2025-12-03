@@ -25,7 +25,7 @@ pnpm run dev                   # Frontend (Vite)
 
 # Access system
 http://localhost:8002          # ✅ ALWAYS use this URL!
-# Login: admin@ndd.com / 123456
+# Login: admin@ndd.com / Admin@123 (or user@ndd.com / User@123)
 
 # Testing & validation
 pnpm run typecheck            # TypeScript check
@@ -990,6 +990,98 @@ L.polyline(allCoordinates, {color: '#E91E63', weight: 4}).addTo(map)
 - `POST /api/transportes/query` (admin-only)
 
 **Most endpoints are public** (for now)
+
+### Role-Based Access Control (RBAC)
+
+**System:** Two-tier role system with ENUM validation
+
+**Available Roles:**
+- `admin` - Full system access + custom SQL queries
+- `user` - Standard access (default for new registrations)
+
+**User Management:**
+```bash
+# Default users (after seeding)
+admin@ndd.com / Admin@123  # Role: admin
+user@ndd.com  / User@123   # Role: user
+
+# Run seeder
+php artisan db:seed --class=DefaultUserSeeder
+```
+
+**Role Validation Layers:**
+
+1. **Database Level** (SQLite/MySQL):
+   ```sql
+   -- ENUM validation enforced at schema level
+   ALTER TABLE users ADD COLUMN role ENUM('admin', 'user') DEFAULT 'user';
+
+   -- Index for performance
+   CREATE INDEX users_role_index ON users(role);
+   ```
+
+2. **Model Level** (app/Models/User.php):
+   ```php
+   // Mutator validates before save
+   public function setRoleAttribute($value): void {
+       $validRoles = ['admin', 'user'];
+       if (!in_array($value, $validRoles, true)) {
+           throw new \InvalidArgumentException("Role inválido: '$value'");
+       }
+       $this->attributes['role'] = $value;
+   }
+   ```
+
+3. **Controller Level** (app/Http/Controllers/Api/AuthController.php):
+   ```php
+   // Login: Validate role integrity (NO fallback)
+   if (!$user->role || !in_array($user->role, ['admin', 'user'], true)) {
+       \Log::error('Usuário com role inválido detectado', [...]);
+       return response()->json([
+           'success' => false,
+           'message' => 'Erro de integridade de dados do usuário.'
+       ], 500);
+   }
+
+   // Register: Explicit role assignment
+   User::create([
+       'name' => $request->name,
+       'email' => $request->email,
+       'password' => Hash::make($request->password),
+       'role' => 'user',  // Always 'user' for new registrations
+   ]);
+   ```
+
+**Password Requirements:**
+- Minimum 8 characters
+- At least one lowercase letter (a-z)
+- At least one uppercase letter (A-Z)
+- At least one number (0-9)
+- At least one special character (@$!%*#?&)
+
+**Frontend Integration:**
+```typescript
+// resources/ts/utils/api.ts
+// 401 Handler with redirect guard
+if (response.status === 401) {
+  // Clear cookies
+  accessTokenCookie.value = null
+  userDataCookie.value = null
+  userAbilityRulesCookie.value = null
+
+  // Redirect to login (with guard to prevent infinite loop)
+  if (!window.location.pathname.includes('/login')) {
+    window.location.href = '/login'
+  }
+}
+```
+
+**⚠️ CRITICAL:**
+- ❌ NEVER use silent fallbacks like `$user->role ?? 'user'`
+- ✅ ALWAYS validate role integrity and log errors
+- ✅ ALWAYS throw exceptions for invalid roles at model level
+- ✅ New users ALWAYS get 'user' role (never 'admin')
+- ✅ Admin role must be assigned manually via seeder or tinker
 
 ### Rate Limiting Tiers
 
