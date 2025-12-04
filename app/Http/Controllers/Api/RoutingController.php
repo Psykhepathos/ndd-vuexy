@@ -55,13 +55,28 @@ class RoutingController extends Controller
      */
     public function getRoute(Request $request): JsonResponse
     {
-        $start = $request->input('start');
-        $end = $request->input('end');
-        
-        if (!$start || !$end) {
-            return response()->json(['error' => 'Coordenadas start e end são obrigatórias'], 400);
-        }
-        
+        // Validacao rigorosa de coordenadas
+        $validated = $request->validate([
+            'start' => ['required', 'array', 'size:2'],
+            'start.0' => ['required', 'numeric', 'min:-180', 'max:180'],
+            'start.1' => ['required', 'numeric', 'min:-90', 'max:90'],
+            'end' => ['required', 'array', 'size:2'],
+            'end.0' => ['required', 'numeric', 'min:-180', 'max:180'],
+            'end.1' => ['required', 'numeric', 'min:-90', 'max:90']
+        ]);
+
+        $start = $validated['start'];
+        $end = $validated['end'];
+
+        // LGPD Art. 46 - Log de acesso a routing
+        Log::info('Rota calculada via proxy', [
+            'start' => $start,
+            'end' => $end,
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'timestamp' => now()->toIso8601String()
+        ]);
+
         // Tentar múltiplas APIs em ordem
         $apis = [
             'osrm' => function($start, $end) {
@@ -96,10 +111,20 @@ class RoutingController extends Controller
         }
         
         // Se nenhuma API funcionou
-        Log::error("Todas as APIs de roteamento falharam");
+        $errorId = uniqid('err_');
+
+        Log::error('Todas as APIs de roteamento falharam', [
+            'error_id' => $errorId,
+            'start' => $start,
+            'end' => $end,
+            'ip' => $request->ip(),
+            'timestamp' => now()->toIso8601String()
+        ]);
+
         return response()->json([
             'success' => false,
-            'error' => 'Nenhuma API de roteamento disponível',
+            'message' => 'Nenhuma API de roteamento disponível. ID: ' . $errorId,
+            'error_id' => $errorId,
             'fallback' => 'usar_linha_reta'
         ], 503);
     }
@@ -313,8 +338,14 @@ class RoutingController extends Controller
     /**
      * Endpoint de teste
      */
-    public function testConnection(): JsonResponse
+    public function testConnection(Request $request): JsonResponse
     {
+        Log::info('Teste de conexão do proxy de routing', [
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'timestamp' => now()->toIso8601String()
+        ]);
+
         return response()->json([
             'status' => 'ok',
             'message' => 'Proxy de roteamento Laravel funcionando'
