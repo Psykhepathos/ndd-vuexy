@@ -609,17 +609,8 @@ class ProgressService
     }
 
     /**
-     * CORREÇÃO #4: Sanitiza SQL para logs (LGPD compliance)
-     *
-     * Mascara dados sensíveis antes de gravar em logs:
-     * - CPF: 123.456.789-01 → ***.***.***.--**
-     * - CNPJ: 12.345.678/0001-23 → **.***.***/****-**
-     * - Números longos em WHERE: codcnpjcpf = '12345678901234' → codcnpjcpf = '***'
-     * - Valores monetários grandes
-     * - Strings longas (nomes, endereços)
-     *
-     * @param string $sql SQL query original
-     * @return string SQL sanitizado para log
+     * Sanitiza SQL para logs (LGPD compliance)
+     * Mascara CPF, CNPJ, valores monetarios e strings longas
      */
     private function sanitizeSqlForLogging(string $sql): string
     {
@@ -677,9 +668,11 @@ class ProgressService
             }
 
             // Validação 4: Prevenir comandos perigosos embutidos
+            // Usar regex com word boundaries para não bloquear nomes de colunas como "codRotCreateSP"
             $dangerous_keywords = ['DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE', 'EXEC'];
             foreach ($dangerous_keywords as $keyword) {
-                if (str_contains($sql_upper, $keyword)) {
+                // Buscar keyword como palavra completa (word boundary) para não pegar substrings
+                if (preg_match('/\b' . $keyword . '\b/', $sql_upper)) {
                     throw new Exception("Palavra-chave não permitida detectada: {$keyword}");
                 }
             }
@@ -743,9 +736,11 @@ class ProgressService
             }
 
             // Validação 4: Prevenir comandos perigosos
+            // Usar regex com word boundaries para não bloquear nomes de colunas como "codRotCreateSP"
             $dangerous_keywords = ['DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE', 'EXEC'];
             foreach ($dangerous_keywords as $keyword) {
-                if (str_contains($sql_upper, $keyword)) {
+                // Buscar keyword como palavra completa (word boundary) para não pegar substrings
+                if (preg_match('/\b' . $keyword . '\b/', $sql_upper)) {
                     throw new Exception("Palavra-chave não permitida detectada: {$keyword}");
                 }
             }

@@ -224,19 +224,11 @@ const fetchViagens = async () => {
 
     console.log('🔍 Buscando viagens com filtros:', payload)
 
-    // CORREÇÃO: Adicionar autenticação (rota protegida por auth:sanctum)
-    const authToken = localStorage.getItem('auth_token')
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    }
-
-    if (authToken) {
-      headers['Authorization'] = `Bearer ${authToken}`
-    }
-
     const response = await fetch(`${API_BASE_URL}/api/compra-viagem/viagens`, {
       method: 'POST',
-      headers,
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(payload),
     })
 
