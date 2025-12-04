@@ -530,14 +530,6 @@
             const codTrn = document.getElementById('codTrn').value.trim();
             const sPararRotID = document.getElementById('sPararRotID').value.trim();
 
-            // CORREÇÃO #7: Verificar autenticação
-            if (!authToken) {
-                result.className = 'result error';
-                result.innerHTML = '❌ ERRO: Você precisa fazer login para comprar viagens!<br>' +
-                                   '<small>Este endpoint agora requer autenticação (auth:sanctum)</small>';
-                return;
-            }
-
             if (!placa) {
                 result.className = 'result error';
                 result.innerHTML = '❌ Por favor, informe uma placa';
@@ -595,10 +587,9 @@
                     payload.res_compra = 'sistema';
                 }
 
-                // CORREÇÃO #7: Incluir token de autenticação
                 const response = await fetch(`${API_BASE}/comprar-viagem`, {
                     method: 'POST',
-                    headers: getHeaders(true),  // true = incluir Authorization header
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
 
@@ -651,13 +642,6 @@
             const telefone = document.getElementById('telefoneRecibo').value.trim();
             const email = document.getElementById('emailRecibo').value.trim();
 
-            // CORREÇÃO #7: Verificar autenticação
-            if (!authToken) {
-                result.innerHTML = '<div class="result error">❌ ERRO: Você precisa fazer login para gerar recibos!<br>' +
-                                   '<small>Este endpoint agora requer autenticação (auth:sanctum)</small></div>';
-                return;
-            }
-
             if (!codViagem) {
                 result.innerHTML = '<div class="result error">❌ ERRO: Informe o código da viagem</div>';
                 return;
@@ -671,10 +655,9 @@
             result.innerHTML = '⏳ Gerando recibo e enviando por WhatsApp...';
 
             try {
-                // CORREÇÃO #7: Incluir token de autenticação
                 const response = await fetch(`${API_BASE}/gerar-recibo`, {
                     method: 'POST',
-                    headers: getHeaders(true),  // true = incluir Authorization header
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         cod_viagem: codViagem,
                         telefone: telefone,

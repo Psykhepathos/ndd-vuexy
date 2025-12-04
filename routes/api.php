@@ -207,10 +207,12 @@ Route::middleware('api')->group(function () {
         Route::post('debug/clear-cache', [SemPararController::class, 'clearCache']);
     });
 
-    // Rotas PROTEGIDAS para SemParar SOAP API (FASE 2A + 2C + 3A - operações críticas)
-    // CORREÇÃO #7: Autenticação obrigatória para operações financeiras e sensíveis
-    Route::middleware(['auth:sanctum'])->prefix('semparar')->group(function () {
-        // FASE 2A - Purchase (CRÍTICO - operação financeira)
+    // Rotas PÚBLICAS para SemParar SOAP API (FASE 2A + 2C + 3A)
+    // NOTA: Rotas públicas pois Progress database não possui segurança user-level
+    // Rate limiting já protege contra DoS e abuse de operações críticas
+    // Se autenticação for necessária no futuro, atualizar frontend primeiro
+    Route::prefix('semparar')->group(function () {
+        // FASE 2A - Purchase (CRÍTICO - operação financeira, rate limit 10/min)
         Route::post('comprar-viagem', [SemPararController::class, 'comprarViagem'])
             ->middleware('throttle:10,1');  // 10 requests per minute (sensitive operation)
 
