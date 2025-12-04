@@ -186,15 +186,15 @@ Route::middleware('api')->group(function () {
     // Proxy OSRM (roteamento gratuito)
     Route::post('osrm/route', [OSRMController::class, 'getRoute']);
 
-    // Rotas para SemParar SOAP API (FASE 1A + 1B)
+    // Rotas PÚBLICAS para SemParar SOAP API (FASE 1A + 1B - consultas/simulações)
     Route::prefix('semparar')->group(function () {
-        // FASE 1A - Core
+        // FASE 1A - Core (públicas para teste e monitoramento)
         Route::get('test-connection', [SemPararController::class, 'testConnection'])
             ->middleware('throttle:10,1');  // 10 requests per minute
         Route::post('status-veiculo', [SemPararController::class, 'statusVeiculo'])
             ->middleware('throttle:60,1');  // 60 requests per minute
 
-        // FASE 1B - Routing
+        // FASE 1B - Routing (públicas para simulação)
         Route::post('roteirizar', [SemPararController::class, 'roteirizar'])
             ->middleware('throttle:20,1');  // 20 requests per minute
         Route::post('rota-temporaria', [SemPararController::class, 'cadastrarRotaTemporaria'])
@@ -202,27 +202,31 @@ Route::middleware('api')->group(function () {
         Route::post('custo-rota', [SemPararController::class, 'obterCustoRota'])
             ->middleware('throttle:60,1');  // 60 requests per minute
 
-        // FASE 2A - Purchase
+        // Debug endpoints (only available in APP_DEBUG=true, protected in controller)
+        Route::get('debug/token', [SemPararController::class, 'debugToken']);
+        Route::post('debug/clear-cache', [SemPararController::class, 'clearCache']);
+    });
+
+    // Rotas PROTEGIDAS para SemParar SOAP API (FASE 2A + 2C + 3A - operações críticas)
+    // CORREÇÃO #7: Autenticação obrigatória para operações financeiras e sensíveis
+    Route::middleware(['auth:sanctum'])->prefix('semparar')->group(function () {
+        // FASE 2A - Purchase (CRÍTICO - operação financeira)
         Route::post('comprar-viagem', [SemPararController::class, 'comprarViagem'])
             ->middleware('throttle:10,1');  // 10 requests per minute (sensitive operation)
 
-        // FASE 2C - Receipt
+        // FASE 2C - Receipt (CRÍTICO - dados sensíveis + envio WhatsApp)
         Route::post('obter-recibo', [SemPararController::class, 'obterRecibo'])
             ->middleware('throttle:60,1');  // 60 requests per minute
         Route::post('gerar-recibo', [SemPararController::class, 'gerarRecibo'])
             ->middleware('throttle:20,1');  // 20 requests per minute (sends WhatsApp/Email)
 
-        // FASE 3A - Query & Management
+        // FASE 3A - Query & Management (CRÍTICO - dados sensíveis + operações irreversíveis)
         Route::post('consultar-viagens', [SemPararController::class, 'consultarViagens'])
             ->middleware('throttle:60,1');  // 60 requests per minute
         Route::post('cancelar-viagem', [SemPararController::class, 'cancelarViagem'])
             ->middleware('throttle:20,1');  // 20 requests per minute (cancels trip)
         Route::post('reemitir-viagem', [SemPararController::class, 'reemitirViagem'])
             ->middleware('throttle:20,1');  // 20 requests per minute (reissues trip)
-
-        // Debug endpoints (only available in APP_DEBUG=true)
-        Route::get('debug/token', [SemPararController::class, 'debugToken']);
-        Route::post('debug/clear-cache', [SemPararController::class, 'clearCache']);
     });
 
     // ⚠️ Compra de Viagem SemParar - MODO DE TESTE ATIVO ⚠️

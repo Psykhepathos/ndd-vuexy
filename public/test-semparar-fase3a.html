@@ -160,9 +160,35 @@
     <div class="container">
         <h1>🚀 SemParar FASE 3A - Gestão de Viagens</h1>
 
+        <!-- Card de Login -->
+        <div class="card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+            <h2 style="color: white; margin-bottom: 20px;">🔐 Autenticação Laravel Sanctum</h2>
+            <p style="color: white; margin-bottom: 15px;">
+                <strong>Status:</strong> <span id="authStatus">❌ Não autenticado</span>
+            </p>
+            <div id="loginForm" style="display: block;">
+                <input type="email" id="loginEmail" placeholder="Email (admin@ndd.com)" value="admin@ndd.com"
+                    style="width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 5px; border: none;">
+                <input type="password" id="loginPassword" placeholder="Senha" value="123456"
+                    style="width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 5px; border: none;">
+                <button onclick="fazerLogin()" style="background: white; color: #f5576c; font-weight: bold;">
+                    🔓 FAZER LOGIN
+                </button>
+            </div>
+            <div id="logoutArea" style="display: none;">
+                <p style="color: white; margin-bottom: 10px;">
+                    👤 Logado como: <strong id="userEmail"></strong>
+                </p>
+                <button onclick="fazerLogout()" style="background: white; color: #f5576c; font-weight: bold;">
+                    🔒 SAIR
+                </button>
+            </div>
+        </div>
+
         <div class="card">
             <div class="warning">
-                ⚠️ <strong>ATENÇÃO:</strong> Cancelamento e reemissão são operações <strong>irreversíveis</strong>!
+                ⚠️ <strong>ATENÇÃO:</strong> Todos os endpoints desta página <strong>requerem autenticação</strong>!
+                Cancelamento e reemissão são operações <strong>irreversíveis</strong>!
                 Use apenas com viagens de teste ou certifique-se do que está fazendo.
             </div>
 
@@ -247,6 +273,91 @@
 
     <script>
         const API_BASE = 'http://localhost:8002/api/semparar';
+        const AUTH_API = 'http://localhost:8002/api/auth';
+        let authToken = localStorage.getItem('auth_token') || null;
+
+        // Verificar auth ao carregar página
+        window.addEventListener('DOMContentLoaded', () => {
+            verificarAuth();
+        });
+
+        function verificarAuth() {
+            if (authToken) {
+                document.getElementById('authStatus').innerHTML = '✅ Autenticado';
+                document.getElementById('authStatus').style.color = '#28a745';
+                document.getElementById('loginForm').style.display = 'none';
+                document.getElementById('logoutArea').style.display = 'block';
+                const userEmail = localStorage.getItem('user_email') || 'Usuário';
+                document.getElementById('userEmail').textContent = userEmail;
+            } else {
+                document.getElementById('authStatus').innerHTML = '❌ Não autenticado';
+                document.getElementById('authStatus').style.color = '#e74c3c';
+                document.getElementById('loginForm').style.display = 'block';
+                document.getElementById('logoutArea').style.display = 'none';
+            }
+        }
+
+        async function fazerLogin() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value.trim();
+
+            if (!email || !password) {
+                alert('❌ Informe email e senha');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${AUTH_API}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.token) {
+                    authToken = data.token;
+                    localStorage.setItem('auth_token', authToken);
+                    localStorage.setItem('user_email', email);
+                    alert('✅ Login efetuado com sucesso!');
+                    verificarAuth();
+                } else {
+                    alert(`❌ Erro no login: ${data.message || 'Credenciais inválidas'}`);
+                }
+            } catch (error) {
+                alert(`❌ Erro: ${error.message}`);
+            }
+        }
+
+        async function fazerLogout() {
+            if (!authToken) return;
+
+            try {
+                await fetch(`${AUTH_API}/logout`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+            } catch (error) {
+                console.error('Erro ao fazer logout:', error);
+            }
+
+            authToken = null;
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user_email');
+            alert('✅ Logout efetuado!');
+            verificarAuth();
+        }
+
+        function getHeaders(includeAuth = false) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (includeAuth && authToken) {
+                headers['Authorization'] = `Bearer ${authToken}`;
+            }
+            return headers;
+        }
 
         // Auto-uppercase plate input
         document.getElementById('placaReemitir').addEventListener('input', function(e) {
@@ -259,6 +370,13 @@
             const dataInicio = document.getElementById('dataInicio').value;
             const dataFim = document.getElementById('dataFim').value;
 
+            // CORREÇÃO #7: Verificar autenticação
+            if (!authToken) {
+                result.innerHTML = '<div class="error">❌ ERRO: Você precisa fazer login para consultar viagens!<br>' +
+                                   '<small>Este endpoint agora requer autenticação (auth:sanctum)</small></div>';
+                return;
+            }
+
             if (!dataInicio || !dataFim) {
                 result.innerHTML = '<div class="error">❌ ERRO: Informe as datas de início e fim</div>';
                 return;
@@ -267,9 +385,10 @@
             result.innerHTML = '⏳ Consultando viagens...';
 
             try {
+                // CORREÇÃO #7: Incluir token de autenticação
                 const response = await fetch(`${API_BASE}/consultar-viagens`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getHeaders(true),  // true = incluir Authorization header
                     body: JSON.stringify({
                         data_inicio: dataInicio,
                         data_fim: dataFim
@@ -307,6 +426,13 @@
             const result = document.getElementById('resultCancelar');
             const codViagem = document.getElementById('codViagemCancelar').value.trim();
 
+            // CORREÇÃO #7: Verificar autenticação
+            if (!authToken) {
+                result.innerHTML = '<div class="error">❌ ERRO: Você precisa fazer login para cancelar viagens!<br>' +
+                                   '<small>Este endpoint agora requer autenticação (auth:sanctum)</small></div>';
+                return;
+            }
+
             if (!codViagem) {
                 result.innerHTML = '<div class="error">❌ ERRO: Informe o código da viagem</div>';
                 return;
@@ -321,9 +447,10 @@
             result.innerHTML = '⏳ Cancelando viagem...';
 
             try {
+                // CORREÇÃO #7: Incluir token de autenticação
                 const response = await fetch(`${API_BASE}/cancelar-viagem`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getHeaders(true),  // true = incluir Authorization header
                     body: JSON.stringify({
                         cod_viagem: codViagem
                     })
@@ -355,6 +482,13 @@
             const codViagem = document.getElementById('codViagemReemitir').value.trim();
             const placa = document.getElementById('placaReemitir').value.trim().toUpperCase();
 
+            // CORREÇÃO #7: Verificar autenticação
+            if (!authToken) {
+                result.innerHTML = '<div class="error">❌ ERRO: Você precisa fazer login para reemitir viagens!<br>' +
+                                   '<small>Este endpoint agora requer autenticação (auth:sanctum)</small></div>';
+                return;
+            }
+
             if (!codViagem || !placa) {
                 result.innerHTML = '<div class="error">❌ ERRO: Informe o código da viagem e a nova placa</div>';
                 return;
@@ -374,9 +508,10 @@
             result.innerHTML = '⏳ Reemitindo viagem...';
 
             try {
+                // CORREÇÃO #7: Incluir token de autenticação
                 const response = await fetch(`${API_BASE}/reemitir-viagem`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getHeaders(true),  // true = incluir Authorization header
                     body: JSON.stringify({
                         cod_viagem: codViagem,
                         placa: placa
