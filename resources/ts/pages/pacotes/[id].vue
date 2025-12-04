@@ -89,12 +89,11 @@ const fetchItinerario = async () => {
   loading.value = true
   
   try {
+    // CORREÇÃO: Backend espera codPac diretamente no root, não dentro de Pacote
     const payload = {
-      Pacote: {
-        codPac: parseInt(pacoteId.value)
-      }
+      codPac: parseInt(pacoteId.value)
     }
-    
+
     const response = await fetch('http://localhost:8002/api/pacotes/itinerario', {
       method: 'POST',
       headers: {
