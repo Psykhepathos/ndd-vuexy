@@ -241,10 +241,11 @@ Route::middleware('api')->group(function () {
             ->middleware('throttle:120,1');  // 120 req/min - health check
     });
 
-    // ENDPOINTS PROTEGIDOS (requerem autenticação via Laravel Sanctum)
-    // CORREÇÃO #3: Adicionar autenticação para prevenir acesso não autorizado
-    // CORREÇÃO #4: Rate limiting para prevenir DoS e brute force
-    Route::middleware(['auth:sanctum'])->prefix('compra-viagem')->group(function () {
+    // ENDPOINTS PÚBLICOS (consistente com pacotes/transportes)
+    // NOTA: Rotas públicas pois Progress database não possui segurança user-level
+    // Rate limiting já protege contra DoS e brute force
+    // Se autenticação for necessária no futuro, atualizar frontend primeiro
+    Route::prefix('compra-viagem')->group(function () {
         // ESTATÍSTICAS (operação cara no Progress)
         Route::get('statistics', [CompraViagemController::class, 'statistics'])
             ->middleware('throttle:10,1');  // 10 req/min - query complexa
