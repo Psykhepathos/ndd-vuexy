@@ -229,10 +229,17 @@ const markersById = new Map<number, L.Marker>() // Map de index -> marker
 
 /**
  * Converte coordenada do formato Progress para decimal
+ * CORREÇÃO: Backend agora retorna number (float) após BUG MODERADO #1
  */
-function convertCoordinate(coord: string): number {
+function convertCoordinate(coord: string | number): number {
   if (!coord) return 0
 
+  // Type guard: Se já é number, retornar direto
+  if (typeof coord === 'number') {
+    return coord
+  }
+
+  // Se é string, processar formatos antigos
   if (coord.includes(',')) {
     return parseFloat(coord.replace(',', '.'))
   }

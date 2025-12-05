@@ -414,10 +414,16 @@ async function loadRotaFromDatabase() {
     console.log('Resposta da API:', data)
 
     if (data.success && data.data && data.data.pedidos && data.data.pedidos.length > 0) {
-      // Extrair coordenadas GPS dos pedidos e converter vírgulas para pontos
+      // Extrair coordenadas GPS dos pedidos
+      // CORREÇÃO: Backend agora retorna number (float) após BUG MODERADO #1
       const coordenadas = data.data.pedidos.map((pedido: Pedido) => {
-        const lat = parseFloat(pedido.gps_lat.replace(',', '.'))
-        const lon = parseFloat(pedido.gps_lon.replace(',', '.'))
+        // Type guard: Se já é number, usar direto; se é string, converter
+        const lat = typeof pedido.gps_lat === 'number'
+          ? pedido.gps_lat
+          : parseFloat(pedido.gps_lat.replace(',', '.'))
+        const lon = typeof pedido.gps_lon === 'number'
+          ? pedido.gps_lon
+          : parseFloat(pedido.gps_lon.replace(',', '.'))
         return [lat, lon]
       }).filter((coords: number[]) => !isNaN(coords[0]) && !isNaN(coords[1]))
 

@@ -349,7 +349,8 @@ class ProgressController extends Controller
      */
     private function validateQuerySecurity(string $sql): array
     {
-        $sql_upper = strtoupper($sql);
+        // CORREÇÃO BUG #7: Usar mb_strtoupper para suporte a UTF-8
+        $sql_upper = mb_strtoupper($sql, 'UTF-8');
 
         // Regra 1: Whitelist de tabelas permitidas para usuários autenticados
         $allowedTables = [
@@ -387,6 +388,42 @@ class ProgressController extends Controller
             ];
         }
 
+        // CORREÇÃO BUG #5: Validar tipo de operação para tabelas read-only
+        $readOnlyTables = [
+            'PUB.SEMPARATOT',
+            'PUB.TRANSPORTE',
+            'PUB.MOTORISTA',
+            'PUB.VEICULO'
+        ];
+
+        // Determinar tipo de operação
+        $operation = '';
+        if (str_starts_with($sql_upper, 'SELECT')) {
+            $operation = 'SELECT';
+        } elseif (str_starts_with($sql_upper, 'UPDATE')) {
+            $operation = 'UPDATE';
+        } elseif (str_starts_with($sql_upper, 'INSERT')) {
+            $operation = 'INSERT';
+        } elseif (str_starts_with($sql_upper, 'DELETE')) {
+            $operation = 'DELETE';
+        }
+
+        // Verificar se tabela é read-only e operação não é SELECT
+        foreach ($tablesInQuery as $tableName) {
+            if (in_array($tableName, $readOnlyTables) && $operation !== 'SELECT') {
+                Log::warning('Tentativa de modificar tabela read-only', [
+                    'table' => $tableName,
+                    'operation' => $operation,
+                    'sql' => substr($sql, 0, 100)
+                ]);
+
+                return [
+                    'valid' => false,
+                    'error' => "Tabela {$tableName} é read-only. Apenas SELECT é permitido."
+                ];
+            }
+        }
+
         // Regra 2: Proibir SELECT * (deve especificar colunas)
         if (preg_match('/SELECT\s+\*/i', $sql)) {
             return [
@@ -396,9 +433,12 @@ class ProgressController extends Controller
         }
 
         // Regra 3: Detectar acesso a colunas sensíveis (mesmo que whitelisted)
+        // CORREÇÃO BUG #8: Usar regex com word boundaries para evitar false positives
+        // Exemplo: "codPasswd" não deve bloquear, mas "PASSWORD" sim
         $sensitiveCols = ['CODCNPJCPF', 'CODCPF', 'SENHA', 'PASSWORD', 'TOKEN'];
         foreach ($sensitiveCols as $col) {
-            if (str_contains($sql_upper, $col)) {
+            // Usar \b para word boundary - apenas palavras completas
+            if (preg_match('/\b' . preg_quote($col, '/') . '\b/i', $sql_upper)) {
                 return [
                     'valid' => false,
                     'error' => "Acesso à coluna sensível '{$col}' não é permitido."

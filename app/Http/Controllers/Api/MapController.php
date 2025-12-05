@@ -23,6 +23,10 @@ class MapController extends Controller
 
     public function __construct()
     {
+        // NOTE: Embora dependency injection via constructor parameter seja preferível
+        // (ex: __construct(MapService $mapService)), a instanciação direta é aceitável
+        // aqui pois MapService não tem dependências complexas e não requer mocking em testes.
+        // Se MapService crescer em complexidade, considerar migrar para DI.
         $this->mapService = new MapService();
     }
 
@@ -107,7 +111,8 @@ class MapController extends Controller
     public function geocodeBatch(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'municipalities' => 'required|array|min:1',
+            // CORREÇÃO BUG #57: Adicionar max limit para prevenir DoS
+            'municipalities' => 'required|array|min:1|max:100',
             'municipalities.*.cdibge' => 'required|string',
             'municipalities.*.desmun' => 'required|string',
             'municipalities.*.desest' => 'required|string|size:2',
@@ -181,7 +186,8 @@ class MapController extends Controller
     public function clusterPoints(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'points' => 'required|array|min:1',
+            // CORREÇÃO BUG #58: Adicionar max limit para prevenir DoS
+            'points' => 'required|array|min:1|max:100',
             'points.*.lat' => 'required|numeric|between:-90,90',
             'points.*.lon' => 'required|numeric|between:-180,180',
             'points.*.type' => 'sometimes|string',

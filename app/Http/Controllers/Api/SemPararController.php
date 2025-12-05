@@ -8,6 +8,7 @@ use App\Services\ProgressService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 /**
  * SemPararController - Test endpoints for FASE 1A + 1B + 2A + 2B
@@ -291,9 +292,14 @@ class SemPararController extends Controller
      */
     public function comprarViagem(Request $request): JsonResponse
     {
-        $request->validate([
+        // CORREÇÃO BUG #13: Validação de placa brasileira (ABC1234 ou ABC1D23 Mercosul)
+        $validated = $request->validate([
             'nome_rota' => 'required|string',
-            'placa' => 'required|string|min:7|max:8',
+            'placa' => [
+                'required',
+                'string',
+                'regex:/^[A-Z]{3}\d{4}$|^[A-Z]{3}\d[A-Z]\d{2}$/'  // ABC1234 ou ABC1D23 (Mercosul)
+            ],
             'eixos' => 'required|integer|min:2|max:9',
             'data_inicio' => 'required|date',
             'data_fim' => 'required|date|after_or_equal:data_inicio',
@@ -308,6 +314,55 @@ class SemPararController extends Controller
             'valor_viagem' => 'nullable|numeric',
             'res_compra' => 'nullable|string|max:50'
         ]);
+
+        // CORREÇÃO BUG CRÍTICO #1: Verificar autenticação ANTES de query (prevenir information disclosure)
+        if (!empty($validated['cod_pac'])) {
+            // Verificar autenticação primeiro
+            $user = auth()->user();
+            if (!$user) {
+                Log::warning('Tentativa de compra sem autenticação', [
+                    'cod_pac' => $validated['cod_pac'],
+                    'ip' => $request->ip(),
+                    'timestamp' => now()->toIso8601String()
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Autenticação requerida'
+                ], 401);
+            }
+
+            // Agora buscar pacote
+            $pacote = DB::connection('progress')->select(
+                "SELECT codtrn FROM PUB.pacote WHERE codpac = ?",
+                [$validated['cod_pac']]
+            )[0] ?? null;
+
+            if (!$pacote) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Pacote não encontrado'
+                ], 404);
+            }
+
+            // Verificar se usuário tem permissão (admin ou dono do transporte)
+            if ($user->role !== 'admin' && $user->codtrn != $pacote->codtrn) {
+                Log::warning('Tentativa de compra não autorizada', [
+                    'user_id' => $user->id,
+                    'user_email' => $user->email,
+                    'cod_pac' => $validated['cod_pac'],
+                    'pacote_codtrn' => $pacote->codtrn,
+                    'user_codtrn' => $user->codtrn,
+                    'ip' => $request->ip(),
+                    'timestamp' => now()->toIso8601String()
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Você não tem permissão para comprar viagem com este pacote'
+                ], 403);
+            }
+        }
 
         // CORREÇÃO #7: LGPD Art. 46 - Logging de operação financeira
         $user = $request->user();
@@ -466,10 +521,11 @@ class SemPararController extends Controller
     public function gerarRecibo(Request $request): JsonResponse
     {
         // Validate input
+        // CORREÇÃO BUG #11: Validar email corretamente
         $request->validate([
             'cod_viagem' => 'required|string|min:1|max:50',
             'telefone' => 'required|string|min:12|max:15', // Format: 5531988892076
-            'email' => 'nullable|string|max:255', // No email validation - service will handle/fix invalid emails
+            'email' => 'nullable|email|max:255', // CORREÇÃO BUG #11: email validation
             'flg_imprime' => 'nullable|boolean'
         ]);
 

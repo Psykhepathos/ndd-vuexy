@@ -2,7 +2,18 @@
   "permissions": {
     "allow": [
       "Bash(typecheck-output.txt)",
-      "Bash(cut:*)"
+      "Bash(cut:*)",
+      "Bash(Select-String \"error TS\")",
+      "Bash(Measure-Object)",
+      "Bash(Select-Object -ExpandProperty Count)",
+      "Bash(nul)",
+      "Bash(move:*)",
+      "Bash(xargs:*)",
+      "Bash(mkdir:*)",
+      "Bash(tree:*)",
+      "Bash(pnpm run typecheck:*)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)"
     ],
     "deny": [],
     "ask": []

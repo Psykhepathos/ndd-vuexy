@@ -769,7 +769,7 @@ class SemPararSoapService
                 continue;
             }
 
-            // REGRA 3: Pará (estado 16) → Substitui por Maranhão (linhas 758-767, 799-805)
+            // REGRA 3: Pará (estado 16) -> Substitui por Maranhão (linhas 758-767, 799-805)
             if ($ibge > 0) {
                 $estadoId = intval(substr((string)$ibge, 0, 2));
 

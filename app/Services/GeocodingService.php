@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\MunicipioCoordenada;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\RateLimiter;
 
 class GeocodingService
 {
@@ -79,7 +80,8 @@ class GeocodingService
     {
         try {
             $address = "{$nomeMunicipio}, {$uf}, Brasil";
-            $apiKey = env('GOOGLE_MAPS_API_KEY');
+            // CORREÇÃO BUG #67: Usar config() em vez de env() no runtime
+            $apiKey = config('services.google_maps.api_key');
 
             if (!$apiKey) {
                 Log::warning('Google Maps API Key não configurada');
@@ -155,6 +157,15 @@ class GeocodingService
      */
     public function getCoordenadasLote(array $municipios): array
     {
+        // CORREÇÃO BUG #69: Validação de max limit para prevenir DoS
+        if (count($municipios) > 100) {
+            Log::warning('getCoordenadasLote: Array muito grande (DoS prevention)', [
+                'size' => count($municipios),
+                'max_allowed' => 100
+            ]);
+            throw new \Exception('Máximo de 100 municípios permitidos por requisição');
+        }
+
         // Validação de entrada: verificar se array não está vazio
         if (empty($municipios)) {
             Log::warning('getCoordenadasLote chamado com array vazio');
@@ -234,9 +245,18 @@ class GeocodingService
                 'coordenadas' => $coordenadas
             ];
 
-            // Rate limiting: aguarda 200ms entre requisições para não ultrapassar limites da API
+            // CORREÇÃO BUG IMPORTANTE #1: Rate limiting global sincronizado (fix race condition)
+            // Ordem correta: 1) Verificar limite, 2) Aguardar se necessário, 3) Registrar hit
             if ($coordenadas && !$coordenadas['cached']) {
-                usleep(200000); // 200ms
+                $key = 'google_geocoding_api';
+
+                // Verificar se limite foi excedido ANTES de registrar hit
+                if (RateLimiter::tooManyAttempts($key, 5)) {
+                    usleep(200000); // 200ms backoff
+                }
+
+                // Registrar hit no rate limiter (máximo 5 req/segundo global)
+                RateLimiter::hit($key, 1);
             }
         }
 

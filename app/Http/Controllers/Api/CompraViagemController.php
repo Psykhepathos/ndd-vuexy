@@ -99,17 +99,40 @@ class CompraViagemController extends Controller
     public function statistics(): JsonResponse
     {
         try {
+            // CORREÇÃO BUG IMPORTANTE #3: Validar resultados de queries antes de usar
+
             // Query para estatísticas gerais
             $sqlGeral = "SELECT COUNT(*) as total, SUM(valViagem) as valor_total FROM PUB.sPararViagem WHERE flgCancelado = false OR flgCancelado IS NULL";
             $resultGeral = $this->progressService->executeCustomQuery($sqlGeral);
+
+            if (!$resultGeral['success']) {
+                Log::error('Erro ao obter estatísticas gerais', [
+                    'method' => __METHOD__,
+                    'error' => $resultGeral['error'] ?? 'Unknown error'
+                ]);
+            }
 
             // Query para última compra
             $sqlUltima = "SELECT TOP 1 codViagem, NumPla, valViagem, dataCompra FROM PUB.sPararViagem WHERE flgCancelado = false OR flgCancelado IS NULL ORDER BY dataCompra DESC";
             $resultUltima = $this->progressService->executeCustomQuery($sqlUltima);
 
+            if (!$resultUltima['success']) {
+                Log::error('Erro ao obter última compra', [
+                    'method' => __METHOD__,
+                    'error' => $resultUltima['error'] ?? 'Unknown error'
+                ]);
+            }
+
             // Query para viagens canceladas
             $sqlCanceladas = "SELECT COUNT(*) as total FROM PUB.sPararViagem WHERE flgCancelado = true";
             $resultCanceladas = $this->progressService->executeCustomQuery($sqlCanceladas);
+
+            if (!$resultCanceladas['success']) {
+                Log::error('Erro ao obter viagens canceladas', [
+                    'method' => __METHOD__,
+                    'error' => $resultCanceladas['error'] ?? 'Unknown error'
+                ]);
+            }
 
             // Processa resultados
             $totalViagens = 0;
@@ -850,25 +873,53 @@ class CompraViagemController extends Controller
             }
 
             // ========================================================================
-            // CORREÇÃO #7: IDEMPOTÊNCIA - Previne compras duplicadas por double-click
+            // CORREÇÃO BUG IMPORTANTE #4: IDEMPOTÊNCIA - Fix race condition with atomic lock
             // ========================================================================
             // Se cliente enviou idempotency_key, verifica se já processamos essa requisição
             if (isset($validated['idempotency_key']) && !empty($validated['idempotency_key'])) {
                 $cacheKey = 'idempotency:compra:' . $validated['idempotency_key'];
+                $lockKey = 'idempotency:lock:' . $validated['idempotency_key'];
 
-                // Verifica se já existe resultado cached
-                if (Cache::has($cacheKey)) {
-                    $cachedResult = Cache::get($cacheKey);
-
+                // Primeiro tenta pegar resultado cached (fast path)
+                $cachedResult = Cache::get($cacheKey);
+                if ($cachedResult) {
                     Log::info('Requisição idempotente detectada - retornando resultado cached', [
                         'idempotency_key' => $validated['idempotency_key'],
                         'codpac' => $validated['codpac'],
                         'cached_at' => $cachedResult['cached_at'] ?? 'unknown'
                     ]);
 
-                    // Retorna resultado da primeira requisição
                     return response()->json($cachedResult['response'], $cachedResult['status_code']);
                 }
+
+                // Se não tem cache, adquire lock antes de processar
+                // Lock por 30 segundos (tempo máximo de processamento esperado)
+                $lock = Cache::lock($lockKey, 30);
+
+                if (!$lock->get()) {
+                    // Outro request está processando, aguarda e retorna resultado
+                    Log::warning('Idempotency lock collision - aguardando processamento', [
+                        'idempotency_key' => $validated['idempotency_key'],
+                        'ip' => request()->ip()
+                    ]);
+
+                    // Aguarda até 10 segundos para o lock ser liberado
+                    sleep(2);
+                    $cachedResult = Cache::get($cacheKey);
+                    if ($cachedResult) {
+                        return response()->json($cachedResult['response'], $cachedResult['status_code']);
+                    }
+
+                    // Se ainda não tem cache, retorna erro 409 Conflict
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Requisição duplicada em processamento. Tente novamente em alguns segundos.',
+                        'code' => 'IDEMPOTENCY_CONFLICT'
+                    ], 409);
+                }
+
+                // Lock adquirido com sucesso - processar normalmente
+                // IMPORTANTE: Lock será liberado automaticamente no final do método
             }
 
             // CORREÇÃO #6: Sanitiza dados sensíveis no log (LGPD) - não mascara valor em info

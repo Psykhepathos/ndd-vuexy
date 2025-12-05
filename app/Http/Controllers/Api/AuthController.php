@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Validator;
 use App\Models\User;
 
@@ -14,6 +15,27 @@ class AuthController extends Controller
 {
     public function login(Request $request)
     {
+        // CORREÇÃO BUG #1: Rate limiting para prevenir brute force (5 tentativas por minuto)
+        $key = 'login:' . $request->ip();
+
+        if (RateLimiter::tooManyAttempts($key, 5)) {
+            $seconds = RateLimiter::availableIn($key);
+
+            Log::warning('Rate limit excedido em login', [
+                'ip' => $request->ip(),
+                'email' => $request->input('email'),
+                'retry_after' => $seconds,
+                'user_agent' => $request->userAgent(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => "Muitas tentativas de login. Tente novamente em {$seconds} segundos.",
+                'retry_after' => $seconds
+            ], 429);
+        }
+
         $validator = Validator::make($request->all(), [
             'email' => 'required|email',
             'password' => 'required|string|min:8',
@@ -29,7 +51,13 @@ class AuthController extends Controller
 
         $credentials = $request->only('email', 'password');
 
+        // Incrementar contador de tentativas
+        RateLimiter::hit($key, 60);
+
         if (Auth::attempt($credentials)) {
+            // CORREÇÃO BUG #1: Limpar contador de rate limit após login bem-sucedido
+            RateLimiter::clear($key);
+
             $user = Auth::user();
 
             // Validar integridade de role (não usar fallback silencioso)
@@ -91,7 +119,17 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        // CORREÇÃO BUG #2: Null-safe operator para evitar erro se token não existir
+        $request->user()?->currentAccessToken()?->delete();
+
+        // LGPD logging
+        Log::info('Logout realizado', [
+            'user_id' => $request->user()?->id,
+            'email' => $request->user()?->email,
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'timestamp' => now()->toIso8601String()
+        ]);
 
         return response()->json([
             'success' => true,
@@ -107,6 +145,20 @@ class AuthController extends Controller
         ]);
     }
 
+    /**
+     * CORREÇÃO BUG #3: Endpoint de registro público
+     *
+     * ⚠️ ATENÇÃO SEGURANÇA:
+     * Este endpoint está PÚBLICO por design para permitir auto-registro.
+     *
+     * Considerações:
+     * - Para produção, considere adicionar email verification (Laravel MustVerifyEmail)
+     * - Ou desabilitar este endpoint e criar usuários apenas via admin
+     * - Ou adicionar CAPTCHA para prevenir spam de bots
+     *
+     * Para desabilitar registro público, comente a rota em routes/api.php:
+     * // Route::post('/auth/register', [AuthController::class, 'register']);
+     */
     public function register(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -142,11 +194,28 @@ class AuthController extends Controller
         // Laravel 'confirmed' rule já valida que password === password_confirmation
         // Se validator passou, senhas já são iguais!
 
+        // CORREÇÃO BUG #4: Role configurável via config, default 'user' (seguro)
+        // Para permitir criação de admins, altere em config/auth.php:
+        // 'default_registration_role' => 'admin' (NÃO RECOMENDADO EM PRODUÇÃO!)
+        $defaultRole = config('auth.default_registration_role', 'user');
+
+        // Security: Nunca permitir role 'admin' em registro público
+        if ($defaultRole === 'admin') {
+            Log::warning('Tentativa de criar usuário admin via registro público bloqueada', [
+                'email' => $request->email,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
+            $defaultRole = 'user'; // Force user role for security
+        }
+
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => 'user',
+            'role' => $defaultRole,
         ]);
 
         // CORREÇÃO #4: Logging de novo registro (LGPD Art. 46 compliance)

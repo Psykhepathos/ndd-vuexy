@@ -70,12 +70,16 @@ class MotoristaController extends Controller
                 }
             }
 
+            // CORREÇÃO BUG #29: Escapar wildcards LIKE para prevenir injection
             if ($request->has('nome')) {
-                $query->where('nome', 'LIKE', '%' . $request->nome . '%');
+                $nome = str_replace(['%', '_'], ['\\%', '\\_'], $request->nome);
+                $query->where('nome', 'LIKE', '%' . $nome . '%');
             }
 
+            // CORREÇÃO BUG #29: Escapar wildcards LIKE para prevenir injection
             if ($request->has('cpf')) {
-                $query->where('cpf', 'LIKE', '%' . $request->cpf . '%');
+                $cpf = str_replace(['%', '_'], ['\\%', '\\_'], $request->cpf);
+                $query->where('cpf', 'LIKE', '%' . $cpf . '%');
             }
 
             if ($request->has('codigo_progress')) {
@@ -84,6 +88,16 @@ class MotoristaController extends Controller
 
             $perPage = $request->get('per_page', 15);
             $motoristas = $query->orderBy('nome')->paginate($perPage);
+
+            // CORREÇÃO BUG #31: LGPD logging de listagem de motoristas
+            Log::info('Motoristas listados', [
+                'filters' => $request->only(['status', 'nome', 'cpf', 'codigo_progress']),
+                'total_results' => $motoristas->total(),
+                'user_id' => auth()->id() ?? null,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'timestamp' => now()->toIso8601String()
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -133,15 +147,28 @@ class MotoristaController extends Controller
             $data = json_decode($request->getContent(), true) ?: [];
         }
 
+        // CORREÇÃO BUG #30: Validar CPF com algoritmo de check digit
         $validator = Validator::make($data, [
             'codigo_progress' => 'required|string|unique:motoristas,codigo_progress',
             'nome' => 'required|string|max:255',
-            'cpf' => 'required|string|unique:motoristas,cpf',
+            'cpf' => [
+                'required',
+                'string',
+                'size:11',
+                'regex:/^\d{11}$/',
+                'unique:motoristas,cpf',
+                function ($attribute, $value, $fail) {
+                    if (!$this->validarCPF($value)) {
+                        $fail('O CPF informado é inválido.');
+                    }
+                }
+            ],
             'cnh' => 'required|string',
             'vencimento_cnh' => 'nullable|date',
             'telefone' => 'nullable|string',
             'email' => 'nullable|email',
-            'status' => 'sometimes|in:ativo,inativo,suspenso'
+            // CORREÇÃO BUG #32: Status deve ser string enum, não boolean
+            'status' => 'required|in:ativo,inativo,suspenso'
         ]);
 
         if ($validator->fails()) {
@@ -190,6 +217,15 @@ class MotoristaController extends Controller
     {
         try {
             $motorista = Motorista::findOrFail($id);
+
+            // CORREÇÃO BUG #31: LGPD logging de acesso a detalhes de motorista
+            Log::info('Motorista acessado', [
+                'motorista_id' => $id,
+                'user_id' => auth()->id() ?? null,
+                'ip' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+                'timestamp' => now()->toIso8601String()
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -253,7 +289,16 @@ class MotoristaController extends Controller
             $motorista->update($request->all());
             $motorista->refresh();
 
-            Log::info('Motorista atualizado', ['id' => $motorista->id, 'nome' => $motorista->nome]);
+            // CORREÇÃO BUG #31: LGPD logging de atualização de motorista
+            Log::warning('Motorista atualizado', [
+                'motorista_id' => $motorista->id,
+                'nome' => $motorista->nome,
+                'changes' => array_keys($request->all()),
+                'user_id' => auth()->id() ?? null,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'timestamp' => now()->toIso8601String()
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -319,5 +364,57 @@ class MotoristaController extends Controller
                 'message' => 'Motorista não encontrado com este código Progress'
             ], 404);
         }
+    }
+
+    /**
+     * CORREÇÃO BUG #30: Validar CPF brasileiro com algoritmo de check digit
+     *
+     * Algoritmo oficial da Receita Federal do Brasil
+     * Verifica se todos os dígitos são iguais (ex: 111.111.111-11)
+     * Calcula e valida os dois dígitos verificadores
+     *
+     * @param string $cpf CPF com 11 dígitos numéricos (sem pontos e traços)
+     * @return bool True se CPF válido, False caso contrário
+     */
+    private function validarCPF(string $cpf): bool
+    {
+        // Remove formatação (pontos e traços) se houver
+        $cpf = preg_replace('/[^0-9]/', '', $cpf);
+
+        // CPF deve ter exatamente 11 dígitos
+        if (strlen($cpf) != 11) {
+            return false;
+        }
+
+        // Rejeitar CPFs com todos os dígitos iguais (ex: 000.000.000-00, 111.111.111-11)
+        if (preg_match('/^(\d)\1{10}$/', $cpf)) {
+            return false;
+        }
+
+        // Validar primeiro dígito verificador
+        $soma = 0;
+        for ($i = 0; $i < 9; $i++) {
+            $soma += intval($cpf[$i]) * (10 - $i);
+        }
+        $resto = $soma % 11;
+        $digitoVerificador1 = ($resto < 2) ? 0 : (11 - $resto);
+
+        if (intval($cpf[9]) != $digitoVerificador1) {
+            return false;
+        }
+
+        // Validar segundo dígito verificador
+        $soma = 0;
+        for ($i = 0; $i < 10; $i++) {
+            $soma += intval($cpf[$i]) * (11 - $i);
+        }
+        $resto = $soma % 11;
+        $digitoVerificador2 = ($resto < 2) ? 0 : (11 - $resto);
+
+        if (intval($cpf[10]) != $digitoVerificador2) {
+            return false;
+        }
+
+        return true;
     }
 }

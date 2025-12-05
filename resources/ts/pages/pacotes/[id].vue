@@ -166,20 +166,27 @@ const goBack = () => {
 }
 
 // Processar coordenadas GPS como no Progress itinerario.p
-const processGpsCoordinate = (coordinate: string): string => {
+// CORREÇÃO: Backend agora retorna number (float) após BUG MODERADO #1
+const processGpsCoordinate = (coordinate: string | number): string => {
   if (!coordinate) return ''
-  
+
+  // Se já é number (backend retorna float após correção), converter para string
+  if (typeof coordinate === 'number') {
+    return coordinate.toString()
+  }
+
+  // Se é string, processar formatos antigos
   let processedCoord = coordinate.toString().trim()
   // Remover indicadores direcionais
   processedCoord = processedCoord.replace(/[WNES]/g, '')
   processedCoord = processedCoord.replace(/[-.,]/g, '')
-  
+
   if (processedCoord.length >= 3) {
     const intPart = processedCoord.substring(0, processedCoord.length - 6)
     const decPart = processedCoord.substring(processedCoord.length - 6)
     return `-${intPart}.${decPart}`
   }
-  
+
   return ''
 }
 

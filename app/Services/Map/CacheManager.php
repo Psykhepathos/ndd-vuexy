@@ -131,11 +131,14 @@ class CacheManager
 
     /**
      * Find route by similar waypoints (fuzzy match)
+     * CORREÇÃO BUG MODERADO #5: Limitar candidates para prevenir memory leak
      */
     private function findRouteBySimilarWaypoints(array $waypoints, ?string $provider = null): ?RouteCache
     {
         $query = RouteCache::where('waypoints_count', count($waypoints))
-            ->where('expires_at', '>', now());
+            ->where('expires_at', '>', now())
+            ->orderBy('created_at', 'desc')
+            ->limit(50); // Máximo 50 candidatos para prevenir memory leak
 
         if ($provider) {
             $query->where('source', $provider);

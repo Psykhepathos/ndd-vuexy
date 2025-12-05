@@ -24,9 +24,11 @@ class OsrmProvider implements RouteProviderInterface
 
     /**
      * Request timeout in seconds
-     * Reduced to 5s to prevent PHP timeout when processing multiple waypoints
+     * CORREÇÃO BUG IMPORTANTE #5: Aumentado para 15s para rotas longas
+     * 5s era insuficiente para rotas com muitos waypoints ou distâncias grandes
+     * 15s é adequado para rotas brasileiras (SP-RJ ~450km, SP-BA ~1900km)
      */
-    private int $timeout = 5;
+    private int $timeout = 15;
 
     public function getName(): string
     {

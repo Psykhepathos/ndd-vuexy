@@ -73,13 +73,74 @@ export const DEFAULT_HEADERS = {
   'X-Requested-With': 'XMLHttpRequest'
 } as const
 
-// Helper para fazer fetch com configuração padrão
-export async function apiFetch(url: string, options: RequestInit = {}) {
+/**
+ * Helper para fazer fetch com configuração padrão + autenticação
+ * Adiciona automaticamente:
+ * - Headers JSON padrão (Accept, Content-Type, X-Requested-With)
+ * - Token de autenticação Bearer (se disponível)
+ *
+ * @example
+ * // GET request
+ * const response = await apiFetch('/api/pacotes')
+ *
+ * // POST request com body
+ * const response = await apiFetch('/api/compra-viagem/comprar', {
+ *   method: 'POST',
+ *   body: JSON.stringify({ pacote: 123 })
+ * })
+ */
+export async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  // Obter token de autenticação do cookie
+  const accessToken = useCookie('accessToken').value
+
+  // Construir headers com autenticação se disponível
+  const headers: Record<string, string> = {
+    ...DEFAULT_HEADERS,
+    ...(options.headers as Record<string, string> || {})
+  }
+
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`
+  }
+
   return fetch(url, {
     ...options,
-    headers: {
-      ...DEFAULT_HEADERS,
-      ...options.headers
-    }
+    headers
+  })
+}
+
+/**
+ * Helper adicional para requisições com JSON body
+ * Automaticamente faz JSON.stringify do body
+ *
+ * @example
+ * const response = await apiPost('/api/compra-viagem/validar-pacote', {
+ *   cod_pac: 12345,
+ *   flg_cd: true
+ * })
+ */
+export async function apiPost(url: string, body: any): Promise<Response> {
+  return apiFetch(url, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  })
+}
+
+/**
+ * Helper para requisições PUT
+ */
+export async function apiPut(url: string, body: any): Promise<Response> {
+  return apiFetch(url, {
+    method: 'PUT',
+    body: JSON.stringify(body)
+  })
+}
+
+/**
+ * Helper para requisições DELETE
+ */
+export async function apiDelete(url: string): Promise<Response> {
+  return apiFetch(url, {
+    method: 'DELETE'
   })
 }
