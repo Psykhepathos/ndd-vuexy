@@ -178,18 +178,18 @@ const prevMotorista = () => {
   }
 }
 
-const formatMotoristaPhone = (ddd: number, phone: number) => {
+const formatMotoristaPhone = (ddd: number | undefined, phone: number | undefined) => {
   if (!ddd || !phone) return 'N/D'
   const tel = phone.toString()
   return `(${ddd}) ${tel.replace(/(\d{4,5})(\d{4})/, '$1-$2')}`
 }
 
-const formatCpf = (cpf: string) => {
+const formatCpf = (cpf: string | undefined) => {
   if (!cpf) return 'N/D'
   return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
 }
 
-const formatDate = (date: string) => {
+const formatDate = (date: string | undefined) => {
   if (!date) return 'N/D'
   // Converter formato yyyy-mm-dd para dd/mm/yyyy
   const d = new Date(date)

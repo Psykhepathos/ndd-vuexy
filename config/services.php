@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'google_maps' => [
+        'api_key' => env('GOOGLE_MAPS_API_KEY'),
+        'daily_limit' => env('GOOGLE_MAPS_DAILY_LIMIT', 1000),
+        'monthly_budget' => env('GOOGLE_MAPS_MONTHLY_BUDGET', 1.00),
+        'protection_enabled' => env('GOOGLE_MAPS_PROTECTION_ENABLED', true),
+    ],
+
 ];

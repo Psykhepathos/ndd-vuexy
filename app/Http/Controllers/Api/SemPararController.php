@@ -7,6 +7,8 @@ use App\Services\SemParar\SemPararService;
 use App\Services\ProgressService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 /**
  * SemPararController - Test endpoints for FASE 1A + 1B + 2A + 2B
@@ -290,9 +292,14 @@ class SemPararController extends Controller
      */
     public function comprarViagem(Request $request): JsonResponse
     {
-        $request->validate([
+        // CORREÇÃO BUG #13: Validação de placa brasileira (ABC1234 ou ABC1D23 Mercosul)
+        $validated = $request->validate([
             'nome_rota' => 'required|string',
-            'placa' => 'required|string|min:7|max:8',
+            'placa' => [
+                'required',
+                'string',
+                'regex:/^[A-Z]{3}\d{4}$|^[A-Z]{3}\d[A-Z]\d{2}$/'  // ABC1234 ou ABC1D23 (Mercosul)
+            ],
             'eixos' => 'required|integer|min:2|max:9',
             'data_inicio' => 'required|date',
             'data_fim' => 'required|date|after_or_equal:data_inicio',
@@ -308,6 +315,68 @@ class SemPararController extends Controller
             'res_compra' => 'nullable|string|max:50'
         ]);
 
+        // CORREÇÃO BUG CRÍTICO #1: Verificar autenticação ANTES de query (prevenir information disclosure)
+        if (!empty($validated['cod_pac'])) {
+            // Verificar autenticação primeiro
+            $user = auth()->user();
+            if (!$user) {
+                Log::warning('Tentativa de compra sem autenticação', [
+                    'cod_pac' => $validated['cod_pac'],
+                    'ip' => $request->ip(),
+                    'timestamp' => now()->toIso8601String()
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Autenticação requerida'
+                ], 401);
+            }
+
+            // Agora buscar pacote
+            $pacote = DB::connection('progress')->select(
+                "SELECT codtrn FROM PUB.pacote WHERE codpac = ?",
+                [$validated['cod_pac']]
+            )[0] ?? null;
+
+            if (!$pacote) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Pacote não encontrado'
+                ], 404);
+            }
+
+            // Verificar se usuário tem permissão (admin ou dono do transporte)
+            if ($user->role !== 'admin' && $user->codtrn != $pacote->codtrn) {
+                Log::warning('Tentativa de compra não autorizada', [
+                    'user_id' => $user->id,
+                    'user_email' => $user->email,
+                    'cod_pac' => $validated['cod_pac'],
+                    'pacote_codtrn' => $pacote->codtrn,
+                    'user_codtrn' => $user->codtrn,
+                    'ip' => $request->ip(),
+                    'timestamp' => now()->toIso8601String()
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Você não tem permissão para comprar viagem com este pacote'
+                ], 403);
+            }
+        }
+
+        // CORREÇÃO #7: LGPD Art. 46 - Logging de operação financeira
+        $user = $request->user();
+        Log::info('Compra de viagem SemParar iniciada', [
+            'user_id' => $user->id,
+            'user_email' => $user->email,
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'placa' => $request->input('placa'),
+            'nome_rota' => $request->input('nome_rota'),
+            'valor_estimado' => $request->input('valor_viagem'),
+            'timestamp' => now()->toIso8601String()
+        ]);
+
         try {
             // FASE 2A - Comprar viagem no SemParar
             $result = $this->semPararService->comprarViagem(
@@ -320,6 +389,14 @@ class SemPararController extends Controller
                 $request->input('item_fin2') ?? '',
                 $request->input('item_fin3') ?? ''
             );
+
+            // CORREÇÃO #7: Log do resultado da compra
+            Log::info('Compra de viagem ' . ($result['success'] ? 'concluída' : 'falhou'), [
+                'user_id' => $user->id,
+                'cod_viagem' => $result['cod_viagem'] ?? null,
+                'status' => $result['status'] ?? null,
+                'timestamp' => now()->toIso8601String()
+            ]);
 
             // Se compra foi bem-sucedida E temos dados para salvar no Progress
             if ($result['success'] && $request->has('cod_pac')) {
@@ -349,10 +426,21 @@ class SemPararController extends Controller
                 'data' => $result
             ], $result['success'] ? 200 : 400);
         } catch (\Exception $e) {
+            // CORREÇÃO #7: Log completo (interno), mensagem genérica (público)
+            $errorId = uniqid('err_');
+            Log::error('Erro ao comprar viagem', [
+                'error_id' => $errorId,
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'input' => $request->except(['password', 'token']),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao comprar viagem',
-                'error' => $e->getMessage()
+                'message' => 'Erro interno ao processar compra. Contate o suporte.',
+                'error_id' => $errorId
             ], 500);
         }
     }
@@ -365,14 +453,24 @@ class SemPararController extends Controller
      */
     public function obterRecibo(Request $request): JsonResponse
     {
+        // Validate input
+        $request->validate([
+            'cod_viagem' => 'required|string|min:1|max:50'
+        ]);
+
+        $codViagem = $request->input('cod_viagem');
+
+        // CORREÇÃO #7: LGPD Art. 46 - Logging de acesso a dados sensíveis
+        $user = $request->user();
+        Log::info('Consulta de recibo SemParar', [
+            'user_id' => $user->id,
+            'user_email' => $user->email,
+            'ip' => $request->ip(),
+            'cod_viagem' => $codViagem,
+            'timestamp' => now()->toIso8601String()
+        ]);
+
         try {
-            // Validate input
-            $request->validate([
-                'cod_viagem' => 'required|string|min:1|max:50'
-            ]);
-
-            $codViagem = $request->input('cod_viagem');
-
             // Call SemParar service to get receipt data
             // NOTE: SOAP returns trip data (pracas, total, etc.), NOT PDF
             $result = $this->semPararService->obterRecibo($codViagem);
@@ -395,10 +493,21 @@ class SemPararController extends Controller
             }
 
         } catch (\Exception $e) {
+            // CORREÇÃO #7: Log completo (interno), mensagem genérica (público)
+            $errorId = uniqid('err_');
+            Log::error('Erro ao obter recibo', [
+                'error_id' => $errorId,
+                'user_id' => $user->id,
+                'cod_viagem' => $codViagem,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao obter dados do recibo',
-                'error' => $e->getMessage()
+                'message' => 'Erro interno ao obter recibo. Contate o suporte.',
+                'error_id' => $errorId
             ], 500);
         }
     }
@@ -411,20 +520,33 @@ class SemPararController extends Controller
      */
     public function gerarRecibo(Request $request): JsonResponse
     {
+        // Validate input
+        // CORREÇÃO BUG #11: Validar email corretamente
+        $request->validate([
+            'cod_viagem' => 'required|string|min:1|max:50',
+            'telefone' => 'required|string|min:12|max:15', // Format: 5531988892076
+            'email' => 'nullable|email|max:255', // CORREÇÃO BUG #11: email validation
+            'flg_imprime' => 'nullable|boolean'
+        ]);
+
+        $codViagem = $request->input('cod_viagem');
+        $telefone = $request->input('telefone');
+        $email = $request->input('email') ?? '';  // Fix: use null coalescing
+        $flgImprime = $request->input('flg_imprime', true);
+
+        // CORREÇÃO #7: LGPD Art. 46 - Logging de compartilhamento de dados (WhatsApp/Email)
+        $user = $request->user();
+        Log::info('Geração e envio de recibo SemParar', [
+            'user_id' => $user->id,
+            'user_email' => $user->email,
+            'ip' => $request->ip(),
+            'cod_viagem' => $codViagem,
+            'telefone' => substr($telefone, 0, 4) . '****' . substr($telefone, -4),  // Mascarar telefone
+            'email_fornecido' => !empty($email),
+            'timestamp' => now()->toIso8601String()
+        ]);
+
         try {
-            // Validate input
-            $request->validate([
-                'cod_viagem' => 'required|string|min:1|max:50',
-                'telefone' => 'required|string|min:12|max:15', // Format: 5531988892076
-                'email' => 'nullable|string|max:255', // No email validation - service will handle/fix invalid emails
-                'flg_imprime' => 'nullable|boolean'
-            ]);
-
-            $codViagem = $request->input('cod_viagem');
-            $telefone = $request->input('telefone');
-            $email = $request->input('email') ?? '';  // Fix: use null coalescing
-            $flgImprime = $request->input('flg_imprime', true);
-
             // Call SemParar service to generate and send receipt
             $result = $this->semPararService->gerarRecibo(
                 $codViagem,
@@ -432,6 +554,15 @@ class SemPararController extends Controller
                 $email,
                 $flgImprime
             );
+
+            // CORREÇÃO #7: Log do envio bem-sucedido
+            if ($result['success']) {
+                Log::info('Recibo enviado com sucesso', [
+                    'user_id' => $user->id,
+                    'cod_viagem' => $codViagem,
+                    'timestamp' => now()->toIso8601String()
+                ]);
+            }
 
             if ($result['success']) {
                 return response()->json([
@@ -448,10 +579,21 @@ class SemPararController extends Controller
             }
 
         } catch (\Exception $e) {
+            // CORREÇÃO #7: Log completo (interno), mensagem genérica (público)
+            $errorId = uniqid('err_');
+            Log::error('Erro ao gerar recibo', [
+                'error_id' => $errorId,
+                'user_id' => $user->id,
+                'cod_viagem' => $codViagem,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao gerar recibo',
-                'error' => $e->getMessage()
+                'message' => 'Erro interno ao gerar recibo. Contate o suporte.',
+                'error_id' => $errorId
             ], 500);
         }
     }
@@ -464,16 +606,26 @@ class SemPararController extends Controller
      */
     public function consultarViagens(Request $request): JsonResponse
     {
+        // Validate input
+        $request->validate([
+            'data_inicio' => 'required|date|date_format:Y-m-d',
+            'data_fim' => 'required|date|date_format:Y-m-d|after_or_equal:data_inicio'
+        ]);
+
+        $dataInicio = $request->input('data_inicio');
+        $dataFim = $request->input('data_fim');
+
+        // CORREÇÃO #7: LGPD Art. 46 - Logging de acesso a dados sensíveis
+        $user = $request->user();
+        Log::info('Consulta de viagens SemParar', [
+            'user_id' => $user->id,
+            'user_email' => $user->email,
+            'ip' => $request->ip(),
+            'periodo' => ['inicio' => $dataInicio, 'fim' => $dataFim],
+            'timestamp' => now()->toIso8601String()
+        ]);
+
         try {
-            // Validate input
-            $request->validate([
-                'data_inicio' => 'required|date|date_format:Y-m-d',
-                'data_fim' => 'required|date|date_format:Y-m-d|after_or_equal:data_inicio'
-            ]);
-
-            $dataInicio = $request->input('data_inicio');
-            $dataFim = $request->input('data_fim');
-
             // Call SemParar service
             $result = $this->semPararService->consultarViagens($dataInicio, $dataFim);
 
@@ -492,10 +644,20 @@ class SemPararController extends Controller
             }
 
         } catch (\Exception $e) {
+            // CORREÇÃO #7: Log completo (interno), mensagem genérica (público)
+            $errorId = uniqid('err_');
+            Log::error('Erro ao consultar viagens', [
+                'error_id' => $errorId,
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao consultar viagens',
-                'error' => $e->getMessage()
+                'message' => 'Erro interno ao consultar viagens. Contate o suporte.',
+                'error_id' => $errorId
             ], 500);
         }
     }
@@ -508,16 +670,35 @@ class SemPararController extends Controller
      */
     public function cancelarViagem(Request $request): JsonResponse
     {
+        // Validate input
+        $request->validate([
+            'cod_viagem' => 'required|string|min:1|max:50'
+        ]);
+
+        $codViagem = $request->input('cod_viagem');
+
+        // CORREÇÃO #7: LGPD Art. 46 - Logging de operação irreversível ANTES de executar
+        $user = $request->user();
+        Log::warning('Cancelamento de viagem SemParar solicitado', [
+            'user_id' => $user->id,
+            'user_email' => $user->email,
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'cod_viagem' => $codViagem,
+            'timestamp' => now()->toIso8601String()
+        ]);
+
         try {
-            // Validate input
-            $request->validate([
-                'cod_viagem' => 'required|string|min:1|max:50'
-            ]);
-
-            $codViagem = $request->input('cod_viagem');
-
             // Call SemParar service
             $result = $this->semPararService->cancelarViagem($codViagem);
+
+            // CORREÇÃO #7: Log do resultado (operação irreversível!)
+            Log::warning('Cancelamento de viagem ' . ($result['success'] ? 'concluído' : 'falhou'), [
+                'user_id' => $user->id,
+                'cod_viagem' => $codViagem,
+                'status' => $result['status'] ?? null,
+                'timestamp' => now()->toIso8601String()
+            ]);
 
             if ($result['success']) {
                 return response()->json([
@@ -534,10 +715,21 @@ class SemPararController extends Controller
             }
 
         } catch (\Exception $e) {
+            // CORREÇÃO #7: Log completo (interno), mensagem genérica (público)
+            $errorId = uniqid('err_');
+            Log::error('Erro ao cancelar viagem', [
+                'error_id' => $errorId,
+                'user_id' => $user->id,
+                'cod_viagem' => $codViagem,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao cancelar viagem',
-                'error' => $e->getMessage()
+                'message' => 'Erro interno ao cancelar viagem. Contate o suporte.',
+                'error_id' => $errorId
             ], 500);
         }
     }
@@ -550,18 +742,39 @@ class SemPararController extends Controller
      */
     public function reemitirViagem(Request $request): JsonResponse
     {
+        // Validate input
+        $request->validate([
+            'cod_viagem' => 'required|string|min:1|max:50',
+            'placa' => 'required|string|size:7' // Brazilian license plate format: ABC1234
+        ]);
+
+        $codViagem = $request->input('cod_viagem');
+        $placa = strtoupper($request->input('placa')); // Uppercase plate
+
+        // CORREÇÃO #7: LGPD Art. 46 - Logging de alteração de dados
+        $user = $request->user();
+        Log::warning('Reemissão de viagem SemParar solicitada', [
+            'user_id' => $user->id,
+            'user_email' => $user->email,
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'cod_viagem' => $codViagem,
+            'placa_nova' => $placa,
+            'timestamp' => now()->toIso8601String()
+        ]);
+
         try {
-            // Validate input
-            $request->validate([
-                'cod_viagem' => 'required|string|min:1|max:50',
-                'placa' => 'required|string|size:7' // Brazilian license plate format: ABC1234
-            ]);
-
-            $codViagem = $request->input('cod_viagem');
-            $placa = strtoupper($request->input('placa')); // Uppercase plate
-
             // Call SemParar service
             $result = $this->semPararService->reemitirViagem($codViagem, $placa);
+
+            // CORREÇÃO #7: Log do resultado
+            Log::warning('Reemissão de viagem ' . ($result['success'] ? 'concluída' : 'falhou'), [
+                'user_id' => $user->id,
+                'cod_viagem' => $codViagem,
+                'placa' => $placa,
+                'status' => $result['status'] ?? null,
+                'timestamp' => now()->toIso8601String()
+            ]);
 
             if ($result['success']) {
                 return response()->json([
@@ -578,10 +791,21 @@ class SemPararController extends Controller
             }
 
         } catch (\Exception $e) {
+            // CORREÇÃO #7: Log completo (interno), mensagem genérica (público)
+            $errorId = uniqid('err_');
+            Log::error('Erro ao reemitir viagem', [
+                'error_id' => $errorId,
+                'user_id' => $user->id,
+                'cod_viagem' => $codViagem,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao reemitir viagem',
-                'error' => $e->getMessage()
+                'message' => 'Erro interno ao reemitir viagem. Contate o suporte.',
+                'error_id' => $errorId
             ], 500);
         }
     }

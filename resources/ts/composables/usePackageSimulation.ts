@@ -60,10 +60,17 @@ export function usePackageSimulation() {
    * Processa coordenada GPS do formato Progress para decimal
    * Formato Progress: "230876543" -> "-23,0876543"
    * Baseado na lógica do ProgressService.php
+   * CORREÇÃO: Backend agora retorna number (float) após BUG MODERADO #1
    */
-  const processGpsCoordinate = (coordinate: string | undefined): number | undefined => {
+  const processGpsCoordinate = (coordinate: string | number | undefined): number | undefined => {
     if (!coordinate) return undefined
 
+    // Se já é number (backend retorna float após correção), retornar direto
+    if (typeof coordinate === 'number') {
+      return coordinate
+    }
+
+    // Se é string, processar formatos antigos
     // Limpar coordenada (remover W, N, E, S, -, ., ,)
     let coord = coordinate.toString().trim()
     coord = coord.replace(/[WNES]/g, '')

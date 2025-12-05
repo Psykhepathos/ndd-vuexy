@@ -67,10 +67,10 @@ class PracaPedagioImportService
                     $imported++;
 
                 } catch (\Exception $e) {
+                    // CORREÇÃO BUG #71: Não incluir 'data' no erro (pode vazar informações sensíveis)
                     $errors[] = [
                         'line' => $imported + 2, // +2 = header + 1-indexed
-                        'error' => $e->getMessage(),
-                        'data' => $row
+                        'error' => $e->getMessage()
                     ];
                     Log::warning('Erro ao importar praça', [
                         'line' => $imported + 2,
@@ -126,15 +126,46 @@ class PracaPedagioImportService
 
     /**
      * Limpar todas as praças (CUIDADO!)
+     * CORREÇÃO BUG #72: Exigir confirmation code para prevenir truncate acidental
+     * CORREÇÃO BUG #73: Logging LGPD completo com contexto de usuário
      */
-    public function limparTudo(): bool
+    public function limparTudo(string $confirmationCode = '', ?array $userContext = null): bool
     {
+        // Validação de confirmation code
+        $expectedCode = 'DELETE_ALL_PRACAS_' . date('Y-m-d');
+        if ($confirmationCode !== $expectedCode) {
+            Log::warning('Tentativa de limpar praças sem confirmation code válido', [
+                'expected_code' => $expectedCode,
+                'provided_code' => $confirmationCode,
+                'user_id' => $userContext['user_id'] ?? null,
+                'ip' => $userContext['ip'] ?? null,
+                'timestamp' => now()->toIso8601String()
+            ]);
+            throw new \Exception("Confirmation code inválido. Use: {$expectedCode}");
+        }
+
         try {
+            $count = PracaPedagio::count();
             PracaPedagio::truncate();
-            Log::warning('Todas as praças foram removidas do banco');
+
+            // CORREÇÃO BUG #73: Logging LGPD completo incluindo quem executou
+            Log::warning('Todas as praças foram removidas do banco', [
+                'total_removidas' => $count,
+                'admin_id' => $userContext['user_id'] ?? null,
+                'admin_email' => $userContext['user_email'] ?? null,
+                'ip' => $userContext['ip'] ?? null,
+                'user_agent' => $userContext['user_agent'] ?? null,
+                'timestamp' => now()->toIso8601String()
+            ]);
+
             return true;
         } catch (\Exception $e) {
-            Log::error('Erro ao limpar praças', ['error' => $e->getMessage()]);
+            Log::error('Erro ao limpar praças', [
+                'error' => $e->getMessage(),
+                'user_id' => $userContext['user_id'] ?? null,
+                'ip' => $userContext['ip'] ?? null,
+                'timestamp' => now()->toIso8601String()
+            ]);
             return false;
         }
     }

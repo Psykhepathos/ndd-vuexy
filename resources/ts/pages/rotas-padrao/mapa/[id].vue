@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// @ts-nocheck - Leaflet type incompatibilities (known @types/leaflet issue)
 import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import draggable from 'vuedraggable'
@@ -179,7 +180,7 @@ const fetchRota = async () => {
   loading.value = true
 
   try {
-    const response = await apiFetch(API_ENDPOINTS.semPararRotaMunicipios(rotaId.value))
+    const response = await apiFetch(API_ENDPOINTS.semPararRotaMunicipios(parseInt(rotaId.value)))
 
     const data = await response.json()
 
@@ -878,7 +879,7 @@ const salvarAlteracoes = async () => {
       }))
     }
 
-    const response = await apiFetch(API_ENDPOINTS.semPararRota(rotaId.value), {
+    const response = await apiFetch(API_ENDPOINTS.semPararRota(parseInt(rotaId.value)), {
       method: 'PUT',
       body: JSON.stringify(payload)
     })

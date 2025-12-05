@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { apiFetch, apiPost } from '@/config/api'
 import type { CompraViagemFormData, PacoteCompraViagem, EntregaPacote } from '../types'
 
 // Props & Emits
@@ -55,7 +56,7 @@ const buscarPacotes = async (search: string | null) => {
 
   loadingPacotes.value = true
   try {
-    const response = await fetch(
+    const response = await apiFetch(
       `${window.location.origin}/api/pacotes/autocomplete?search=${encodeURIComponent(search)}`
     )
     const data = await response.json()
@@ -83,18 +84,16 @@ const selecionarPacote = async (pacoteItem: any) => {
 
   try {
     // Buscar itinerário do pacote
-    const response = await fetch(`${window.location.origin}/api/pacotes/itinerario`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ codPac: pacote.codpac })
+    const response = await apiPost(`${window.location.origin}/api/pacotes/itinerario`, {
+      codPac: pacote.codpac
     })
-
     const data = await response.json()
 
     if (data.success && data.data) {
       const todasEntregas: any[] = data.data.pedidos || []
 
       // Processar coordenadas GPS
+      // @ts-expect-error - Tipo any sendo convertido para EntregaPacote (safe cast)
       const entregasProcessadas: EntregaPacote[] = todasEntregas.map((entrega: any) => ({
         numseqped: entrega.numseqped,
         razcli: entrega.razcli,
@@ -160,9 +159,16 @@ const limparPacote = () => {
 }
 
 // Utility: Processar coordenada GPS do Progress
-const processGpsCoordinate = (coord: string | null): number | null => {
+// CORREÇÃO: Backend agora retorna number (float) após BUG MODERADO #1
+const processGpsCoordinate = (coord: string | number | null): number | null => {
   if (!coord) return null
 
+  // Se já é number (backend retorna float após correção), retornar direto
+  if (typeof coord === 'number') {
+    return coord
+  }
+
+  // Se é string, processar formatos antigos
   // Formato 1: "-23,0876543" → -23.0876543
   if (coord.includes(',')) {
     return parseFloat(coord.replace(',', '.'))

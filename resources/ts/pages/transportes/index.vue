@@ -27,9 +27,9 @@ const totalItems = ref(0)
 const serverItems = ref<Transporte[]>([])
 
 // Filtros - valor padrão: mostrar apenas ativos
-const filtroTipo = ref()
-const filtroNatureza = ref()
-const filtroStatus = ref('ativo')
+const filtroTipo = ref<string | undefined>()
+const filtroNatureza = ref<string | undefined>()
+const filtroStatus = ref<string | undefined>('ativo')
 
 // Opções de paginação (padrão Vuexy)
 const options = ref({
@@ -297,6 +297,19 @@ const viewDetails = (item: Transporte) => {
   router.push(`/transportes/${item.codtrn}`)
 }
 
+const handleItemsPerPageChange = (value: string | number) => {
+  const newValue = Number(value)
+  if (isNaN(newValue) || newValue <= 0) {
+    console.error('Invalid itemsPerPage value:', value)
+    return
+  }
+
+  options.value.itemsPerPage = newValue
+  options.value.page = 1
+  cursors.value = { next: null, prev: null, hasNext: false, hasPrev: false }
+  fetchTransportes(null)
+}
+
 const getTipoTransportador = (item: Transporte) => {
   return item.flgautonomo ? 'AUTÔNOMO' : 'EMPRESA'
 }
@@ -390,7 +403,7 @@ onMounted(() => {
               { value: 100, title: '100' }
             ]"
             style="inline-size: 5rem;"
-            @update:model-value="options.itemsPerPage = parseInt($event, 10)"
+            @update:model-value="handleItemsPerPageChange"
           />
 
           <!-- Filtro Tipo -->

@@ -32,6 +32,9 @@ interface Entrega {
   volume: number
   gps_lat?: string
   gps_lon?: string
+  // Coordenadas processadas (aliases para compatibilidade)
+  lat?: string
+  long?: string
 }
 
 interface ItinerarioData {
@@ -86,12 +89,11 @@ const fetchItinerario = async () => {
   loading.value = true
   
   try {
+    // CORREÇÃO: Backend espera codPac diretamente no root, não dentro de Pacote
     const payload = {
-      Pacote: {
-        codPac: parseInt(pacoteId.value)
-      }
+      codPac: parseInt(pacoteId.value)
     }
-    
+
     const response = await fetch('http://localhost:8002/api/pacotes/itinerario', {
       method: 'POST',
       headers: {
@@ -164,20 +166,27 @@ const goBack = () => {
 }
 
 // Processar coordenadas GPS como no Progress itinerario.p
-const processGpsCoordinate = (coordinate: string): string => {
+// CORREÇÃO: Backend agora retorna number (float) após BUG MODERADO #1
+const processGpsCoordinate = (coordinate: string | number): string => {
   if (!coordinate) return ''
-  
+
+  // Se já é number (backend retorna float após correção), converter para string
+  if (typeof coordinate === 'number') {
+    return coordinate.toString()
+  }
+
+  // Se é string, processar formatos antigos
   let processedCoord = coordinate.toString().trim()
   // Remover indicadores direcionais
   processedCoord = processedCoord.replace(/[WNES]/g, '')
   processedCoord = processedCoord.replace(/[-.,]/g, '')
-  
+
   if (processedCoord.length >= 3) {
     const intPart = processedCoord.substring(0, processedCoord.length - 6)
     const decPart = processedCoord.substring(processedCoord.length - 6)
     return `-${intPart}.${decPart}`
   }
-  
+
   return ''
 }
 

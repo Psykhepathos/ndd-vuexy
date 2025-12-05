@@ -30,10 +30,50 @@ const form = ref({
   username: '',
   email: '',
   password: '',
+  passwordConfirm: '',
   privacyPolicies: false,
 })
 
 const isPasswordVisible = ref(false)
+const isPasswordConfirmVisible = ref(false)
+const router = useRouter()
+const errors = ref<Record<string, string | undefined>>({})
+
+const register = async () => {
+  if (!form.value.privacyPolicies) {
+    errors.value.privacyPolicies = 'Você deve concordar com a política de privacidade'
+    return
+  }
+
+  if (form.value.password !== form.value.passwordConfirm) {
+    errors.value.password = 'As senhas não correspondem'
+    return
+  }
+
+  try {
+    const res = await $api('/auth/register', {
+      method: 'POST',
+      body: {
+        name: form.value.username,
+        email: form.value.email,
+        password: form.value.password,
+        password_confirmation: form.value.passwordConfirm,
+      },
+      onResponseError({ response }) {
+        errors.value = response._data.errors || {}
+      },
+    })
+
+    if (res.success) {
+      await nextTick(() => {
+        router.replace('/login')
+      })
+    }
+  }
+  catch (err) {
+    console.error(err)
+  }
+}
 </script>
 
 <template>
@@ -97,7 +137,7 @@ const isPasswordVisible = ref(false)
         </VCardText>
 
         <VCardText>
-          <VForm @submit.prevent="() => {}">
+          <VForm @submit.prevent="register">
             <VRow>
               <!-- Username -->
               <VCol cols="12">
@@ -125,13 +165,28 @@ const isPasswordVisible = ref(false)
               <VCol cols="12">
                 <AppTextField
                   v-model="form.password"
-                  :rules="[requiredValidator]"
+                  :rules="[requiredValidator, passwordValidator]"
                   label="Password"
                   placeholder="············"
                   :type="isPasswordVisible ? 'text' : 'password'"
-                  autocomplete="password"
+                  autocomplete="new-password"
                   :append-inner-icon="isPasswordVisible ? 'tabler-eye-off' : 'tabler-eye'"
+                  :error-messages="errors.password"
                   @click:append-inner="isPasswordVisible = !isPasswordVisible"
+                />
+              </VCol>
+
+              <!-- password confirmation -->
+              <VCol cols="12">
+                <AppTextField
+                  v-model="form.passwordConfirm"
+                  :rules="[requiredValidator]"
+                  label="Confirm Password"
+                  placeholder="············"
+                  :type="isPasswordConfirmVisible ? 'text' : 'password'"
+                  autocomplete="new-password"
+                  :append-inner-icon="isPasswordConfirmVisible ? 'tabler-eye-off' : 'tabler-eye'"
+                  @click:append-inner="isPasswordConfirmVisible = !isPasswordConfirmVisible"
                 />
 
                 <div class="d-flex align-center my-6">

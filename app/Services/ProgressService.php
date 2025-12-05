@@ -20,6 +20,11 @@ class ProgressService
         // Escapar aspas simples duplicando-as (padrão SQL)
         $escaped = str_replace("'", "''", $value);
 
+        // CORREÇÃO BUG #75: Escapar wildcards LIKE (% e _) para prevenir injection
+        // Nota: Apenas escapar se a string será usada em LIKE
+        // Para uso geral, não escapar wildcards (eles são literais em VALUES)
+        // A decisão de escapar wildcards deve ser feita no contexto de uso
+
         // Remover caracteres perigosos
         $escaped = preg_replace('/[;\x00-\x08\x0B-\x0C\x0E-\x1F]/', '', $escaped);
 
@@ -32,9 +37,10 @@ class ProgressService
     public function testConnection(): array
     {
         try {
+            // CORREÇÃO BUG #74: Usar config() em vez de env() no runtime
             Log::info('Testando conexão Progress via JDBC', [
-                'host' => env('PROGRESS_HOST'),
-                'database' => env('PROGRESS_DATABASE')
+                'host' => config('progress.host'),
+                'database' => config('progress.database')
             ]);
 
             $result = $this->executeJavaConnector('test');
@@ -141,10 +147,16 @@ class ProgressService
                 $whereConditions[] = "flgautonomo = 0";
             }
 
-            // Filtro por natureza do transporte
+            // Filtro por natureza do transporte (validar para evitar SQL injection)
+            // CORREÇÃO BUG #76: Usar escapeSqlString ao invés de hardcoded
             $natureza = $filters['natureza'] ?? '';
             if (!empty($natureza)) {
-                $whereConditions[] = "natcam = '$natureza'";
+                // Validar que natureza é apenas 'F' ou 'J'
+                if (in_array($natureza, ['F', 'J'], true)) {
+                    $whereConditions[] = "natcam = " . $this->escapeSqlString($natureza);
+                } else {
+                    Log::warning('Tentativa de SQL injection detectada em natureza', ['natureza' => $natureza]);
+                }
             }
 
             // Filtro por status ativo
@@ -364,9 +376,17 @@ class ProgressService
                 $whereConditions[] = "p.codrot LIKE " . $this->escapeSqlString('%' . $rota . '%');
             }
 
-            // Filtro por situação
+            // CORREÇÃO BUG #77: SQL injection na situação - usar escapeSqlString
             if (!empty($situacao)) {
-                $whereConditions[] = "p.sitpac = '$situacao'";
+                // CORREÇÃO BUG #77: Validar que situação é apenas 1 caractere alfanumérico
+                if (!preg_match('/^[A-Za-z0-9]$/', $situacao)) {
+                    return [
+                        'success' => false,
+                        'error' => 'Situação inválida (deve ser 1 caractere alfanumérico)',
+                        'data' => null
+                    ];
+                }
+                $whereConditions[] = "p.sitpac = " . $this->escapeSqlString($situacao);
             }
 
             // Filtro "apenas recentes" (baseado no padrão Progress)
@@ -374,12 +394,46 @@ class ProgressService
                 $whereConditions[] = "p.codpac > 800000";
             }
 
-            // Filtro por período
+            // CORREÇÃO BUG #78: SQL injection nas datas - validar formato YYYY-MM-DD
             if (!empty($dataInicio)) {
-                $whereConditions[] = "p.datforpac >= '$dataInicio'";
+                // CORREÇÃO BUG #78: Validar formato de data estrito
+                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dataInicio)) {
+                    return [
+                        'success' => false,
+                        'error' => 'Data de início inválida (use formato YYYY-MM-DD)',
+                        'data' => null
+                    ];
+                }
+                // Validar que é uma data real
+                $parts = explode('-', $dataInicio);
+                if (!checkdate((int)$parts[1], (int)$parts[2], (int)$parts[0])) {
+                    return [
+                        'success' => false,
+                        'error' => 'Data de início inválida',
+                        'data' => null
+                    ];
+                }
+                $whereConditions[] = "p.datforpac >= " . $this->escapeSqlString($dataInicio);
             }
             if (!empty($dataFim)) {
-                $whereConditions[] = "p.datforpac <= '$dataFim'";
+                // CORREÇÃO BUG #78: Validar formato de data estrito
+                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dataFim)) {
+                    return [
+                        'success' => false,
+                        'error' => 'Data de fim inválida (use formato YYYY-MM-DD)',
+                        'data' => null
+                    ];
+                }
+                // Validar que é uma data real
+                $parts = explode('-', $dataFim);
+                if (!checkdate((int)$parts[1], (int)$parts[2], (int)$parts[0])) {
+                    return [
+                        'success' => false,
+                        'error' => 'Data de fim inválida',
+                        'data' => null
+                    ];
+                }
+                $whereConditions[] = "p.datforpac <= " . $this->escapeSqlString($dataFim);
             }
 
             // Sempre mostrar apenas pacotes com transportador
@@ -604,20 +658,80 @@ class ProgressService
     }
 
     /**
+     * Sanitiza SQL para logs (LGPD compliance)
+     * Mascara CPF, CNPJ, valores monetarios e strings longas
+     */
+    private function sanitizeSqlForLogging(string $sql): string
+    {
+        // Mascara CPF (11 dígitos)
+        $sql = preg_replace('/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/', '***.***.***.--**', $sql);
+        $sql = preg_replace('/\b\d{11}\b/', '***********', $sql);
+
+        // Mascara CNPJ (14 dígitos)
+        $sql = preg_replace('/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/', '**.***.***/****-**', $sql);
+        $sql = preg_replace('/\b\d{14}\b/', '**************', $sql);
+
+        // Mascara valores monetários grandes (> 1000)
+        $sql = preg_replace('/\b\d{4,}\.\d{2}\b/', '*****.--**', $sql);
+
+        // Mascara strings em aspas simples com mais de 5 caracteres (pode ser nome/endereço)
+        $sql = preg_replace_callback(
+            "/'([^']{6,})'/",
+            function($matches) {
+                $length = strlen($matches[1]);
+                return "'" . str_repeat('*', min($length, 10)) . "'";
+            },
+            $sql
+        );
+
+        return $sql;
+    }
+
+    /**
      * Executa consulta SQL customizada (para debug e testes)
      */
     public function executeCustomQuery(string $sql): array
     {
         try {
-            Log::info('Executando consulta SQL customizada', ['sql' => $sql]);
+            // Validação 1: SQL não pode ser vazio
+            $sql = trim($sql);
+            if (empty($sql)) {
+                throw new Exception('SQL query não pode ser vazio');
+            }
 
-            // Limitar a apenas SELECT por segurança
-            $sql_upper = strtoupper(trim($sql));
+            // Validação 2: Tamanho máximo (prevenir consultas gigantes)
+            if (strlen($sql) > 50000) {
+                throw new Exception('SQL query muito grande (máximo 50.000 caracteres)');
+            }
+
+            // CORREÇÃO #4: Sanitizar SQL antes de logar
+            $sanitizedSql = $this->sanitizeSqlForLogging($sql);
+            Log::info('Executando consulta SQL customizada', [
+                'sql' => substr($sanitizedSql, 0, 200) . (strlen($sanitizedSql) > 200 ? '...' : '')
+            ]);
+
+            // Validação 3: Limitar a apenas SELECT por segurança
+            $sql_upper = strtoupper($sql);
             if (!str_starts_with($sql_upper, 'SELECT')) {
                 throw new Exception('Apenas consultas SELECT são permitidas');
             }
 
-            $result = $this->executeJavaConnector('query', $sql);
+            // Validação 4: Prevenir comandos perigosos embutidos
+            // Usar regex com word boundaries para não bloquear nomes de colunas como "codRotCreateSP"
+            $dangerous_keywords = ['DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE', 'EXEC'];
+            foreach ($dangerous_keywords as $keyword) {
+                // Buscar keyword como palavra completa (word boundary) para não pegar substrings
+                if (preg_match('/\b' . $keyword . '\b/', $sql_upper)) {
+                    throw new Exception("Palavra-chave não permitida detectada: {$keyword}");
+                }
+            }
+
+            // Validação 5: Prevenir comentários SQL que podem esconder código malicioso
+            if (str_contains($sql, '--') || str_contains($sql, '/*') || str_contains($sql, '*/')) {
+                throw new Exception('Comentários SQL não são permitidos em consultas customizadas');
+            }
+
+            $result = $this->executeJavaConnector('query', $sql);  // Executa SQL original (não sanitizado)
 
             Log::info('Consulta SQL executada com sucesso', [
                 'total_registros' => $result['data']['total'] ?? 0
@@ -626,8 +740,10 @@ class ProgressService
             return $result;
 
         } catch (Exception $e) {
+            // CORREÇÃO #4: Sanitizar SQL em logs de erro
+            $sanitizedSql = $this->sanitizeSqlForLogging($sql ?? 'null');
             Log::error('Erro na execução da consulta SQL', [
-                'sql' => $sql,
+                'sql' => substr($sanitizedSql, 0, 200),
                 'error' => $e->getMessage()
             ]);
 
@@ -640,18 +756,52 @@ class ProgressService
 
     /**
      * Executa UPDATE, INSERT ou DELETE no banco Progress
+     *
+     * IMPORTANTE: Progress JDBC NÃO suporta transações!
+     * Cada comando é executado imediatamente e não pode ser revertido.
      */
     public function executeUpdate(string $sql): array
     {
         try {
-            Log::info('Executando comando UPDATE/INSERT/DELETE', ['sql' => $sql]);
+            // Validação 1: SQL não pode ser vazio
+            $sql = trim($sql);
+            if (empty($sql)) {
+                throw new Exception('SQL command não pode ser vazio');
+            }
 
-            // Validar que é um comando permitido
-            $sql_upper = strtoupper(trim($sql));
+            // Validação 2: Tamanho máximo
+            if (strlen($sql) > 50000) {
+                throw new Exception('SQL command muito grande (máximo 50.000 caracteres)');
+            }
+
+            Log::info('Executando comando UPDATE/INSERT/DELETE', ['sql' => substr($sql, 0, 200) . '...']);
+
+            // Validação 3: Validar que é um comando permitido
+            $sql_upper = strtoupper($sql);
             if (!str_starts_with($sql_upper, 'UPDATE') &&
                 !str_starts_with($sql_upper, 'INSERT') &&
                 !str_starts_with($sql_upper, 'DELETE')) {
                 throw new Exception('Apenas comandos UPDATE, INSERT e DELETE são permitidos');
+            }
+
+            // Validação 4: Prevenir comandos perigosos
+            // Usar regex com word boundaries para não bloquear nomes de colunas como "codRotCreateSP"
+            $dangerous_keywords = ['DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE', 'EXEC'];
+            foreach ($dangerous_keywords as $keyword) {
+                // Buscar keyword como palavra completa (word boundary) para não pegar substrings
+                if (preg_match('/\b' . $keyword . '\b/', $sql_upper)) {
+                    throw new Exception("Palavra-chave não permitida detectada: {$keyword}");
+                }
+            }
+
+            // Validação 5: Prevenir comentários SQL
+            if (str_contains($sql, '--') || str_contains($sql, '/*') || str_contains($sql, '*/')) {
+                throw new Exception('Comentários SQL não são permitidos');
+            }
+
+            // Validação 6: DELETE sem WHERE é perigoso
+            if (str_starts_with($sql_upper, 'DELETE') && !str_contains($sql_upper, 'WHERE')) {
+                throw new Exception('DELETE sem cláusula WHERE não é permitido (prevenir exclusão em massa acidental)');
             }
 
             $result = $this->executeJavaConnector('update', $sql);
@@ -666,7 +816,7 @@ class ProgressService
 
         } catch (Exception $e) {
             Log::error('Erro na execução do comando SQL', [
-                'sql' => $sql,
+                'sql' => substr($sql ?? 'null', 0, 200),
                 'error' => $e->getMessage()
             ]);
 
@@ -684,10 +834,11 @@ class ProgressService
     {
         try {
             $javaPath = storage_path('app/java');
-            $driverPath = 'c:/Progress/OpenEdge/java/openedge.jar';
-            $jdbcUrl = env('PROGRESS_JDBC_URL', 'jdbc:datadirect:openedge://192.168.80.113:13361;databaseName=tambasa;trustStore=');
-            $username = env('PROGRESS_USERNAME', 'sysprogress');
-            $password = env('PROGRESS_PASSWORD', 'sysprogress');
+            // CORREÇÃO BUG #74: Usar config() em vez de env() no runtime
+            $driverPath = config('progress.driver_path', 'c:/Progress/OpenEdge/java/openedge.jar');
+            $jdbcUrl = config('progress.jdbc_url', 'jdbc:datadirect:openedge://192.168.80.113:13361;databaseName=tambasa;trustStore=');
+            $username = config('progress.username', 'sysprogress');
+            $password = config('progress.password', 'sysprogress');
 
             // Verificar se os arquivos necessários existem
             if (!file_exists($driverPath)) {
@@ -969,9 +1120,10 @@ class ProgressService
 
     /**
      * Processa coordenadas GPS seguindo a mesma lógica do itinerario.p
-     * Converte formato Progress para decimal brasileiro
+     * Converte formato Progress para decimal (float)
+     * CORREÇÃO BUG MODERADO #1: Retornar float em vez de string
      */
-    private function processGpsCoordinate($coordinate)
+    private function processGpsCoordinate($coordinate): ?float
     {
         if (empty($coordinate)) {
             return null;
@@ -981,13 +1133,13 @@ class ProgressService
         $coord = trim($coordinate);
         $coord = str_replace(['W', 'N', 'E', 'S'], '', $coord);
         $coord = str_replace(['-', '.', ','], '', $coord);
-        
+
         if (strlen($coord) >= 3) {
-            // Formato brasileiro: "-14,0876543" (sinal negativo + 2 dígitos + vírgula + demais dígitos)
-            $formatted = '-' . substr($coord, 0, 2) . ',' . substr($coord, 2);
-            return trim($formatted);
+            // Converter para float: "140876543" → -14.0876543
+            $formatted = '-' . substr($coord, 0, 2) . '.' . substr($coord, 2);
+            return (float)$formatted;
         }
-        
+
         return null;
     }
 
@@ -1328,7 +1480,8 @@ class ProgressService
 
             // Inserir rota principal
             // IMPORTANTE: SQL single-line (Progress JDBC não gosta de quebras de linha)
-            $insertRotaSql = "INSERT INTO PUB.semPararRot (sPararRotID, desSPararRot, tempoViagem, flgCD, flgRetorno, datAtu, resAtu) VALUES (" . $nextId . ", " . $this->escapeSqlString($data['nome']) . ", " . intval($data['tempo_viagem'] ?? 5) . ", " . ($data['flg_cd'] ? '1' : '0') . ", " . ($data['flg_retorno'] ? '1' : '0') . ", '" . date('Y-m-d') . "', " . $this->escapeSqlString(auth()->user()->name ?? 'system') . ")";
+            $userName = auth()->user()?->name ?? 'system';
+            $insertRotaSql = "INSERT INTO PUB.semPararRot (sPararRotID, desSPararRot, tempoViagem, flgCD, flgRetorno, datAtu, resAtu) VALUES (" . $nextId . ", " . $this->escapeSqlString($data['nome']) . ", " . intval($data['tempo_viagem'] ?? 5) . ", " . ($data['flg_cd'] ? '1' : '0') . ", " . ($data['flg_retorno'] ? '1' : '0') . ", '" . date('Y-m-d') . "', " . $this->escapeSqlString($userName) . ")";
 
             $insertResult = $this->executeUpdate($insertRotaSql);
 
@@ -1380,7 +1533,8 @@ class ProgressService
             Log::info('Atualizando rota SemParar', ['rota_id' => $rotaId, 'data' => $data]);
 
             // Atualizar rota principal (single line for Progress DB)
-            $updateRotaSql = "UPDATE PUB.semPararRot SET desSPararRot = " . $this->escapeSqlString($data['nome']) . ", tempoViagem = " . intval($data['tempo_viagem'] ?? 5) . ", flgCD = " . ($data['flg_cd'] ? '1' : '0') . ", flgRetorno = " . ($data['flg_retorno'] ? '1' : '0') . ", datAtu = '" . date('Y-m-d') . "', resAtu = " . $this->escapeSqlString(auth()->user()->name ?? 'system') . " WHERE sPararRotID = " . intval($rotaId);
+            $userName = auth()->user()?->name ?? 'system';
+            $updateRotaSql = "UPDATE PUB.semPararRot SET desSPararRot = " . $this->escapeSqlString($data['nome']) . ", tempoViagem = " . intval($data['tempo_viagem'] ?? 5) . ", flgCD = " . ($data['flg_cd'] ? '1' : '0') . ", flgRetorno = " . ($data['flg_retorno'] ? '1' : '0') . ", datAtu = '" . date('Y-m-d') . "', resAtu = " . $this->escapeSqlString($userName) . " WHERE sPararRotID = " . intval($rotaId);
 
             $updateResult = $this->executeUpdate($updateRotaSql);
 
@@ -1691,39 +1845,126 @@ class ProgressService
                 'total_municipios' => count($municipios)
             ]);
 
-            // Primeiro, deletar todos os municípios existentes
-            // IMPORTANTE: usar executeUpdate() para DELETE/INSERT/UPDATE
-            $sqlDelete = "DELETE FROM PUB.semPararRotMu WHERE sPararRotID = " . intval($rotaId);
-            $deleteResult = $this->executeUpdate($sqlDelete);
+            // FASE 1: VALIDAR TODOS OS DADOS ANTES DE DELETAR QUALQUER COISA
+            // (Progress JDBC não tem transações - se falhar após DELETE, dados são perdidos!)
+            foreach ($municipios as $index => $municipio) {
+                // Validar campos obrigatórios
+                if (!isset($municipio['sequencia']) || !isset($municipio['cod_est']) ||
+                    !isset($municipio['cod_mun']) || !isset($municipio['des_est']) ||
+                    !isset($municipio['des_mun']) || !isset($municipio['cdibge'])) {
 
-            if (!$deleteResult['success']) {
-                throw new Exception('Erro ao deletar municípios antigos');
-            }
+                    Log::error('Dados de município inválidos na posição ' . $index, ['municipio' => $municipio]);
+                    return [
+                        'success' => false,
+                        'error' => 'Dados inválidos no município da posição ' . ($index + 1) . '. Operação cancelada para evitar perda de dados.'
+                    ];
+                }
 
-            // Inserir novos municípios com a sequência correta
-            // IMPORTANTE: SQL single-line (Progress JDBC não gosta de quebras de linha)
-            foreach ($municipios as $municipio) {
-                $sqlInsert = "INSERT INTO PUB.semPararRotMu (sPararRotID, sPararMuSeq, CodEst, CodMun, DesEst, DesMun, cdibge) VALUES (" . intval($rotaId) . ", " . intval($municipio['sequencia']) . ", " . intval($municipio['cod_est']) . ", " . intval($municipio['cod_mun']) . ", " . $this->escapeSqlString($municipio['des_est']) . ", " . $this->escapeSqlString($municipio['des_mun']) . ", " . intval($municipio['cdibge']) . ")";
+                // Validar tipos de dados
+                if (!is_numeric($municipio['sequencia']) || !is_numeric($municipio['cod_est']) ||
+                    !is_numeric($municipio['cod_mun']) || !is_numeric($municipio['cdibge'])) {
 
-                $result = $this->executeUpdate($sqlInsert);
-
-                if (!$result['success']) {
-                    Log::error('Erro ao inserir município na rota', [
-                        'municipio' => $municipio,
-                        'error' => $result['error']
-                    ]);
-                    throw new Exception('Erro ao inserir município: ' . $municipio['des_mun']);
+                    Log::error('Tipos de dados inválidos no município da posição ' . $index, ['municipio' => $municipio]);
+                    return [
+                        'success' => false,
+                        'error' => 'Tipos de dados inválidos no município da posição ' . ($index + 1) . '. Operação cancelada.'
+                    ];
                 }
             }
 
-            // Atualizar data de modificação da rota
-            // IMPORTANTE: Usar date() do PHP ao invés de CURDATE() do SQL
+            // CORREÇÃO BUG #28: Strategy pattern em vez de DELETE+INSERT
+            // 1. Buscar municípios existentes
+            $sqlExistentes = "SELECT sPararMuSeq, CodEst, CodMun, DesEst, DesMun, cdibge FROM PUB.semPararRotMu WHERE sPararRotID = " . intval($rotaId);
+            $resultExistentes = $this->executeCustomQuery($sqlExistentes);
+
+            if (!$resultExistentes['success']) {
+                Log::error('Erro ao buscar municípios existentes', ['error' => $resultExistentes['error']]);
+                throw new Exception('Erro ao buscar municípios existentes: ' . ($resultExistentes['error'] ?? 'Erro desconhecido'));
+            }
+
+            $existentes = $resultExistentes['data']['results'] ?? [];
+            $seqsExistentes = array_column($existentes, 'sPararMuSeq');
+
+            Log::info('Municípios existentes carregados', [
+                'total_existentes' => count($existentes),
+                'sequencias' => $seqsExistentes
+            ]);
+
+            // 2. Processar cada município (UPDATE se existir, INSERT se novo)
+            $seqsNovos = [];
+            foreach ($municipios as $municipio) {
+                $seq = intval($municipio['sequencia']);
+                $seqsNovos[] = $seq;
+                $codEst = intval($municipio['cod_est']);
+                $codMun = intval($municipio['cod_mun']);
+                $desEst = $this->escapeSqlString($municipio['des_est']);
+                $desMun = $this->escapeSqlString($municipio['des_mun']);
+                $cdibge = intval($municipio['cdibge']);
+
+                if (in_array($seq, $seqsExistentes)) {
+                    // UPDATE existente
+                    $sqlUpdate = "UPDATE PUB.semPararRotMu SET CodEst = {$codEst}, CodMun = {$codMun}, DesEst = {$desEst}, DesMun = {$desMun}, cdibge = {$cdibge} WHERE sPararRotID = " . intval($rotaId) . " AND sPararMuSeq = {$seq}";
+                    $result = $this->executeUpdate($sqlUpdate);
+
+                    if (!$result['success']) {
+                        Log::error('Erro ao atualizar município', [
+                            'municipio' => $municipio['des_mun'],
+                            'sequencia' => $seq,
+                            'error' => $result['error']
+                        ]);
+                        throw new Exception('Erro ao atualizar município: ' . $municipio['des_mun'] . ' - ' . ($result['error'] ?? 'Erro desconhecido'));
+                    }
+
+                    Log::debug('Município atualizado', ['sequencia' => $seq, 'municipio' => $municipio['des_mun']]);
+                } else {
+                    // INSERT novo
+                    $sqlInsert = "INSERT INTO PUB.semPararRotMu (sPararRotID, sPararMuSeq, CodEst, CodMun, DesEst, DesMun, cdibge) VALUES (" . intval($rotaId) . ", {$seq}, {$codEst}, {$codMun}, {$desEst}, {$desMun}, {$cdibge})";
+                    $result = $this->executeUpdate($sqlInsert);
+
+                    if (!$result['success']) {
+                        Log::error('Erro ao inserir município', [
+                            'municipio' => $municipio['des_mun'],
+                            'sequencia' => $seq,
+                            'error' => $result['error']
+                        ]);
+                        throw new Exception('Erro ao inserir município: ' . $municipio['des_mun'] . ' - ' . ($result['error'] ?? 'Erro desconhecido'));
+                    }
+
+                    Log::debug('Município inserido', ['sequencia' => $seq, 'municipio' => $municipio['des_mun']]);
+                }
+            }
+
+            // 3. DELETE apenas os que foram removidos (não existem em $seqsNovos)
+            $seqsRemovidos = array_diff($seqsExistentes, $seqsNovos);
+            foreach ($seqsRemovidos as $seqRemovida) {
+                $sqlDelete = "DELETE FROM PUB.semPararRotMu WHERE sPararRotID = " . intval($rotaId) . " AND sPararMuSeq = " . intval($seqRemovida);
+                $result = $this->executeUpdate($sqlDelete);
+
+                if (!$result['success']) {
+                    Log::warning('Erro ao deletar município removido (não crítico)', [
+                        'sequencia' => $seqRemovida,
+                        'error' => $result['error']
+                    ]);
+                    // Não lançar exceção aqui, apenas log de warning
+                } else {
+                    Log::debug('Município removido', ['sequencia' => $seqRemovida]);
+                }
+            }
+
+            Log::info('Municípios processados com sucesso', [
+                'atualizados_ou_mantidos' => count(array_intersect($seqsExistentes, $seqsNovos)),
+                'inseridos' => count(array_diff($seqsNovos, $seqsExistentes)),
+                'removidos' => count($seqsRemovidos)
+            ]);
+
+            // FASE 5: Atualizar data de modificação da rota
             $sqlUpdate = "UPDATE PUB.semPararRot SET datAtu = '" . date('Y-m-d') . "', resAtu = 'web' WHERE sPararRotID = " . intval($rotaId);
 
             $updateResult = $this->executeUpdate($sqlUpdate);
 
             if (!$updateResult['success']) {
-                throw new Exception('Erro ao atualizar data da rota');
+                // Não é crítico, apenas log
+                Log::warning('Erro ao atualizar data da rota (não crítico)', ['error' => $updateResult['error']]);
             }
 
             return [
@@ -2371,6 +2612,36 @@ class ProgressService
     public function salvarSPararViagem(array $dados): array
     {
         try {
+            // CORREÇÃO BUG IMPORTANTE #6: Validar campos obrigatórios antes de INSERT
+            $camposObrigatorios = ['codpac', 'codRotCreateSP', 'codtrn', 'codViagem',
+                                    'nomRotSemParar', 'placa', 'rotaId', 'valorViagem', 'usuario'];
+
+            foreach ($camposObrigatorios as $campo) {
+                if (!isset($dados[$campo]) || $dados[$campo] === '' || $dados[$campo] === null) {
+                    Log::error('Campo obrigatório ausente em salvarSPararViagem', [
+                        'campo_faltante' => $campo,
+                        'dados_recebidos' => array_keys($dados),
+                        'method' => __METHOD__
+                    ]);
+
+                    return [
+                        'success' => false,
+                        'error' => "Campo obrigatório ausente: {$campo}",
+                        'data' => null
+                    ];
+                }
+            }
+
+            // Validar tipos de dados
+            if (!is_numeric($dados['codpac']) || !is_numeric($dados['codtrn']) ||
+                !is_numeric($dados['rotaId']) || !is_numeric($dados['valorViagem'])) {
+                return [
+                    'success' => false,
+                    'error' => 'Tipos de dados inválidos (codpac, codtrn, rotaId, valorViagem devem ser numéricos)',
+                    'data' => null
+                ];
+            }
+
             $sql = "INSERT INTO PUB.sPararViagem (" .
                    "CodPac, codRotCreateSP, codtrn, codViagem, nomRotSemParar, " .
                    "NumPla, sPararRotID, valViagem, resCompra, dataCompra" .

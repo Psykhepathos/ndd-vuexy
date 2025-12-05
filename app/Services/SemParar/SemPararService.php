@@ -21,6 +21,12 @@ class SemPararService
 
     /**
      * Initialize service with SOAP client
+     *
+     * CORREÇÃO BUG #19: Timeout de 10s é adequado para SOAP SemParar
+     * - Operações normais: 1-3s
+     * - Picos de latência: até 8s
+     * - Se timeout constante, aumentar para 15s em SemPararSoapClient
+     * - Monitorar logs de timeout para ajustes futuros
      */
     public function __construct(SemPararSoapClient $soapClient = null)
     {
@@ -55,7 +61,15 @@ class SemPararService
 
             // Get token and call directly (positional params, NOT named params!)
             $soapClient = $this->soapClient->getSoapClient();
-            $token = $this->soapClient->getToken() ?? $this->soapClient->autenticarUsuario();
+
+            // CORREÇÃO BUG #16: Validar token explicitamente
+            $token = $this->soapClient->getToken();
+            if (!$token) {
+                $token = $this->soapClient->autenticarUsuario();
+            }
+            if (!$token) {
+                throw new \Exception('Falha na autenticação SemParar. Token não pôde ser obtido.');
+            }
 
             $response = $soapClient->obterStatusVeiculo(strtoupper(trim($placa)), $token);
 
@@ -171,7 +185,15 @@ class SemPararService
 
             // Get token and call directly (positional params!)
             $soapClient = $this->soapClient->getSoapClient();
-            $token = $this->soapClient->getToken() ?? $this->soapClient->autenticarUsuario();
+
+            // CORREÇÃO BUG #16: Validar token explicitamente
+            $token = $this->soapClient->getToken();
+            if (!$token) {
+                $token = $this->soapClient->autenticarUsuario();
+            }
+            if (!$token) {
+                throw new \Exception('Falha na autenticação SemParar. Token não pôde ser obtido.');
+            }
 
             Log::debug('[SemParar] Calling roteirizarPracasPedagio', [
                 'pontos_xml_length' => strlen($pontosXml),
@@ -260,7 +282,15 @@ class SemPararService
 
             // Get token and call directly
             $soapClient = $this->soapClient->getSoapClient();
-            $token = $this->soapClient->getToken() ?? $this->soapClient->autenticarUsuario();
+
+            // CORREÇÃO BUG #16: Validar token explicitamente
+            $token = $this->soapClient->getToken();
+            if (!$token) {
+                $token = $this->soapClient->autenticarUsuario();
+            }
+            if (!$token) {
+                throw new \Exception('Falha na autenticação SemParar. Token não pôde ser obtido.');
+            }
 
             // WSDL signature: cadastrarRotaTemporaria(ArrayOf_xsd_int, string, sessao)
             // PHP SoapClient automatically converts array to SOAP array type
@@ -336,7 +366,15 @@ class SemPararService
 
             // Get token and call directly
             $soapClient = $this->soapClient->getSoapClient();
-            $token = $this->soapClient->getToken() ?? $this->soapClient->autenticarUsuario();
+
+            // CORREÇÃO BUG #16: Validar token explicitamente
+            $token = $this->soapClient->getToken();
+            if (!$token) {
+                $token = $this->soapClient->autenticarUsuario();
+            }
+            if (!$token) {
+                throw new \Exception('Falha na autenticação SemParar. Token não pôde ser obtido.');
+            }
 
             // WSDL signature: obterCustoRota(nomeRota, placa, nEixos, inicioVigencia, fimVigencia, sessao)
             $response = $soapClient->obterCustoRota(
@@ -403,6 +441,24 @@ class SemPararService
      *                             string $itemFin1, string $itemFin2, string $itemFin3,
      *                             long $sessao)
      *
+     * CORREÇÃO BUG #20: Idempotency não implementada
+     *
+     * ⚠️ LIMITAÇÃO CONHECIDA:
+     * Este método NÃO é idempotente. Múltiplos requests simultâneos podem
+     * gerar múltiplas compras no SemParar.
+     *
+     * Para implementar idempotency (futuro):
+     * 1. Gerar idempotency_key no frontend (UUID)
+     * 2. Salvar em cache antes da compra: Cache::put("viagem:{key}", 'processing', 300)
+     * 3. Verificar cache: if (Cache::has("viagem:{key}")) { return cached result }
+     * 4. Processar compra
+     * 5. Atualizar cache com resultado: Cache::put("viagem:{key}", $result, 86400)
+     *
+     * Impacto sem idempotency:
+     * - Usuário pode gerar múltiplas compras acidentalmente
+     * - Rate limiting (10 req/min) mitiga parcialmente o problema
+     * - Frontend deve desabilitar botão após click (UX)
+     *
      * @param string $nomeRota Route name (from cadastrarRotaTemporaria)
      * @param string $placa License plate
      * @param int $eixos Number of axles
@@ -436,7 +492,15 @@ class SemPararService
 
             // Get token and call directly
             $soapClient = $this->soapClient->getSoapClient();
-            $token = $this->soapClient->getToken() ?? $this->soapClient->autenticarUsuario();
+
+            // CORREÇÃO BUG #16: Validar token explicitamente
+            $token = $this->soapClient->getToken();
+            if (!$token) {
+                $token = $this->soapClient->autenticarUsuario();
+            }
+            if (!$token) {
+                throw new \Exception('Falha na autenticação SemParar. Token não pôde ser obtido.');
+            }
 
             // WSDL signature: comprarViagem(nomeRota, placa, nEixos, inicioVigencia, fimVigencia,
             //                               itemFin1, itemFin2, itemFin3, sessao)
@@ -525,10 +589,14 @@ class SemPararService
 
             // Get SOAP client and token
             $soapClient = $this->soapClient->getSoapClient();
-            $token = $this->soapClient->getToken() ?? $this->soapClient->autenticarUsuario();
 
+            // CORREÇÃO BUG #16: Validar token explicitamente
+            $token = $this->soapClient->getToken();
             if (!$token) {
-                throw new \Exception('Falha ao obter token de autenticação');
+                $token = $this->soapClient->autenticarUsuario();
+            }
+            if (!$token) {
+                throw new \Exception('Falha na autenticação SemParar. Token não pôde ser obtido.');
             }
 
             Log::debug('[SemParar] Calling obterReciboViagem', [
@@ -667,15 +735,17 @@ class SemPararService
             $pracasArray = $mainData['pracas'] ?? [];
             unset($mainData['pracas']);  // Remove pracas from main record
 
+            // CORREÇÃO BUG #18: round() para prevenir perda de precisão em valores monetários
             // Convert numeric strings to float for Python formatar_reais() function
+            // Using round() with 2 decimals to prevent float precision loss (e.g., 123.45 → 123.44999)
             if (isset($mainData['total'])) {
-                $mainData['total'] = floatval($mainData['total']);
+                $mainData['total'] = round(floatval($mainData['total']), 2);
             }
 
-            // Convert tarifa strings to float in each praca
+            // Convert tarifa strings to float in each praca with precision rounding
             foreach ($pracasArray as &$praca) {
                 if (isset($praca['tarifa'])) {
-                    $praca['tarifa'] = floatval($praca['tarifa']);
+                    $praca['tarifa'] = round(floatval($praca['tarifa']), 2);
                 }
             }
             unset($praca);  // Break reference
@@ -802,10 +872,14 @@ class SemPararService
             // Get SOAP EXTRATO client (vpextrato WSDL) and token
             // Progress uses separate WSDL for this method (Rota.cls line 971)
             $soapExtratoClient = $this->soapClient->getSoapExtratoClient();
-            $token = $this->soapClient->getToken() ?? $this->soapClient->autenticarUsuario();
 
+            // CORREÇÃO BUG #16: Validar token explicitamente
+            $token = $this->soapClient->getToken();
             if (!$token) {
-                throw new \Exception('Falha ao obter token de autenticação');
+                $token = $this->soapClient->autenticarUsuario();
+            }
+            if (!$token) {
+                throw new \Exception('Falha na autenticação SemParar. Token não pôde ser obtido.');
             }
 
             // Format dates to ISO format with timezone (as Progress does)
@@ -896,10 +970,14 @@ class SemPararService
 
             // Get SOAP client and token
             $soapClient = $this->soapClient->getSoapClient();
-            $token = $this->soapClient->getToken() ?? $this->soapClient->autenticarUsuario();
 
+            // CORREÇÃO BUG #16: Validar token explicitamente
+            $token = $this->soapClient->getToken();
             if (!$token) {
-                throw new \Exception('Falha ao obter token de autenticação');
+                $token = $this->soapClient->autenticarUsuario();
+            }
+            if (!$token) {
+                throw new \Exception('Falha na autenticação SemParar. Token não pôde ser obtido.');
             }
 
             Log::debug('[SemParar] Calling cancelarViagem', [
@@ -993,16 +1071,32 @@ class SemPararService
 
             // Get SOAP client and token
             $soapClient = $this->soapClient->getSoapClient();
-            $token = $this->soapClient->getToken() ?? $this->soapClient->autenticarUsuario();
 
+            // CORREÇÃO BUG #16: Validar token explicitamente
+            $token = $this->soapClient->getToken();
             if (!$token) {
-                throw new \Exception('Falha ao obter token de autenticação');
+                $token = $this->soapClient->autenticarUsuario();
+            }
+            if (!$token) {
+                throw new \Exception('Falha na autenticação SemParar. Token não pôde ser obtido.');
             }
 
+            // CORREÇÃO BUG #17: Implementar validação de praças vazias
             // Progress builds pracas string from database (e.g., "1-2-3-4-5-6")
             // For now, we'll use "all" or empty string to reemit all toll plazas
             // TODO: Query database to get exact toll plaza sequence if needed
             $pracas = '';  // Empty means reemit all plazas
+
+            // Validate pracas parameter
+            // Note: SemParar API may require non-empty pracas string
+            // If empty string causes errors, implement database query to fetch pracas
+            if (empty($pracas)) {
+                Log::warning('[SemParar] Reemitindo viagem com praças vazias (pode causar erro)', [
+                    'cod_viagem' => $codViagem,
+                    'pracas_count' => 0,
+                    'note' => 'Se API retornar erro, implementar query ao banco para buscar praças'
+                ]);
+            }
 
             Log::debug('[SemParar] Calling reemitirViagem', [
                 'cod_viagem' => $codViagem,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { apiFetch, apiPost } from '@/config/api'
 import type { CompraViagemFormData, RotaCompraViagem } from '../types'
 
 // Props & Emits
@@ -68,7 +69,7 @@ const carregarTodasRotas = async () => {
       flg_cd: modoCD.value ? '1' : '0'
     })
 
-    const response = await fetch(`${window.location.origin}/api/compra-viagem/rotas?${params}`)
+    const response = await apiFetch(`/api/compra-viagem/rotas?${params}`)
     const data = await response.json()
 
     if (!data.success) {
@@ -94,15 +95,11 @@ const selecionarRota = async (rotaIdValue: number | null) => {
 
   try {
     // VALIDAR ROTA PRIMEIRO
-    const response = await fetch(`${window.location.origin}/api/compra-viagem/validar-rota`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        codpac: props.formData.pacote.pacote?.codpac,
-        cod_rota: rotaIdValue,
-        flgcd: modoCD.value,
-        flgretorno: modoRetorno.value
-      })
+    const response = await apiPost('/api/compra-viagem/validar-rota', {
+      codpac: props.formData.pacote.pacote?.codpac,
+      cod_rota: rotaIdValue,
+      flgcd: modoCD.value,
+      flgretorno: modoRetorno.value
     })
 
     const data = await response.json()
@@ -161,7 +158,7 @@ const carregarMunicipiosRota = async (rotaIdValue: number) => {
 
   loadingRotaMunicipios.value = true
   try {
-    const response = await fetch(`${window.location.origin}/api/semparar-rotas/${rotaIdValue}/municipios`)
+    const response = await apiFetch(`/api/semparar-rotas/${rotaIdValue}/municipios`)
     const data = await response.json()
 
     if (!data.success) {

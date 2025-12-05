@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { apiPost } from '@/config/api'
 import type { CompraViagemFormData } from '../types'
 
 // Props & Emits
@@ -39,11 +40,7 @@ const validarPlaca = async () => {
 
   loadingPlaca.value = true
   try {
-    const response = await fetch(`${window.location.origin}/api/compra-viagem/validar-placa`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ placa: placa.value })
-    })
+    const response = await apiPost('/api/compra-viagem/validar-placa', { placa: placa.value })
 
     const data = await response.json()
 

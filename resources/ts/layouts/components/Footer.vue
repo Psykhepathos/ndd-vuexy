@@ -12,14 +12,14 @@
         class="mx-1"
       />
       por <a
-        href="https://pixinvent.com"
+        href="https://github.com/Psykhepathos"
         target="_blank"
         rel="noopener noreferrer"
         class="text-primary ms-1"
       >Diogo Fontoura</a>
     </span>
     <!-- 👉 Footer: right content -->
-    <span class="d-md-flex gap-x-4 text-primary d-none">
+    <!-- <span class="d-md-flex gap-x-4 text-primary d-none">
       <a
         href="https://themeforest.net/licenses/standard"
         target="noopener noreferrer"
@@ -36,6 +36,6 @@
         href="https://pixinvent.ticksy.com/"
         target="noopener noreferrer"
       >Suporte</a>
-    </span>
+    </span> -->
   </div>
 </template>

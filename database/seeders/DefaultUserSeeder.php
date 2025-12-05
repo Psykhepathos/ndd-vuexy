@@ -11,22 +11,28 @@ class DefaultUserSeeder extends Seeder
 {
     public function run(): void
     {
-        User::firstOrCreate([
-            'email' => 'admin@ndd.com'
-        ], [
-            'name' => 'Administrador NDD',
-            'email' => 'admin@ndd.com',
-            'password' => Hash::make('123456'),
-            'email_verified_at' => now(),
-        ]);
+        // Admin com senha forte: Admin@123
+        // Atende: min:8, lowercase, uppercase, number, special char
+        // updateOrCreate garante que role seja sempre 'admin' mesmo se user já existir
+        User::updateOrCreate(
+            ['email' => 'admin@ndd.com'],
+            [
+                'name' => 'Administrador NDD',
+                'password' => Hash::make('Admin@123'),
+                'role' => 'admin',
+                'email_verified_at' => now(),
+            ]
+        );
 
-        User::firstOrCreate([
-            'email' => 'user@ndd.com'
-        ], [
-            'name' => 'Usuario NDD',
-            'email' => 'user@ndd.com', 
-            'password' => Hash::make('123456'),
-            'email_verified_at' => now(),
-        ]);
+        // Usuario comum com senha forte: User@123
+        User::updateOrCreate(
+            ['email' => 'user@ndd.com'],
+            [
+                'name' => 'Usuario NDD',
+                'password' => Hash::make('User@123'),
+                'role' => 'user',
+                'email_verified_at' => now(),
+            ]
+        );
     }
 }

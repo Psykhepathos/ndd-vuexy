@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { watchDebounced } from '@vueuse/core'
-import { API_BASE_URL } from '@/config/api'
+import { API_BASE_URL, apiPost } from '@/config/api'
 
 definePage({
   meta: {
@@ -224,14 +224,7 @@ const fetchViagens = async () => {
 
     console.log('🔍 Buscando viagens com filtros:', payload)
 
-    const response = await fetch(`${API_BASE_URL}/api/compra-viagem/viagens`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    })
-
+    const response = await apiPost(`${API_BASE_URL}/api/compra-viagem/viagens`, payload)
     const data = await response.json()
 
     if (!data.success) {
@@ -366,18 +359,11 @@ const baixarRecibo = async (codViagem: string) => {
     const telefone = prompt('Digite o número com DDD (ex: 31988887777)')
     if (!telefone) return
 
-    const response = await fetch(`${API_BASE_URL}/api/semparar/gerar-recibo`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        cod_viagem: codViagem,
-        telefone: `55${telefone}`,
-        flg_imprime: false,
-      }),
+    const response = await apiPost(`${API_BASE_URL}/api/semparar/gerar-recibo`, {
+      cod_viagem: codViagem,
+      telefone: `55${telefone}`,
+      flg_imprime: false,
     })
-
     const data = await response.json()
 
     if (data.success) {
@@ -400,16 +386,9 @@ const cancelarViagem = async (codViagem: string) => {
   }
 
   try {
-    const response = await fetch(`${API_BASE_URL}/api/semparar/cancelar-viagem`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        cod_viagem: codViagem,
-      }),
+    const response = await apiPost(`${API_BASE_URL}/api/semparar/cancelar-viagem`, {
+      cod_viagem: codViagem,
     })
-
     const data = await response.json()
 
     if (data.success) {
@@ -435,17 +414,10 @@ const reemitirViagem = async (codViagem: string) => {
   }
 
   try {
-    const response = await fetch(`${API_BASE_URL}/api/semparar/reemitir-viagem`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        cod_viagem: codViagem,
-        placa: novaPlaca.toUpperCase(),
-      }),
+    const response = await apiPost(`${API_BASE_URL}/api/semparar/reemitir-viagem`, {
+      cod_viagem: codViagem,
+      placa: novaPlaca.toUpperCase(),
     })
-
     const data = await response.json()
 
     if (data.success) {

@@ -7,6 +7,7 @@ use App\Models\Progress\Transporte;
 use App\Services\ProgressEloquentService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 class EloquentTransporteController extends Controller
 {
@@ -22,10 +23,14 @@ class EloquentTransporteController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        // CORREÇÃO BUG #62: Adicionar nullable ao campo search
+        // CORREÇÃO BUG #66: Validação consistente - max:50 (limite de performance)
+        // Limite de 50 registros por página previne sobrecarga do Progress JDBC
+        // e melhora tempo de resposta. Para datasets grandes, usar paginação.
         $request->validate([
             'page' => 'integer|min:1',
-            'per_page' => 'integer|min:5|max:100',
-            'search' => 'string|max:255',
+            'per_page' => 'integer|min:5|max:50',
+            'search' => 'nullable|string|max:255',
             'tipo' => 'string|in:autonomo,empresa,todos',
             'natureza' => 'string|in:T,A',
             'status_ativo' => 'nullable|string|in:true,false'
@@ -50,6 +55,16 @@ class EloquentTransporteController extends Controller
             ], 500);
         }
 
+        // CORREÇÃO BUG #61: LGPD logging de listagem de transportes (Eloquent)
+        Log::info('Transportes listados (Eloquent)', [
+            'filters' => $filters,
+            'total_results' => $result['pagination']['total'] ?? 0,
+            'user_id' => auth()->id() ?? null,
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'timestamp' => now()->toIso8601String()
+        ]);
+
         return response()->json([
             'success' => true,
             'message' => 'Transportes obtidos com sucesso (Eloquent)',
@@ -61,7 +76,7 @@ class EloquentTransporteController extends Controller
     /**
      * Busca transporte específico usando Eloquent com relacionamentos
      */
-    public function show($id): JsonResponse
+    public function show($id, Request $request): JsonResponse
     {
         $result = $this->eloquentService->getTransporteById($id);
 
@@ -72,6 +87,15 @@ class EloquentTransporteController extends Controller
                 'data' => null
             ], $result['error'] ? 500 : 404);
         }
+
+        // CORREÇÃO BUG #63: LGPD logging de acesso a detalhes de transporte (Eloquent)
+        Log::info('Transporte acessado (Eloquent)', [
+            'transporte_id' => $id,
+            'user_id' => auth()->id() ?? null,
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'timestamp' => now()->toIso8601String()
+        ]);
 
         return response()->json([
             'success' => true,
@@ -96,11 +120,17 @@ class EloquentTransporteController extends Controller
     public function withRelacionamentos(Request $request): JsonResponse
     {
         try {
-            $transportes = Transporte::with(['veiculos', 'motoristas', 'ciots'])
+            // CORREÇÃO BUG #65: Otimizar with() para evitar N+1 query massivo
+            // Carregar apenas campos essenciais em vez de SELECT *
+            $transportes = Transporte::with([
+                    'veiculos:placa,tipo_veiculo,capacidade,codtrn',
+                    'motoristas:nome,cpf,codtrn',
+                    'ciots:numero,codtrn'
+                ])
                 ->ativos()
                 ->when($request->filled('tipo'), function ($query) use ($request) {
-                    return $request->tipo === 'autonomo' 
-                        ? $query->autonomos() 
+                    return $request->tipo === 'autonomo'
+                        ? $query->autonomos()
                         : $query->empresas();
                 })
                 ->when($request->filled('search'), function ($query) use ($request) {
@@ -155,6 +185,7 @@ class EloquentTransporteController extends Controller
      */
     public function buscaAvancada(Request $request): JsonResponse
     {
+        // CORREÇÃO BUG #66: Validação consistente - max:50 (limite de performance)
         $request->validate([
             'nome' => 'string|max:255',
             'codigo' => 'integer',
@@ -163,7 +194,7 @@ class EloquentTransporteController extends Controller
             'natureza' => 'in:T,A,F',
             'com_cd' => 'boolean',
             'com_veiculo' => 'boolean',
-            'limite' => 'integer|min:1|max:100'
+            'limite' => 'integer|min:1|max:50'
         ]);
 
         try {

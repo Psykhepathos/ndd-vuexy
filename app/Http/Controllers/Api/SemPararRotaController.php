@@ -35,8 +35,6 @@ class SemPararRotaController extends Controller
                 'tempo_maximo' => 'integer|min:0'
             ]);
 
-            Log::info('API: Listando rotas SemParar', ['filters' => $filters]);
-
             $result = $this->progressService->getSemPararRotas($filters);
 
             if (!$result['success']) {
@@ -46,6 +44,16 @@ class SemPararRotaController extends Controller
                     'data' => []
                 ], 500);
             }
+
+            // CORREÇÃO BUG #25: LGPD logging de listagem de rotas SemParar
+            Log::info('Rotas SemParar listadas', [
+                'filters' => $filters,
+                'total_results' => count($result['data']['results'] ?? []),
+                'user_id' => auth()->id() ?? null,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'timestamp' => now()->toIso8601String()
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -111,6 +119,21 @@ class SemPararRotaController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        // CORREÇÃO BUG #26: Apenas administradores podem criar rotas
+        if (!$request->user() || $request->user()->role !== 'admin') {
+            Log::warning('Tentativa de criar rota sem permissão', [
+                'user_id' => $request->user()?->id,
+                'user_email' => $request->user()?->email,
+                'ip' => $request->ip(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Acesso negado. Apenas administradores podem criar rotas.'
+            ], 403);
+        }
+
         try {
             $data = $request->validate([
                 'nome' => 'required|string|max:60',
@@ -169,6 +192,22 @@ class SemPararRotaController extends Controller
      */
     public function update(Request $request, $id): JsonResponse
     {
+        // CORREÇÃO BUG #26: Apenas administradores podem atualizar rotas
+        if (!$request->user() || $request->user()->role !== 'admin') {
+            Log::warning('Tentativa de atualizar rota sem permissão', [
+                'user_id' => $request->user()?->id,
+                'user_email' => $request->user()?->email,
+                'rota_id' => $id,
+                'ip' => $request->ip(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Acesso negado. Apenas administradores podem atualizar rotas.'
+            ], 403);
+        }
+
         try {
             $data = $request->validate([
                 'nome' => 'required|string|max:60',
@@ -226,8 +265,37 @@ class SemPararRotaController extends Controller
     /**
      * Remove uma rota SemParar
      */
-    public function destroy($id): JsonResponse
+    public function destroy(Request $request, $id): JsonResponse
     {
+        // CORREÇÃO BUG #26: Apenas administradores podem deletar rotas
+        if (!$request->user() || $request->user()->role !== 'admin') {
+            Log::warning('Tentativa de deletar rota sem permissão', [
+                'user_id' => $request->user()?->id,
+                'user_email' => $request->user()?->email,
+                'rota_id' => $id,
+                'ip' => $request->ip(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Acesso negado. Apenas administradores podem deletar rotas.'
+            ], 403);
+        }
+
+        // CORREÇÃO BUG #27: Validar confirmation code para operação destrutiva
+        $validated = $request->validate([
+            'confirmation_code' => 'required|string'
+        ]);
+
+        // Verificar confirmation code (simples verificação - pode ser melhorado)
+        if ($validated['confirmation_code'] !== 'DELETE_ROUTE_' . $id) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Código de confirmação inválido'
+            ], 400);
+        }
+
         try {
             Log::info('API: Removendo rota SemParar', ['id' => $id]);
 
@@ -389,6 +457,22 @@ class SemPararRotaController extends Controller
      */
     public function updateMunicipios(Request $request, $id): JsonResponse
     {
+        // CORREÇÃO BUG #26: Apenas administradores podem atualizar municípios
+        if (!$request->user() || $request->user()->role !== 'admin') {
+            Log::warning('Tentativa de atualizar municípios sem permissão', [
+                'user_id' => $request->user()?->id,
+                'user_email' => $request->user()?->email,
+                'rota_id' => $id,
+                'ip' => $request->ip(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Acesso negado. Apenas administradores podem atualizar municípios.'
+            ], 403);
+        }
+
         try {
             $data = $request->validate([
                 'municipios' => 'required|array',

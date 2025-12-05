@@ -13,28 +13,47 @@ use App\Http\Controllers\Api\RotaController;
 use App\Http\Controllers\Api\SemPararController;
 use App\Http\Controllers\Api\SemPararRotaController;
 use App\Http\Controllers\Api\TransporteController;
+use App\Http\Controllers\Api\NddCargoController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-// Rotas de autenticação (públicas)
-Route::post('auth/login', [AuthController::class, 'login']);
-Route::post('auth/register', [AuthController::class, 'register']);
+// Rotas de autenticação (públicas) com rate limiting por IP
+// Nota: Aumentado para 10/min pois escritórios compartilham IP
+Route::post('auth/login', [AuthController::class, 'login'])
+    ->middleware('throttle:10,1'); // 10 tentativas por minuto por IP
+Route::post('auth/register', [AuthController::class, 'register'])
+    ->middleware('throttle:5,1'); // 5 registros por minuto por IP
 
 // Rotas protegidas por autenticação
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('auth/logout', [AuthController::class, 'logout']);
-    Route::get('auth/user', [AuthController::class, 'user']);
+
+    // CORREÇÃO #6: Rate limiting para prevenir token enumeration
+    Route::get('auth/user', [AuthController::class, 'user'])
+        ->middleware('throttle:60,1');  // 60 req/min
 });
 
 Route::middleware('api')->group(function () {
     Route::apiResource('motoristas', MotoristaController::class);
     Route::get('motoristas/progress/{codigo}', [MotoristaController::class, 'findByProgressCode']);
 
+    // CORREÇÃO #1+#2: Rate limiting + Autenticação para ProgressController
     Route::prefix('progress')->group(function () {
-        Route::get('test-connection', [ProgressController::class, 'testConnection']);
-        Route::get('transportes', [ProgressController::class, 'getTransportes']);
-        Route::get('transportes/{id}', [ProgressController::class, 'getTransporteById']);
-        Route::post('query', [ProgressController::class, 'executeCustomQuery']);
+        // Endpoints públicos com rate limiting (CORREÇÃO #2: Prevenir DoS)
+        Route::get('test-connection', [ProgressController::class, 'testConnection'])
+            ->middleware('throttle:10,1');  // 10 req/min - health check
+
+        Route::get('transportes', [ProgressController::class, 'getTransportes'])
+            ->middleware('throttle:60,1');  // 60 req/min - listagem
+
+        Route::get('transportes/{id}', [ProgressController::class, 'getTransporteById'])
+            ->middleware('throttle:60,1');  // 60 req/min - leitura específica
+
+        // CORREÇÃO #1: Custom query APENAS para usuários autenticados + rate limiting agressivo
+        Route::middleware(['auth:sanctum'])->group(function () {
+            Route::post('query', [ProgressController::class, 'executeCustomQuery'])
+                ->middleware('throttle:5,1');  // 5 req/min - apenas admins
+        });
     });
     
     // Rotas para TransporteController (JDBC Progress) - específicas primeiro
@@ -68,17 +87,22 @@ Route::middleware('api')->group(function () {
     // Rotas para RotaController (JDBC Progress) - para autocomplete
     Route::get('rotas', [RotaController::class, 'index']);
     
-    // Rotas para proxy de roteamento (contorna CORS)
+    // Rotas para proxy de roteamento OSRM (100% gratuito, contorna CORS)
     Route::prefix('routing')->group(function () {
         Route::get('test', [\App\Http\Controllers\Api\RoutingController::class, 'testConnection']);
         Route::post('route', [\App\Http\Controllers\Api\RoutingController::class, 'getRoute']);
-        Route::post('calculate', [\App\Http\Controllers\Api\RoutingController::class, 'calculateRoute']);
+        // Route::post('calculate', ...) - DEPRECATED - Google Directions removido
     });
     
     // Rotas para monitoramento Google Maps
+    // CORREÇÃO BUG #44: Proteger endpoints de quota com autenticação
     Route::prefix('google-maps')->group(function () {
-        Route::get('quota', [\App\Http\Controllers\Api\GoogleMapsQuotaController::class, 'getUsageStats']);
-        Route::post('reset-counters', [\App\Http\Controllers\Api\GoogleMapsQuotaController::class, 'resetCounters']);
+        Route::middleware(['auth:sanctum'])->group(function () {
+            Route::get('quota', [\App\Http\Controllers\Api\GoogleMapsQuotaController::class, 'getUsageStats'])
+                ->middleware('throttle:30,1');  // 30 requests per minute
+            Route::post('reset-counters', [\App\Http\Controllers\Api\GoogleMapsQuotaController::class, 'resetCounters'])
+                ->middleware('throttle:5,1');  // 5 requests per minute (admin operation)
+        });
     });
     
     // Rotas para cache de rotas
@@ -86,23 +110,30 @@ Route::middleware('api')->group(function () {
         Route::post('find', [\App\Http\Controllers\Api\RouteCacheController::class, 'findRoute']);
         Route::post('save', [\App\Http\Controllers\Api\RouteCacheController::class, 'saveRoute']);
         Route::get('stats', [\App\Http\Controllers\Api\RouteCacheController::class, 'getStats']);
-        Route::delete('clear-expired', [\App\Http\Controllers\Api\RouteCacheController::class, 'clearExpired']);
+
+        // CORREÇÃO BUG #50: Endpoint administrativo requer autenticação
+        Route::delete('clear-expired', [\App\Http\Controllers\Api\RouteCacheController::class, 'clearExpired'])
+            ->middleware('auth:sanctum');
     });
 
     // Rotas para gestão de rotas SemParar
     Route::prefix('semparar-rotas')->group(function () {
-        // Rotas específicas primeiro para evitar conflitos
+        // Rotas específicas primeiro para evitar conflitos (públicas)
         Route::get('municipios', [SemPararRotaController::class, 'municipios']);
         Route::get('estados', [SemPararRotaController::class, 'estados']);
 
-        // Rotas CRUD
+        // Rotas GET (públicas)
         Route::get('/', [SemPararRotaController::class, 'index']);
-        Route::post('/', [SemPararRotaController::class, 'store']);
         Route::get('/{id}', [SemPararRotaController::class, 'show']);
         Route::get('/{id}/municipios', [SemPararRotaController::class, 'showWithMunicipios']);
-        Route::put('/{id}', [SemPararRotaController::class, 'update']);
-        Route::put('/{id}/municipios', [SemPararRotaController::class, 'updateMunicipios']);
-        Route::delete('/{id}', [SemPararRotaController::class, 'destroy']);
+
+        // Rotas de modificação (protegidas - requerem autenticação de admin)
+        Route::middleware('auth:sanctum')->group(function () {
+            Route::post('/', [SemPararRotaController::class, 'store']);
+            Route::put('/{id}', [SemPararRotaController::class, 'update']);
+            Route::put('/{id}/municipios', [SemPararRotaController::class, 'updateMunicipios']);
+            Route::delete('/{id}', [SemPararRotaController::class, 'destroy']);
+        });
     });
 
     // Rotas para geocoding (conversão IBGE → lat/lon com cache)
@@ -124,6 +155,7 @@ Route::middleware('api')->group(function () {
             ->middleware('throttle:60,1');  // 60 requests per minute
 
         // Importar CSV (público por ora, considerar auth futuramente)
+        // CORREÇÃO BUG #43: Rate limiting aplicado corretamente
         Route::post('importar', [PracaPedagioController::class, 'importar'])
             ->middleware('throttle:5,1');   // 5 requests per minute (operação pesada)
 
@@ -143,8 +175,9 @@ Route::middleware('api')->group(function () {
     // Rotas para MapService unificado (FASE 1 - Backend Foundation)
     Route::prefix('map')->group(function () {
         // Route calculation with automatic provider selection
+        // CORREÇÃO BUG #56: Rate limiting adequado para prevenir abuse
         Route::post('route', [MapController::class, 'calculateRoute'])
-            ->middleware('throttle:100,1');  // 100 requests per minute
+            ->middleware('throttle:60,1');  // 60 requests per minute
 
         // Batch geocoding
         Route::post('geocode-batch', [MapController::class, 'geocodeBatch'])
@@ -155,10 +188,13 @@ Route::middleware('api')->group(function () {
             ->middleware('throttle:60,1');  // 60 requests per minute
 
         // Cache management
-        Route::get('cache-stats', [MapController::class, 'cacheStats'])
-            ->middleware('throttle:30,1');  // 30 requests per minute
-        Route::post('clear-expired-cache', [MapController::class, 'clearExpiredCache'])
-            ->middleware('throttle:5,1');   // 5 requests per minute (admin operation)
+        // CORREÇÃO BUG #59: Proteger endpoints de cache com autenticação
+        Route::middleware(['auth:sanctum'])->group(function () {
+            Route::get('cache-stats', [MapController::class, 'cacheStats'])
+                ->middleware('throttle:30,1');  // 30 requests per minute
+            Route::post('clear-expired-cache', [MapController::class, 'clearExpiredCache'])
+                ->middleware('throttle:5,1');   // 5 requests per minute (admin operation)
+        });
 
         // Provider information
         Route::get('providers', [MapController::class, 'providers'])
@@ -166,17 +202,19 @@ Route::middleware('api')->group(function () {
     });
 
     // Proxy OSRM (roteamento gratuito)
-    Route::post('osrm/route', [OSRMController::class, 'getRoute']);
+    // CORREÇÃO BUG #52: Rate limiting para prevenir abuse
+    Route::post('osrm/route', [OSRMController::class, 'getRoute'])
+        ->middleware('throttle:60,1');  // 60 requests per minute
 
-    // Rotas para SemParar SOAP API (FASE 1A + 1B)
+    // Rotas PÚBLICAS para SemParar SOAP API (FASE 1A + 1B - consultas/simulações)
     Route::prefix('semparar')->group(function () {
-        // FASE 1A - Core
+        // FASE 1A - Core (públicas para teste e monitoramento)
         Route::get('test-connection', [SemPararController::class, 'testConnection'])
             ->middleware('throttle:10,1');  // 10 requests per minute
         Route::post('status-veiculo', [SemPararController::class, 'statusVeiculo'])
             ->middleware('throttle:60,1');  // 60 requests per minute
 
-        // FASE 1B - Routing
+        // FASE 1B - Routing (públicas para simulação)
         Route::post('roteirizar', [SemPararController::class, 'roteirizar'])
             ->middleware('throttle:20,1');  // 20 requests per minute
         Route::post('rota-temporaria', [SemPararController::class, 'cadastrarRotaTemporaria'])
@@ -184,57 +222,108 @@ Route::middleware('api')->group(function () {
         Route::post('custo-rota', [SemPararController::class, 'obterCustoRota'])
             ->middleware('throttle:60,1');  // 60 requests per minute
 
-        // FASE 2A - Purchase
+        // Debug endpoints (only available in APP_DEBUG=true, protected in controller)
+        Route::get('debug/token', [SemPararController::class, 'debugToken']);
+        Route::post('debug/clear-cache', [SemPararController::class, 'clearCache']);
+    });
+
+    // Rotas PÚBLICAS para SemParar SOAP API (FASE 2A + 2C + 3A)
+    // NOTA: Rotas públicas pois Progress database não possui segurança user-level
+    // Rate limiting já protege contra DoS e abuse de operações críticas
+    // Se autenticação for necessária no futuro, atualizar frontend primeiro
+    Route::prefix('semparar')->group(function () {
+        // FASE 2A - Purchase (CRÍTICO - operação financeira, rate limit 10/min)
+        // CORREÇÃO BUG #15: Rate limiting aplicado corretamente
         Route::post('comprar-viagem', [SemPararController::class, 'comprarViagem'])
             ->middleware('throttle:10,1');  // 10 requests per minute (sensitive operation)
 
-        // FASE 2C - Receipt
+        // FASE 2C - Receipt (CRÍTICO - dados sensíveis + envio WhatsApp)
+        // CORREÇÃO BUG #15: Rate limiting aplicado corretamente
         Route::post('obter-recibo', [SemPararController::class, 'obterRecibo'])
             ->middleware('throttle:60,1');  // 60 requests per minute
         Route::post('gerar-recibo', [SemPararController::class, 'gerarRecibo'])
-            ->middleware('throttle:20,1');  // 20 requests per minute (sends WhatsApp/Email)
+            ->middleware('throttle:10,1');  // 10 requests per minute (sends WhatsApp/Email - sensitive)
 
-        // FASE 3A - Query & Management
+        // FASE 3A - Query & Management (CRÍTICO - dados sensíveis + operações irreversíveis)
         Route::post('consultar-viagens', [SemPararController::class, 'consultarViagens'])
             ->middleware('throttle:60,1');  // 60 requests per minute
         Route::post('cancelar-viagem', [SemPararController::class, 'cancelarViagem'])
             ->middleware('throttle:20,1');  // 20 requests per minute (cancels trip)
         Route::post('reemitir-viagem', [SemPararController::class, 'reemitirViagem'])
             ->middleware('throttle:20,1');  // 20 requests per minute (reissues trip)
+    });
 
-        // Debug endpoints (only available in APP_DEBUG=true)
-        Route::get('debug/token', [SemPararController::class, 'debugToken']);
-        Route::post('debug/clear-cache', [SemPararController::class, 'clearCache']);
+    // Rotas PÚBLICAS para NDD Cargo API (Roteirizador e Vale Pedágio)
+    // Integração com protocolo CrossTalk sobre SOAP 1.1
+    // @see docs/integracoes/ndd-cargo/README.md
+    Route::prefix('ndd-cargo')->group(function () {
+        // Info e health check (públicos)
+        Route::get('info', [NddCargoController::class, 'info'])
+            ->middleware('throttle:120,1');  // 120 requests per minute
+        Route::get('test-connection', [NddCargoController::class, 'testConnection'])
+            ->middleware('throttle:10,1');  // 10 requests per minute
+
+        // Consultas de roteirizador (públicas para simulação)
+        Route::post('roteirizador', [NddCargoController::class, 'consultarRoteirizador'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+        Route::post('rota-simples', [NddCargoController::class, 'consultarRotaSimples'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        // Consulta de resultado assíncrono
+        Route::get('resultado/{guid}', [NddCargoController::class, 'consultarResultado'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
     });
 
     // ⚠️ Compra de Viagem SemParar - MODO DE TESTE ATIVO ⚠️
     // IMPORTANTE: Todas as chamadas estão em modo simulação para evitar compras acidentais
+
+    // ENDPOINTS PÚBLICOS (sem autenticação necessária)
+    // CORREÇÃO #4: Rate limiting para prevenir DoS
     Route::prefix('compra-viagem')->group(function () {
-        Route::get('initialize', [CompraViagemController::class, 'initialize']);
-        Route::get('statistics', [CompraViagemController::class, 'statistics']);
-        Route::get('health', [CompraViagemController::class, 'health']);
+        Route::get('initialize', [CompraViagemController::class, 'initialize'])
+            ->middleware('throttle:120,1');  // 120 req/min - informações leves
+        Route::get('health', [CompraViagemController::class, 'health'])
+            ->middleware('throttle:120,1');  // 120 req/min - health check
+    });
+
+    // ENDPOINTS PÚBLICOS (consistente com pacotes/transportes)
+    // NOTA: Rotas públicas pois Progress database não possui segurança user-level
+    // Rate limiting já protege contra DoS e brute force
+    // Se autenticação for necessária no futuro, atualizar frontend primeiro
+    Route::prefix('compra-viagem')->group(function () {
+        // ESTATÍSTICAS (operação cara no Progress)
+        Route::get('statistics', [CompraViagemController::class, 'statistics'])
+            ->middleware('throttle:10,1');  // 10 req/min - query complexa
 
         // LISTAGEM: Busca viagens do Progress (tabela PUB.sPararViagem)
-        Route::post('viagens', [CompraViagemController::class, 'listarViagens']);
+        Route::post('viagens', [CompraViagemController::class, 'listarViagens'])
+            ->middleware('throttle:60,1');  // 60 req/min - operação padrão
 
         // FASE 2: Validação de pacote
-        Route::post('validar-pacote', [CompraViagemController::class, 'validarPacote']);
+        Route::post('validar-pacote', [CompraViagemController::class, 'validarPacote'])
+            ->middleware('throttle:60,1');  // 60 req/min - operação padrão
 
         // FASE 3: Validação de placa/veículo
-        Route::post('validar-placa', [CompraViagemController::class, 'validarPlaca']);
+        Route::post('validar-placa', [CompraViagemController::class, 'validarPlaca'])
+            ->middleware('throttle:60,1');  // 60 req/min - operação padrão
 
         // FASE 4: Seleção de rota
-        Route::get('rotas', [CompraViagemController::class, 'listarRotas']);
-        Route::post('validar-rota', [CompraViagemController::class, 'validarRota']);
+        Route::get('rotas', [CompraViagemController::class, 'listarRotas'])
+            ->middleware('throttle:60,1');  // 60 req/min - autocomplete
+        Route::post('validar-rota', [CompraViagemController::class, 'validarRota'])
+            ->middleware('throttle:60,1');  // 60 req/min - validação
 
-        // FASE 5: Verificação de preço
-        Route::post('verificar-preco', [CompraViagemController::class, 'verificarPreco']);
+        // FASE 5: Verificação de preço (chamada SOAP externa)
+        Route::post('verificar-preco', [CompraViagemController::class, 'verificarPreco'])
+            ->middleware('throttle:30,1');  // 30 req/min - SOAP call
 
-        // FASE 6: Compra de viagem
-        Route::post('comprar', [CompraViagemController::class, 'comprarViagem']);
+        // FASE 6: Compra de viagem (CRÍTICO - Operação financeira)
+        Route::post('comprar', [CompraViagemController::class, 'comprarViagem'])
+            ->middleware('throttle:10,1');  // 10 req/min - previne compras duplicadas
 
         // DEBUG: Análise completa do fluxo
-        Route::post('debug-flow', [\App\Http\Controllers\Api\DebugSemPararController::class, 'debugFlow']);
+        Route::post('debug-flow', [\App\Http\Controllers\Api\DebugSemPararController::class, 'debugFlow'])
+            ->middleware('throttle:10,1');  // 10 req/min - debug apenas
 
         // TODO: Adicionar rotas das próximas fases aqui
         // Route::post('gerar-recibo', [CompraViagemController::class, 'gerarRecibo']);
