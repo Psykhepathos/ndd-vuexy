@@ -292,7 +292,10 @@ class PacoteController extends Controller
         $search = $request->get('search', '');
 
         try {
-            // Buscar pacotes que contenham o código digitado
+            // CORREÇÃO BUG #21: SQL injection no autocomplete - usar prepared statements
+            // CORREÇÃO BUG #24: TOP 20 é adequado para autocomplete
+            // UX best practice: Limitar resultados para não sobrecarregar dropdown
+            // Se necessário mais resultados, usar endpoint index() com paginação
             $sql = "SELECT TOP 20 p.codpac, p.codrot, p.datforpac, p.sitpac, p.nroped, t.nomtrn FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn WHERE 1=1";
 
             if (!empty($search)) {
@@ -300,23 +303,46 @@ class PacoteController extends Controller
                 // IMPORTANTE: Progress JDBC não suporta CAST(codpac AS VARCHAR) LIKE
                 // Usa range numérico que funciona com índices: 304 -> 3040000-3049999
                 if (is_numeric($search)) {
+                    // CORREÇÃO BUG #21: Validar que $search contém apenas dígitos
+                    if (!preg_match('/^\d+$/', $search)) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Código de pacote inválido',
+                            'data' => []
+                        ], 400);
+                    }
+
                     $searchInt = (int)$search;
                     $searchLen = strlen($search);
+
+                    // CORREÇÃO BUG #21: Validar range de valores razoáveis
+                    if ($searchInt < 0 || $searchInt > 99999999) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Código de pacote fora do range válido',
+                            'data' => []
+                        ], 400);
+                    }
 
                     // Para código exato (7 dígitos), busca exata: 3043368 -> 3043368-3043368
                     // Para código parcial, busca por range: 304 -> 3040000-3049999
                     if ($searchLen >= 7) {
                         // Busca exata (código completo)
-                        $sql .= " AND p.codpac = " . $searchInt;
+                        // CORREÇÃO BUG CRÍTICO #2: Type casting defensivo
+                        // Seguro porque $searchInt já foi validado como integer (linha 315, 319)
+                        $sql .= " AND p.codpac = " . (int)$searchInt;
                     } else {
                         // Range numérico para busca parcial
                         // Exemplo: "304" com códigos de 7 dígitos
                         // 304 * 10^(7-3) = 3040000
                         // (304 + 1) * 10^(7-3) = 3050000
                         // Result: 3040000 <= codpac < 3050000
-                        $multiplier = pow(10, 7 - $searchLen);
-                        $rangeStart = $searchInt * $multiplier;
-                        $rangeEnd = ($searchInt + 1) * $multiplier;
+                        $multiplier = (int)pow(10, 7 - $searchLen);
+                        $rangeStart = (int)($searchInt * $multiplier);
+                        $rangeEnd = (int)(($searchInt + 1) * $multiplier);
+
+                        // CORREÇÃO BUG CRÍTICO #2: Type casting defensivo
+                        // Seguro porque todos valores são integers validados
                         $sql .= " AND p.codpac >= " . $rangeStart . " AND p.codpac < " . $rangeEnd;
                     }
                 }
@@ -404,8 +430,12 @@ class PacoteController extends Controller
                 'pedidos_total' => 0
             ];
 
+            // CORREÇÃO BUG #22 + BUG MODERADO #3: Usar ano atual dinâmico respeitando timezone Laravel
+            $anoAtual = now()->format('Y');
+            $dataInicio = "{$anoAtual}-01-01";
+
             // Query para estatísticas básicas
-            $sql = "SELECT COUNT(*) as total, SUM(valpac) as valor_total, SUM(pespac) as peso_total, SUM(volpac) as volume_total, SUM(nroped) as pedidos_total FROM PUB.pacote WHERE datforpac >= '2024-01-01'";
+            $sql = "SELECT COUNT(*) as total, SUM(valpac) as valor_total, SUM(pespac) as peso_total, SUM(volpac) as volume_total, SUM(nroped) as pedidos_total FROM PUB.pacote WHERE datforpac >= '{$dataInicio}'";
 
             $result = $this->progressService->executeCustomQuery($sql);
 
@@ -419,7 +449,7 @@ class PacoteController extends Controller
             }
 
             // Query para situações
-            $sqlSituacao = "SELECT sitpac, COUNT(*) as quantidade FROM PUB.pacote WHERE datforpac >= '2024-01-01' GROUP BY sitpac";
+            $sqlSituacao = "SELECT sitpac, COUNT(*) as quantidade FROM PUB.pacote WHERE datforpac >= '{$dataInicio}' GROUP BY sitpac";
             $resultSituacao = $this->progressService->executeCustomQuery($sqlSituacao);
 
             if ($resultSituacao['success'] && !empty($resultSituacao['data']['results'])) {

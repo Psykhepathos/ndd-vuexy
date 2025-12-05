@@ -57,6 +57,7 @@ const loadPacote = async () => {
 
     if (data.success && data.data?.pedidos) {
       // Mapear pedidos para formato de entregas
+      // CORREÇÃO: Backend agora retorna number (float) após BUG MODERADO #1
       entregas.value = data.data.pedidos.map(pedido => ({
         seqent: pedido.seqent,
         razcli: pedido.razcli,
@@ -64,8 +65,12 @@ const loadPacote = async () => {
         baicli: pedido.baicli,
         cidcli: pedido.cidcli,
         sigufs: pedido.sigufs,
-        lat: parseFloat(pedido.gps_lat?.replace(',', '.') || '0'),
-        lon: parseFloat(pedido.gps_lon?.replace(',', '.') || '0')
+        lat: typeof pedido.gps_lat === 'number'
+          ? pedido.gps_lat
+          : parseFloat(pedido.gps_lat?.replace(',', '.') || '0'),
+        lon: typeof pedido.gps_lon === 'number'
+          ? pedido.gps_lon
+          : parseFloat(pedido.gps_lon?.replace(',', '.') || '0')
       }))
 
       testStatus.value = `✅ ${entregas.value.length} entregas carregadas`

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { apiPost } from '@/config/api'
 import type { CompraViagemFormData } from '../types'
 
 // Props & Emits
@@ -45,17 +46,13 @@ const verificarPreco = async () => {
   try {
     console.log('💰 Calculando preço da viagem...')
 
-    const response = await fetch(`${window.location.origin}/api/compra-viagem/verificar-preco`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        codpac: props.formData.pacote.pacote.codpac,
-        cod_rota: props.formData.rota.rota.sPararRotID,
-        qtd_eixos: props.formData.placa.eixos,
-        placa: props.formData.placa.placa,
-        data_inicio: props.formData.configuracao.dataInicio,
-        data_fim: props.formData.configuracao.dataFim
-      })
+    const response = await apiPost('/api/compra-viagem/verificar-preco', {
+      codpac: props.formData.pacote.pacote.codpac,
+      cod_rota: props.formData.rota.rota.sPararRotID,
+      qtd_eixos: props.formData.placa.eixos,
+      placa: props.formData.placa.placa,
+      data_inicio: props.formData.configuracao.dataInicio,
+      data_fim: props.formData.configuracao.dataFim
     })
 
     const data = await response.json()

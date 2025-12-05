@@ -19,9 +19,30 @@ class DebugSemPararController extends Controller
 
     /**
      * Debug completo do fluxo SemParar
+     *
+     * SECURITY: Este endpoint está protegido por middleware auth:sanctum em routes/api.php (linha 296).
+     * O uso de $request->user() é seguro pois Sanctum garante que user() não será null.
+     * Verificar routes/api.php para confirmar proteção ativa.
      */
     public function debugFlow(Request $request)
     {
+        // CORREÇÃO BUG MODERADO #4: Verificar se usuário é admin antes de permitir debug
+        $user = $request->user();
+        if (!$user || $user->role !== 'admin') {
+            Log::warning('Tentativa de acesso ao debug por usuário não-admin', [
+                'user_id' => $user?->id,
+                'user_email' => $user?->email,
+                'user_role' => $user?->role,
+                'ip' => $request->ip(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Acesso negado. Apenas administradores podem acessar debug.'
+            ], 403);
+        }
+
         // CORREÇÃO #1: Bloquear endpoint em produção
         if (!config('app.debug')) {
             Log::warning('Tentativa de acesso ao endpoint de debug em produção bloqueada', [
@@ -150,14 +171,14 @@ class DebugSemPararController extends Controller
             // ANÁLISE: Comparação Progress vs PHP
             $debug['analysis'] = [
                 'progress_flow' => [
-                    '1. Loop municipios rota (semPararRotMu) → t-entrega com IBGE, lat=0, lon=0',
-                    '2. Loop entregas pacote (carga→pedido→arqrdnt) → t-entrega com GPS real',
-                    '3. Se achou município pelo nome → ZERA GPS e mantém IBGE (linha 787-790)',
+                    '1. Loop municipios rota (semPararRotMu) -> t-entrega com IBGE, lat=0, lon=0',
+                    '2. Loop entregas pacote (carga->pedido->arqrdnt) -> t-entrega com GPS real',
+                    '3. Se achou município pelo nome -> ZERA GPS e mantém IBGE (linha 787-790)',
                     '4. Envia DATASET com mix: municípios (IBGE+0,0) + entregas (GPS+IBGE=0)',
                 ],
                 'php_current_implementation' => [
-                    '1. Busca municípios → adiciona com IBGE, lat=0, lon=0 ✓',
-                    '2. Busca entregas via getItinerarioPacote() → TIMEOUT/LENTO ❌',
+                    '1. Busca municípios -> adiciona com IBGE, lat=0, lon=0 ✓',
+                    '2. Busca entregas via getItinerarioPacote() -> TIMEOUT/LENTO ❌',
                     '3. Não está chegando entregas com GPS ❌'
                 ],
                 'problem_identified' => 'Query de entregas está travando. Progress usa loop FOR EACH otimizado, PHP usa JOIN pesado.',

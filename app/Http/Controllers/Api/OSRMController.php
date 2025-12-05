@@ -23,10 +23,58 @@ class OSRMController extends Controller
 
             $coordinates = $request->input('coordinates');
 
+            // CORREÇÃO BUG #53: SSRF vulnerability - validar formato de coordenadas
+            // Formato esperado: "lon1,lat1;lon2,lat2;..." onde lon/lat são floats
+            // Exemplo: "-46.633308,-23.550520;-43.172896,-22.906847"
+            if (!preg_match('/^-?\d+(\.\d+)?,-?\d+(\.\d+)?(;-?\d+(\.\d+)?,-?\d+(\.\d+)?)*$/', $coordinates)) {
+                Log::warning("OSRM Proxy: Formato de coordenadas inválido", [
+                    'coordinates' => $coordinates,
+                    'ip' => $request->ip()
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Formato de coordenadas inválido. Use: lon1,lat1;lon2,lat2'
+                ], 400);
+            }
+
+            // CORREÇÃO BUG #53: Validar range de latitude/longitude
+            $coordPairs = explode(';', $coordinates);
+            foreach ($coordPairs as $pair) {
+                list($lon, $lat) = explode(',', $pair);
+                $lon = (float)$lon;
+                $lat = (float)$lat;
+
+                // Validar range válido: lat [-90, 90], lon [-180, 180]
+                if ($lat < -90 || $lat > 90 || $lon < -180 || $lon > 180) {
+                    Log::warning("OSRM Proxy: Coordenadas fora do range válido", [
+                        'lat' => $lat,
+                        'lon' => $lon,
+                        'ip' => $request->ip()
+                    ]);
+
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'Coordenadas fora do range válido (lat: -90 a 90, lon: -180 a 180)'
+                    ], 400);
+                }
+            }
+
+            // CORREÇÃO BUG #53: Limitar número de waypoints para prevenir DoS
+            if (count($coordPairs) > 50) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Máximo de 50 waypoints permitidos'
+                ], 400);
+            }
+
             // Construir URL do OSRM
             $url = "https://router.project-osrm.org/route/v1/driving/{$coordinates}";
             $url .= "?overview=full&geometries=geojson";
 
+            // NOTA: Coordinates são dados públicos (lat/lon) e não precisam sanitização para logging.
+            // Não são dados sensíveis como CPF, senha, ou informações pessoais (LGPD).
+            // Lat/lon são coordenadas geográficas públicas de municípios/estradas.
             Log::info("OSRM Proxy: Requisitando rota", ['url' => $url]);
 
             // Fazer requisição para OSRM

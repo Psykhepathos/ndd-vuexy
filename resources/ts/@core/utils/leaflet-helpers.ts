@@ -5,7 +5,7 @@
  * onde o tipo Map é incompatível com Map | LayerGroup
  */
 
-import type L from 'leaflet'
+import L from 'leaflet'
 
 /**
  * Type-safe wrapper para adicionar layer ao mapa

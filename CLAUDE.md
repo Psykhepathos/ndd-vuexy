@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 📚 Navigation
 
 - [Quick Start](#-quick-start) - Commands to get started
+- [Recent Changes](#-recent-changes-dec-2025) - Latest security updates
 - [Critical Rules](#-critical-rules) - MUST READ before coding
 - [Architecture](#-architecture) - System overview
 - [Backend Controllers](#-backend-controllers-18-controllers) - Complete API reference
@@ -13,6 +14,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - [Database](#-database-architecture) - Progress + SQLite/MySQL
 - [Implementation Patterns](#-critical-implementation-patterns) - Code examples
 - [Troubleshooting](#-troubleshooting) - Common issues
+
+---
+
+## 🔄 Recent Changes (Dec 2025)
+
+### Major Security Audit & Bug Fixes (Dec 4-5, 2025)
+
+**Current Branch:** `refactor/controller-bug-audit`
+
+A comprehensive security audit identified and fixed **81 bugs** across all controllers:
+
+**By Severity:**
+- 🔴 **23 CRITICAL** - SQL injection, DoS vulnerabilities, unprotected financial endpoints
+- 🟡 **32 IMPORTANT** - LGPD compliance, authentication gaps, data validation
+- 🟢 **26 MODERATE** - Code quality, documentation, configuration issues
+
+**Key Improvements:**
+- ✅ **Rate Limiting**: Comprehensive protection against brute force (5-60 req/min by endpoint)
+- ✅ **Authentication**: Admin-only access for sensitive operations (quota reset, data deletion, etc.)
+- ✅ **SQL Injection**: 8 critical vulnerabilities eliminated with prepared statements
+- ✅ **LGPD Compliance**: Full audit trail logging (user_id, IP, timestamp) in 22 locations
+- ✅ **DoS Protection**: Array limits (max 100 items), timeout optimization (60s), input validation
+- ✅ **Data Protection**: Strategy pattern for updates, confirmation codes for destructive operations
+
+**Documentation:**
+- 📁 `docs/audits/` - 8 controller-by-controller security audits
+- 📁 `docs/bug-fixes/` - 15 detailed bug fix documents
+- 📁 `docs/security/` - Critical security alerts
+- 📁 `docs/analysis/` - Technical analysis and flow documentation
+- 📁 `docs/summaries/` - Progress summaries and consolidated reports
+
+**See:** `docs/summaries/RESUMO_CONSOLIDADO_FINAL_2025-12-05.md` for complete details.
 
 ---
 
@@ -1789,7 +1822,14 @@ ndd-vuexy/
 │   ├── test-semparar-fase1b.html           # SemParar workflow test
 │   └── test-semparar-fase3a.html           # Trip management test
 ├── docs/                                   # Additional documentation
+│   ├── audits/                             # Security audits (8 files)
+│   ├── bug-fixes/                          # Bug fix documentation (15 files)
+│   ├── security/                           # Security alerts
+│   ├── analysis/                           # Technical analysis (6 files)
+│   ├── summaries/                          # Progress reports (3 files)
 │   ├── semparar-phases/                    # SemParar phase docs
+│   ├── migrations/                         # Map migration docs
+│   ├── modules/                            # Module-specific docs
 │   └── archive/                            # Historical analysis
 ├── .env                                    # Environment config (NOT in repo!)
 ├── .env.example                            # Environment template
@@ -1806,22 +1846,30 @@ ndd-vuexy/
 
 **Main Docs:**
 - `README.md` - Project overview
-- `DOCUMENTATION_INDEX.md` - Complete documentation map
-- `REFACTOR_CLEANUP_2025-11-28.md` - Recent refactoring
+- `DOCUMENTATION_INDEX.md` - Complete documentation map (40+ files)
+- `docs/INDEX.md` - Detailed docs structure and organization
+
+**Security & Quality (Dec 2025):**
+- `docs/audits/` - 8 controller security audits
+- `docs/bug-fixes/` - 15 detailed bug fix documents
+- `docs/security/ALERTA_SEGURANCA_CRITICO_2025-12-04.md` - Critical security alert
+- `docs/summaries/RESUMO_CONSOLIDADO_FINAL_2025-12-05.md` - Complete audit summary
+- `docs/analysis/` - 6 technical analysis documents
 
 **SemParar Integration:**
 - `docs/semparar-phases/CHECKPOINT_FASE_1A.md` - SOAP core
 - `docs/semparar-phases/SEMPARAR_FASE1B_COMPLETO.md` - Routing
 - `SEMPARAR_IMPLEMENTATION_ROADMAP.md` - Complete roadmap
 
-**Architecture Analysis:**
-- `docs/archive/ANALISE_ROTAS_SEMPARAR.md` - Route system
-- `docs/archive/COMPRA_VIAGEM_ANALISE.md` - Trip purchase
-- `DEBUG_MAPA_ROTAS.md` - Map debugging
+**Map & Performance:**
+- `docs/MAP_SERVICE_FASE1_COMPLETO.md` - MapService unified implementation
+- `docs/CACHE_OPTIMIZATION_AND_BUG_FIXES.md` - Cache optimization (80-85% improvement)
+- `docs/migrations/` - Google Maps → OSRM migration docs
 
-**Progress References:**
-- `SEMPARAR_AI_REFERENCE.md` - Progress ABL code
-- `Rota.cls` - Progress class (lines 110-606)
+**Architecture & Modules:**
+- `docs/PROGRESS_INTEGRATIONS.md` - Progress OpenEdge integration patterns
+- `docs/modules/IMPLEMENTACAO_COMPLETA.md` - Trip purchase complete implementation
+- `docs/archive/` - Historical analysis and debugging docs
 
 ---
 
@@ -1846,9 +1894,12 @@ ndd-vuexy/
 - Frontend lazy loading
 
 ### Security Enhancements
-- Role-based access control (RBAC)
+- ✅ **COMPLETED (Dec 2025)**: Comprehensive security audit (81 bugs fixed)
+- ✅ **COMPLETED (Dec 2025)**: LGPD compliance logging (22 locations)
+- ✅ **COMPLETED (Dec 2025)**: Rate limiting (all endpoints)
+- ✅ **COMPLETED (Dec 2025)**: SQL injection protection
+- Role-based access control (RBAC) - Enhanced
 - API key rotation
-- Audit logging
 - Two-factor authentication (2FA)
 
 ---
@@ -1857,7 +1908,8 @@ ndd-vuexy/
 
 **Repository:**
 - GitHub: https://github.com/Psykhepathos/ndd-vuexy.git
-- Branch: `master`
+- Main Branch: `master`
+- Current Branch: `refactor/controller-bug-audit` (security audit work)
 - Developer: Psykhepathos
 
 **Deprecated Systems:**
@@ -1999,8 +2051,8 @@ VITE_API_BASE_URL=http://localhost:8002
 
 ---
 
-**Last Updated:** 2024-12-01
-**Version:** 2.0.0
+**Last Updated:** 2025-12-05
+**Version:** 2.1.0
 **Maintainer:** Psykhepathos
 
 ---

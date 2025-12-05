@@ -16,8 +16,10 @@ class RouteCacheController extends Controller
      */
     public function findRoute(Request $request): JsonResponse
     {
+        // CORREÇÃO BUG #51: Limite máximo de waypoints para prevenir crash
+        // Google Maps API e performance limitam a ~100 waypoints por rota
         $validator = Validator::make($request->all(), [
-            'waypoints' => 'required|array|min:2',
+            'waypoints' => 'required|array|min:2|max:100',
             'waypoints.*' => 'required|array|size:2',
             'waypoints.*.*' => 'required|numeric'
         ]);
@@ -35,9 +37,14 @@ class RouteCacheController extends Controller
             $cachedRoute = RouteCache::findCachedRoute($waypoints);
 
             if ($cachedRoute) {
+                // CORREÇÃO BUG #48: LGPD logging de acesso ao cache de rotas
                 Log::info('Cache hit for route', [
                     'waypoints_count' => count($waypoints),
-                    'cache_id' => $cachedRoute->id
+                    'cache_id' => $cachedRoute->id,
+                    'user_id' => auth()->id() ?? null,
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'timestamp' => now()->toIso8601String()
                 ]);
 
                 return response()->json([
@@ -81,10 +88,15 @@ class RouteCacheController extends Controller
      */
     public function saveRoute(Request $request): JsonResponse
     {
-        set_time_limit(300); // 5 minutos para cache de rotas grandes
-        
+        // CORREÇÃO BUG #49: Reduzido de 300s para 60s para prevenir DoS
+        // Trade-off: Rotas extremamente grandes (>500 waypoints) podem falhar,
+        // mas 60s é suficiente para 99% dos casos e previne abuso
+        set_time_limit(60);
+
+        // CORREÇÃO BUG #51: Limite máximo de waypoints para prevenir crash
+        // Google Maps API e performance limitam a ~100 waypoints por rota
         $validator = Validator::make($request->all(), [
-            'waypoints' => 'required|array|min:2',
+            'waypoints' => 'required|array|min:2|max:100',
             'waypoints.*' => 'required|array|size:2',
             'waypoints.*.*' => 'required|numeric',
             'route_coordinates' => 'required|array|min:2',
@@ -115,12 +127,17 @@ class RouteCacheController extends Controller
                 $source
             );
 
+            // CORREÇÃO BUG #48: LGPD logging de salvamento de rota no cache
             Log::info('Rota salva no cache', [
                 'cache_id' => $cachedRoute->id,
                 'waypoints_count' => count($waypoints),
                 'coordinates_count' => count($routeCoordinates),
                 'distance' => $totalDistance,
-                'source' => $source
+                'source' => $source,
+                'user_id' => auth()->id() ?? null,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'timestamp' => now()->toIso8601String()
             ]);
 
             return response()->json([
@@ -170,14 +187,32 @@ class RouteCacheController extends Controller
 
     /**
      * Limpar cache expirado
+     * CORREÇÃO BUG #50: Apenas admins podem executar esta operação
      */
-    public function clearExpired(): JsonResponse
+    public function clearExpired(Request $request): JsonResponse
     {
+        // CORREÇÃO BUG #50: Verificação de permissão de admin
+        if (!$request->user() || $request->user()->role !== 'admin') {
+            Log::warning('Tentativa de limpar cache sem permissão', [
+                'user_id' => $request->user()?->id,
+                'ip' => $request->ip(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Acesso negado. Apenas administradores podem limpar cache.'
+            ], 403);
+        }
+
         try {
             $deletedCount = RouteCache::clearExpired();
 
             Log::info('Cache expirado limpo', [
-                'deleted_routes' => $deletedCount
+                'deleted_routes' => $deletedCount,
+                'admin_id' => $request->user()->id,
+                'ip' => $request->ip(),
+                'timestamp' => now()->toIso8601String()
             ]);
 
             return response()->json([

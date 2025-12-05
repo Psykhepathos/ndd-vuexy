@@ -70,6 +70,32 @@ Documentação histórica das fases de implementação da API SemParar
 - `SEMPARAR_FASE1B_COMPLETO.md` - Roteirização de praças
 - `SEMPARAR_IMPLEMENTATION_ROADMAP.md` - Roadmap completo
 
+### 🚛 Integrações NDD Cargo
+Documentação completa da integração com NDD Cargo API (Roteirizador + Vale Pedágio)
+
+📁 **[docs/integracoes/ndd-cargo/](docs/integracoes/ndd-cargo/)**
+- **[INDEX.md](docs/integracoes/ndd-cargo/INDEX.md)** - Índice completo da documentação (COMECE AQUI!)
+- **[README.md](docs/integracoes/ndd-cargo/README.md)** - Visão geral da integração NDD Cargo
+  - Arquitetura completa (Protocolo CrossTalk)
+  - Fluxos de integração (síncrono/assíncrono)
+  - Credenciais e configuração (homologação/produção)
+  - Guia de implementação no ndd-vuexy
+- **[ANALISE_NTESTE_PY.md](docs/integracoes/ndd-cargo/ANALISE_NTESTE_PY.md)** - Análise extremamente detalhada (1.000+ linhas)
+  - Análise linha a linha do script Python de envio
+  - Processo completo de assinatura digital RSA-SHA1
+  - Construção de XML de negócio (consultarRoteirizador)
+  - Encapsulamento SOAP (CrossTalk Message)
+  - Problemas de segurança identificados e soluções
+- **[ANALISE_RESULTADO_PY.md](docs/integracoes/ndd-cargo/ANALISE_RESULTADO_PY.md)** - Script de consulta assíncrona
+  - Diferenças entre envio e consulta
+  - ExchangePattern 8 (consulta assíncrona)
+  - Processamento de resposta
+  - Bugs identificados e código melhorado
+
+**⚠️ Importante:** NDD Cargo ≠ SemParar (sistemas diferentes)
+- **SemParar:** Vale pedágio eletrônico (já implementado)
+- **NDD Cargo:** Roteirizador completo + gestão de transporte (nova integração)
+
 ### 🛡️ Segurança & Auditorias
 - **[docs/SECURITY_AUDIT_TRANSPORTES.md](docs/SECURITY_AUDIT_TRANSPORTES.md)** (2025-10-01)
   - Auditoria de segurança módulo transportes
@@ -197,14 +223,15 @@ Documentação antiga preservada para referência histórica.
 
 ## 📊 Estatísticas da Documentação
 
-- **Total de documentos:** 30+
-- **Documentação ativa:** 15 arquivos (docs/ + docs/modules/)
+- **Total de documentos:** 34+
+- **Documentação ativa:** 18 arquivos (docs/ + docs/modules/ + docs/integracoes/)
+- **Integrações NDD Cargo:** 3 arquivos principais (~2.300 linhas)
 - **Documentação arquivada:** 11 arquivos (docs/archive/)
 - **Migrações:** 3 arquivos (docs/migrations/)
 - **Fases SemParar:** 3 arquivos (docs/semparar-phases/)
 - **Scripts:** 9 arquivos (scripts/)
-- **Última atualização:** 2025-11-28
-- **Cobertura:** Backend (PHP), Frontend (Vue/TS), Infraestrutura, APIs
+- **Última atualização:** 2025-12-05
+- **Cobertura:** Backend (PHP/Python), Frontend (Vue/TS), Infraestrutura, APIs, Integrações SOAP
 
 ---
 
@@ -216,6 +243,7 @@ Ao criar nova documentação:
 2. **Localização:**
    - Raiz: `CLAUDE.md`, `README.md` apenas
    - `docs/`: Documentação recente e ativa (implementações, segurança, APIs)
+   - `docs/integracoes/`: Documentação de integrações externas (NDD Cargo, etc.)
    - `docs/migrations/`: Migrações de sistema
    - `docs/semparar-phases/`: Fases de implementação SemParar
    - `docs/modules/`: Documentação de módulos específicos
@@ -237,5 +265,25 @@ Ao criar nova documentação:
 
 ---
 
-*Última atualização: 2025-11-28*
+*Última atualização: 2025-12-05*
 *Mantido por: Claude Code*
+
+---
+
+## 🆕 Novidades (2025-12-05)
+
+### Integração NDD Cargo Documentada
+
+Adicionada documentação completa da integração com **NDD Cargo API**:
+
+✅ **3 documentos principais** (~75 páginas, ~2.300 linhas)
+✅ **Análise linha a linha** do código Python de integração
+✅ **Protocolo CrossTalk** completamente documentado
+✅ **Assinatura digital RSA-SHA1** explicada em detalhes
+✅ **Fluxos síncrono e assíncrono** com diagramas
+✅ **20+ tabelas de referência** (categorias, códigos, etc.)
+✅ **Problemas de segurança identificados** e soluções propostas
+✅ **Código melhorado** com boas práticas Python
+
+**Localização:** [`docs/integracoes/ndd-cargo/`](docs/integracoes/ndd-cargo/)
+**Comece por:** [`INDEX.md`](docs/integracoes/ndd-cargo/INDEX.md)

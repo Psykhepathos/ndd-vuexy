@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { watchDebounced } from '@vueuse/core'
+import { apiFetch, apiPost } from '@/config/api'
 
 // ============================================================================
 // INTERFACES & TYPES
@@ -95,7 +96,7 @@ const canImport = computed(() => {
 const loadStatistics = async () => {
   loadingStats.value = true
   try {
-    const response = await fetch(`${window.location.origin}/api/pracas-pedagio/estatisticas`)
+    const response = await apiFetch(`${window.location.origin}/api/pracas-pedagio/estatisticas`)
     const data = await response.json()
     if (data.success) {
       statistics.value = data.data
@@ -122,7 +123,7 @@ const loadPracas = async () => {
     if (filtroRodovia.value) params.append('rodovia', filtroRodovia.value)
     if (filtroSituacao.value) params.append('situacao', filtroSituacao.value)
 
-    const response = await fetch(`${window.location.origin}/api/pracas-pedagio?${params.toString()}`)
+    const response = await apiFetch(`${window.location.origin}/api/pracas-pedagio?${params.toString()}`)
     const data = await response.json()
 
     if (data.success) {
@@ -154,11 +155,12 @@ const importCSV = async () => {
     const formData = new FormData()
     formData.append('file', selectedFile.value)
 
-    const response = await fetch(`${window.location.origin}/api/pracas-pedagio/importar`, {
+    const response = await apiFetch(`${window.location.origin}/api/pracas-pedagio/importar`, {
       method: 'POST',
-      body: formData
+      body: formData,
+      // Remove Content-Type header para FormData (browser define automaticamente)
+      headers: {} as any
     })
-
     const data = await response.json()
     importResult.value = data
 
