@@ -34,6 +34,7 @@ export interface EntregaPacote {
   gps_lon: string | null
   lat?: number
   lon?: number
+  long?: number  // Alias para lon (backward compatibility)
   tipo: 'entrega'
 }
 
@@ -100,6 +101,11 @@ export interface PracaPedagio {
   valor: number
   lat?: number
   lon?: number
+  // Campos adicionais da API SemParar
+  praca?: string
+  rodovia?: string
+  km?: number
+  concessionaria?: string
 }
 
 // ============================================================================

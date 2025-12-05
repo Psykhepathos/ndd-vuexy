@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\RoutingService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Http;
@@ -11,64 +10,10 @@ use Illuminate\Support\Facades\Log;
 
 class RoutingController extends Controller
 {
-    protected RoutingService $routingService;
-
-    public function __construct(RoutingService $routingService)
-    {
-        $this->routingService = $routingService;
-    }
-
     /**
-     * Calcular rota com múltiplos waypoints usando Google Directions + cache
+     * RoutingService (Google Directions) foi REMOVIDO
+     * Use getRoute() que utiliza OSRM (100% gratuito)
      */
-    public function calculateRoute(Request $request): JsonResponse
-    {
-        try {
-            $validated = $request->validate([
-                'waypoints' => 'required|array|min:2',
-                'waypoints.*.lat' => 'required|numeric',
-                'waypoints.*.lng' => 'required|numeric'
-            ]);
-
-            Log::info('API: Calculando rota com cache', [
-                'waypoints' => count($validated['waypoints'])
-            ]);
-
-            $result = $this->routingService->calculateRoute($validated['waypoints']);
-
-            if (!$result['success']) {
-                return response()->json([
-                    'success' => false,
-                    'message' => $result['error'],
-                    'data' => null
-                ], 400);
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Rota calculada com sucesso',
-                'data' => $result['data']
-            ]);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Dados inválidos',
-                'errors' => $e->errors()
-            ], 422);
-
-        } catch (\Exception $e) {
-            Log::error('Erro na API ao calcular rota', [
-                'error' => $e->getMessage()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro interno do servidor',
-                'data' => null
-            ], 500);
-        }
-    }
 
     /**
      * Buscar rota real usando APIs externas via proxy Laravel
@@ -110,13 +55,28 @@ class RoutingController extends Controller
      */
     public function getRoute(Request $request): JsonResponse
     {
-        $start = $request->input('start');
-        $end = $request->input('end');
-        
-        if (!$start || !$end) {
-            return response()->json(['error' => 'Coordenadas start e end são obrigatórias'], 400);
-        }
-        
+        // Validacao rigorosa de coordenadas
+        $validated = $request->validate([
+            'start' => ['required', 'array', 'size:2'],
+            'start.0' => ['required', 'numeric', 'min:-180', 'max:180'],
+            'start.1' => ['required', 'numeric', 'min:-90', 'max:90'],
+            'end' => ['required', 'array', 'size:2'],
+            'end.0' => ['required', 'numeric', 'min:-180', 'max:180'],
+            'end.1' => ['required', 'numeric', 'min:-90', 'max:90']
+        ]);
+
+        $start = $validated['start'];
+        $end = $validated['end'];
+
+        // LGPD Art. 46 - Log de acesso a routing
+        Log::info('Rota calculada via proxy', [
+            'start' => $start,
+            'end' => $end,
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'timestamp' => now()->toIso8601String()
+        ]);
+
         // Tentar múltiplas APIs em ordem
         $apis = [
             'osrm' => function($start, $end) {
@@ -151,10 +111,20 @@ class RoutingController extends Controller
         }
         
         // Se nenhuma API funcionou
-        Log::error("Todas as APIs de roteamento falharam");
+        $errorId = uniqid('err_');
+
+        Log::error('Todas as APIs de roteamento falharam', [
+            'error_id' => $errorId,
+            'start' => $start,
+            'end' => $end,
+            'ip' => $request->ip(),
+            'timestamp' => now()->toIso8601String()
+        ]);
+
         return response()->json([
             'success' => false,
-            'error' => 'Nenhuma API de roteamento disponível',
+            'message' => 'Nenhuma API de roteamento disponível. ID: ' . $errorId,
+            'error_id' => $errorId,
             'fallback' => 'usar_linha_reta'
         ], 503);
     }
@@ -368,8 +338,14 @@ class RoutingController extends Controller
     /**
      * Endpoint de teste
      */
-    public function testConnection(): JsonResponse
+    public function testConnection(Request $request): JsonResponse
     {
+        Log::info('Teste de conexão do proxy de routing', [
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'timestamp' => now()->toIso8601String()
+        ]);
+
         return response()->json([
             'status' => 'ok',
             'message' => 'Proxy de roteamento Laravel funcionando'

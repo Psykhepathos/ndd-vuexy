@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { apiPost } from '@/config/api'
 import type { CompraViagemFormData } from '../types'
 
 // Props & Emits
@@ -78,6 +79,9 @@ const confirmarCompra = async () => {
   success.value = false
 
   try {
+    // Gera UUID único para idempotência (previne double-click)
+    const idempotencyKey = crypto.randomUUID()
+
     // Preparar dados da compra
     const payload = {
       // Dados obrigatórios
@@ -95,17 +99,15 @@ const confirmarCompra = async () => {
 
       // Modos da rota
       flgcd: props.formData.rota.modoCD,
-      flgretorno: props.formData.rota.modoRetorno
+      flgretorno: props.formData.rota.modoRetorno,
+
+      // CORREÇÃO #7: Idempotência - UUID único para prevenir duplicatas
+      idempotency_key: idempotencyKey
     }
 
     console.log('🛒 Enviando compra:', payload)
 
-    const response = await fetch(`${window.location.origin}/api/compra-viagem/comprar`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-
+    const response = await apiPost(`${window.location.origin}/api/compra-viagem/comprar`, payload)
     const data = await response.json()
 
     if (!data.success) {

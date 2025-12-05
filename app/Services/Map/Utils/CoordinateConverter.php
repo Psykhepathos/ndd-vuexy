@@ -6,7 +6,7 @@ namespace App\Services\Map\Utils;
  * CoordinateConverter - Convert coordinates between different formats
  *
  * Handles:
- * - Progress GPS format (e.g., "230876543" → -23.0876543)
+ * - Progress GPS format (e.g., "230876543" -> -23.0876543)
  * - Decimal degrees validation
  * - Brazil bounds checking
  */

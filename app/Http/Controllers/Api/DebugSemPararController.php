@@ -19,11 +19,58 @@ class DebugSemPararController extends Controller
 
     /**
      * Debug completo do fluxo SemParar
+     *
+     * SECURITY: Este endpoint está protegido por middleware auth:sanctum em routes/api.php (linha 296).
+     * O uso de $request->user() é seguro pois Sanctum garante que user() não será null.
+     * Verificar routes/api.php para confirmar proteção ativa.
      */
     public function debugFlow(Request $request)
     {
+        // CORREÇÃO BUG MODERADO #4: Verificar se usuário é admin antes de permitir debug
+        $user = $request->user();
+        if (!$user || $user->role !== 'admin') {
+            Log::warning('Tentativa de acesso ao debug por usuário não-admin', [
+                'user_id' => $user?->id,
+                'user_email' => $user?->email,
+                'user_role' => $user?->role,
+                'ip' => $request->ip(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Acesso negado. Apenas administradores podem acessar debug.'
+            ], 403);
+        }
+
+        // CORREÇÃO #1: Bloquear endpoint em produção
+        if (!config('app.debug')) {
+            Log::warning('Tentativa de acesso ao endpoint de debug em produção bloqueada', [
+                'user_id' => $request->user()->id ?? null,
+                'user_email' => $request->user()->email ?? null,
+                'ip' => $request->ip(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Endpoint de debug desabilitado em produção'
+            ], 403);
+        }
+
         $codPac = $request->input('codpac');
         $codRota = $request->input('cod_rota');
+
+        // CORREÇÃO #5: Logging de acesso (LGPD Art. 46 compliance)
+        Log::warning('Acesso ao endpoint de debug', [
+            'user_id' => $request->user()->id ?? null,
+            'user_email' => $request->user()->email ?? null,
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'codpac' => $codPac,
+            'cod_rota' => $codRota,
+            'timestamp' => now()->toIso8601String()
+        ]);
 
         $debug = [
             'timestamp' => now()->format('Y-m-d H:i:s'),
@@ -34,7 +81,7 @@ class DebugSemPararController extends Controller
             'steps' => []
         ];
 
-        try {
+        try{
             // PASSO 1: Buscar rota Progress
             $debug['steps'][] = [
                 'number' => 1,
@@ -124,14 +171,14 @@ class DebugSemPararController extends Controller
             // ANÁLISE: Comparação Progress vs PHP
             $debug['analysis'] = [
                 'progress_flow' => [
-                    '1. Loop municipios rota (semPararRotMu) → t-entrega com IBGE, lat=0, lon=0',
-                    '2. Loop entregas pacote (carga→pedido→arqrdnt) → t-entrega com GPS real',
-                    '3. Se achou município pelo nome → ZERA GPS e mantém IBGE (linha 787-790)',
+                    '1. Loop municipios rota (semPararRotMu) -> t-entrega com IBGE, lat=0, lon=0',
+                    '2. Loop entregas pacote (carga->pedido->arqrdnt) -> t-entrega com GPS real',
+                    '3. Se achou município pelo nome -> ZERA GPS e mantém IBGE (linha 787-790)',
                     '4. Envia DATASET com mix: municípios (IBGE+0,0) + entregas (GPS+IBGE=0)',
                 ],
                 'php_current_implementation' => [
-                    '1. Busca municípios → adiciona com IBGE, lat=0, lon=0 ✓',
-                    '2. Busca entregas via getItinerarioPacote() → TIMEOUT/LENTO ❌',
+                    '1. Busca municípios -> adiciona com IBGE, lat=0, lon=0 ✓',
+                    '2. Busca entregas via getItinerarioPacote() -> TIMEOUT/LENTO ❌',
                     '3. Não está chegando entregas com GPS ❌'
                 ],
                 'problem_identified' => 'Query de entregas está travando. Progress usa loop FOR EACH otimizado, PHP usa JOIN pesado.',
@@ -144,19 +191,29 @@ class DebugSemPararController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            // CORREÇÃO #4: Logar stack trace completo, retornar apenas mensagem genérica
+            Log::error('Erro no debug flow', [
+                'user_id' => $request->user()->id ?? null,
+                'codpac' => $codPac,
+                'cod_rota' => $codRota,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),  // ✅ Apenas em logs
+                'timestamp' => now()->toIso8601String()
+            ]);
+
             $debug['steps'][] = [
                 'number' => 999,
                 'name' => 'ERRO',
                 'status' => 'error',
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'error' => 'Erro interno no processamento'  // ✅ Mensagem genérica
+                // ❌ NÃO retornar: trace
             ];
 
             return response()->json([
                 'success' => false,
                 'debug' => $debug,
-                'error' => $e->getMessage()
-            ]);
+                'error' => 'Erro interno. Contate o suporte com timestamp: ' . now()->toIso8601String()
+            ], 500);
         }
     }
 }

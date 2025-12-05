@@ -326,12 +326,17 @@ class MapService
                     $cluster['count']++;
 
                     // Recalculate center (average)
+                    // CORREÇÃO BUG MODERADO #2: Prevenir division by zero
                     $lats = array_column($cluster['points'], 'lat');
                     $lons = array_column($cluster['points'], 'lon');
-                    $cluster['center'] = [
-                        'lat' => array_sum($lats) / count($lats),
-                        'lon' => array_sum($lons) / count($lons)
-                    ];
+
+                    $countLats = count($lats);
+                    if ($countLats > 0) {
+                        $cluster['center'] = [
+                            'lat' => array_sum($lats) / $countLats,
+                            'lon' => array_sum($lons) / $countLats
+                        ];
+                    }
 
                     array_splice($remaining, $i, 1);
                 }
