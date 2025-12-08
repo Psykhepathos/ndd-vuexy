@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\SemPararController;
 use App\Http\Controllers\Api\SemPararRotaController;
 use App\Http\Controllers\Api\TransporteController;
 use App\Http\Controllers\Api\NddCargoController;
+use App\Http\Controllers\Api\VpoController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -261,7 +262,7 @@ Route::middleware('api')->group(function () {
         Route::get('info', [NddCargoController::class, 'info'])
             ->middleware('throttle:120,1');  // 120 requests per minute
         Route::get('test-connection', [NddCargoController::class, 'testConnection'])
-            ->middleware('throttle:10,1');  // 10 requests per minute
+            ->middleware('throttle:5,1');  // 5 requests per minute (proteção contra abuso)
 
         // Consultas de roteirizador (públicas para simulação)
         Route::post('roteirizador', [NddCargoController::class, 'consultarRoteirizador'])
@@ -272,6 +273,40 @@ Route::middleware('api')->group(function () {
         // Consulta de resultado assíncrono
         Route::get('resultado/{guid}', [NddCargoController::class, 'consultarResultado'])
             ->middleware('throttle:60,1');  // 60 requests per minute
+    });
+
+    // Rotas PÚBLICAS para VPO (Vale Pedágio Obrigatório) Data Sync
+    // Sistema de sincronização Progress → ANTT → Cache Local
+    // @see docs/integracoes/ndd-cargo/VPO_DATA_SYNC.md
+    Route::prefix('vpo')->group(function () {
+        // Health check e info
+        Route::get('test-connection', [VpoController::class, 'testConnection'])
+            ->middleware('throttle:10,1');  // 10 requests per minute
+
+        // Sincronização de dados (operações de escrita)
+        Route::post('sync/transportador', [VpoController::class, 'syncTransportador'])
+            ->middleware('throttle:30,1');  // 30 requests per minute (sincronização individual)
+
+        Route::post('sync/batch', [VpoController::class, 'syncBatch'])
+            ->middleware('throttle:10,1');  // 10 requests per minute (operação pesada)
+
+        // Consultas ao cache (operações de leitura)
+        Route::get('transportadores', [VpoController::class, 'index'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        Route::get('transportadores/{codtrn}', [VpoController::class, 'show'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        // Operações de manutenção
+        Route::delete('transportadores/{codtrn}', [VpoController::class, 'destroy'])
+            ->middleware('throttle:30,1');  // 30 requests per minute (força resync)
+
+        Route::post('transportadores/{codtrn}/recalcular-qualidade', [VpoController::class, 'recalcularQualidade'])
+            ->middleware('throttle:30,1');  // 30 requests per minute
+
+        // Estatísticas
+        Route::get('statistics', [VpoController::class, 'statistics'])
+            ->middleware('throttle:30,1');  // 30 requests per minute
     });
 
     // ⚠️ Compra de Viagem SemParar - MODO DE TESTE ATIVO ⚠️
