@@ -82,6 +82,13 @@ class NddCargoService
                 'size_bytes' => strlen($xml)
             ]);
 
+            // Log XML completo se habilitado
+            if (config('nddcargo.logging.log_xml')) {
+                Log::debug('XML de negócio NÃO assinado', [
+                    'xml' => $xml
+                ]);
+            }
+
             // 3. Assinar XML digitalmente
             $xmlAssinado = $this->digitalSignature->signXml($xml, $uuid);
 
@@ -138,6 +145,11 @@ class NddCargoService
                 status: -999,
                 mensagem: 'Erro interno: ' . $e->getMessage()
             );
+        } finally {
+            // Sempre limpar recursos OpenSSL
+            if ($this->digitalSignature) {
+                $this->digitalSignature->cleanup();
+            }
         }
     }
 
@@ -150,6 +162,18 @@ class NddCargoService
     public function consultarResultado(string $guid): RoteirizadorResponse
     {
         try {
+            // Validação defensiva no service layer
+            if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $guid)) {
+                Log::warning('GUID inválido recebido em consultarResultado', [
+                    'guid' => $guid
+                ]);
+
+                return RoteirizadorResponse::error(
+                    status: -3,
+                    mensagem: 'GUID inválido ou malformado'
+                );
+            }
+
             Log::info('Consultando resultado assíncrono NDD Cargo', [
                 'guid' => $guid
             ]);

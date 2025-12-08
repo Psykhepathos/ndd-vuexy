@@ -34,13 +34,6 @@ class NddCargoController extends Controller
     public function __construct(NddCargoService $nddCargoService)
     {
         $this->nddCargoService = $nddCargoService;
-
-        // Rate limiting
-        $this->middleware('throttle:60,1')->only([
-            'consultarRoteirizador',
-            'consultarRotaSimples'
-        ]);
-        $this->middleware('throttle:10,1')->only(['testConnection']);
     }
 
     /**
@@ -76,9 +69,10 @@ class NddCargoController extends Controller
                 'cnpj_empresa' => 'required|string|size:14',
                 'cnpj_contratante' => 'required|string|size:14',
                 'categoria_pedagio' => 'integer|min:1|max:7',
-                'pontos_parada' => 'required|array',
+                'pontos_parada' => 'required|array|max:100',  // Limite 100 pontos (proteção DoS)
                 'pontos_parada.origem' => 'required|string|size:8',
                 'pontos_parada.destino' => 'required|string|size:8',
+                'pontos_parada.*' => 'string|size:8',  // Validar todos os elementos
                 'tipo_rota_padrao' => 'integer|min:1|max:3',
                 'evitar_pedagogios' => 'boolean',
                 'priorizar_rodovias' => 'boolean',
@@ -108,6 +102,18 @@ class NddCargoController extends Controller
                     'data' => $response->toArray()
                 ]);
             } else {
+                // Status 202 = Aceito para processamento (retorna 202 HTTP)
+                if ($response->status === 202) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $response->mensagem,
+                        'status' => $response->status,
+                        'guid' => $response->guid,
+                        'consultar_em' => url("/api/ndd-cargo/resultado/{$response->guid}")
+                    ], 202);
+                }
+
+                // Outros erros
                 return response()->json([
                     'success' => false,
                     'message' => $response->mensagem,
@@ -152,6 +158,9 @@ class NddCargoController extends Controller
                 'cep_origem' => 'required|string|size:8',
                 'cep_destino' => 'required|string|size:8',
                 'categoria_pedagio' => 'integer|min:1|max:7',
+            ], [
+                'cep_origem.size' => 'CEP de origem deve conter exatamente 8 dígitos',
+                'cep_destino.size' => 'CEP de destino deve conter exatamente 8 dígitos',
             ]);
 
             if ($validator->fails()) {
@@ -176,6 +185,18 @@ class NddCargoController extends Controller
                     'data' => $response->toArray()
                 ]);
             } else {
+                // Status 202 = Aceito para processamento (retorna 202 HTTP)
+                if ($response->status === 202) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $response->mensagem,
+                        'status' => $response->status,
+                        'guid' => $response->guid,
+                        'consultar_em' => url("/api/ndd-cargo/resultado/{$response->guid}")
+                    ], 202);
+                }
+
+                // Outros erros
                 return response()->json([
                     'success' => false,
                     'message' => $response->mensagem,

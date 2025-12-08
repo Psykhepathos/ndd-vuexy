@@ -235,6 +235,9 @@ class VpoEmissaoService
 
             $rota = $result['data']['results'][0];
 
+            // Progress retorna campos em lowercase
+            $rotaNome = $rota['desspararrot'] ?? $rota['desSPararRot'] ?? 'Rota ' . $rotaId;
+
             // 2. Municipios da rota
             $rotaMunicipios = $this->progressService->getSemPararRotaWithMunicipios($rotaId);
 
@@ -284,7 +287,7 @@ class VpoEmissaoService
                 }
             }
 
-            return ['success' => true, 'data' => ['id' => $rotaId, 'nome' => $rota['desSPararRot'], 'waypoints' => $waypoints], 'error' => null];
+            return ['success' => true, 'data' => ['id' => $rotaId, 'nome' => $rotaNome, 'waypoints' => $waypoints], 'error' => null];
 
         } catch (\Exception $e) {
             return ['success' => false, 'data' => null, 'error' => $e->getMessage()];

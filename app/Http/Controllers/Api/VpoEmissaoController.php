@@ -54,7 +54,7 @@ class VpoEmissaoController extends Controller
         $result = $this->emissaoService->iniciarEmissao([
             'codpac' => $request->codpac,
             'rota_id' => $request->rota_id,
-            'usuario_id' => auth()->id(),
+            'usuario_id' => auth()->id() ?? null,
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
         ]);
@@ -375,6 +375,20 @@ class VpoEmissaoController extends Controller
     public function statistics(): JsonResponse
     {
         try {
+            // Calcular média de tempo de processamento (compatível SQLite e MySQL)
+            $avgSeconds = null;
+            $emissoes = VpoEmissao::completed()
+                ->whereNotNull('requested_at')
+                ->whereNotNull('completed_at')
+                ->get(['requested_at', 'completed_at']);
+
+            if ($emissoes->count() > 0) {
+                $totalSeconds = $emissoes->reduce(function ($carry, $emissao) {
+                    return $carry + $emissao->completed_at->diffInSeconds($emissao->requested_at);
+                }, 0);
+                $avgSeconds = round($totalSeconds / $emissoes->count(), 2);
+            }
+
             $stats = [
                 'total' => VpoEmissao::count(),
                 'por_status' => [
@@ -384,12 +398,8 @@ class VpoEmissaoController extends Controller
                     'failed' => VpoEmissao::failed()->count(),
                     'cancelled' => VpoEmissao::where('status', 'cancelled')->count(),
                 ],
-                'custo_total' => VpoEmissao::completed()->sum('custo_total'),
-                'media_tempo_processamento' => VpoEmissao::completed()
-                    ->whereNotNull('requested_at')
-                    ->whereNotNull('completed_at')
-                    ->selectRaw('AVG(TIMESTAMPDIFF(SECOND, requested_at, completed_at)) as avg_seconds')
-                    ->value('avg_seconds'),
+                'custo_total' => VpoEmissao::completed()->sum('custo_total') ?? 0,
+                'media_tempo_processamento' => $avgSeconds,
                 'ultimas_24h' => VpoEmissao::where('created_at', '>=', now()->subDay())->count(),
             ];
 

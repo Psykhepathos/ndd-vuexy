@@ -313,17 +313,11 @@ Route::middleware('api')->group(function () {
     // Sistema de emissão assíncrona de Vale Pedágio com integração NDD Cargo
     // @see docs/integracoes/ndd-cargo/VPO_EMISSAO_WIZARD.md (futuro)
     Route::prefix('vpo/emissao')->group(function () {
+        // Rotas específicas ANTES das rotas com parâmetros {uuid}
+
         // Iniciar emissão
         Route::post('iniciar', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'iniciar'])
             ->middleware('throttle:30,1');  // 30 requests per minute (operação pesada)
-
-        // Consultar resultado (polling)
-        Route::get('{uuid}', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'consultar'])
-            ->middleware('throttle:120,1');  // 120 requests per minute (polling frequente)
-
-        // Cancelar emissão
-        Route::post('{uuid}/cancelar', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'cancelar'])
-            ->middleware('throttle:30,1');  // 30 requests per minute
 
         // Validação e preview
         Route::post('validar-pacote', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'validarPacote'])
@@ -336,12 +330,22 @@ Route::middleware('api')->group(function () {
         Route::get('pacote/{codpac}/rotas', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'rotasDisponiveis'])
             ->middleware('throttle:60,1');  // 60 requests per minute
 
+        // Estatísticas (ANTES de {uuid} para não ser capturado)
+        Route::get('statistics', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'statistics'])
+            ->middleware('throttle:30,1');  // 30 requests per minute
+
         // Histórico de emissões
         Route::get('/', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'index'])
             ->middleware('throttle:60,1');  // 60 requests per minute
 
-        // Estatísticas
-        Route::get('statistics', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'statistics'])
+        // Rotas com parâmetros {uuid} - DEVEM VIR POR ÚLTIMO
+
+        // Consultar resultado (polling)
+        Route::get('{uuid}', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'consultar'])
+            ->middleware('throttle:120,1');  // 120 requests per minute (polling frequente)
+
+        // Cancelar emissão
+        Route::post('{uuid}/cancelar', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'cancelar'])
             ->middleware('throttle:30,1');  // 30 requests per minute
     });
 

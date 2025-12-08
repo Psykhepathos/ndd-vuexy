@@ -194,16 +194,22 @@ class DigitalSignature
      */
     private function createSignedInfo(string $referenceId, string $digestValue): string
     {
+        // Armazenar constantes em variáveis para usar no heredoc
+        $canonicalizationMethod = self::CANONICALIZATION_METHOD;
+        $signatureMethod = self::SIGNATURE_METHOD;
+        $transformEnveloped = self::TRANSFORM_ENVELOPED;
+        $digestMethod = self::DIGEST_METHOD;
+
         return <<<XML
 <SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">
-  <CanonicalizationMethod Algorithm="{$this::CANONICALIZATION_METHOD}"/>
-  <SignatureMethod Algorithm="{$this::SIGNATURE_METHOD}"/>
+  <CanonicalizationMethod Algorithm="{$canonicalizationMethod}"/>
+  <SignatureMethod Algorithm="{$signatureMethod}"/>
   <Reference URI="#{$referenceId}">
     <Transforms>
-      <Transform Algorithm="{$this::TRANSFORM_ENVELOPED}"/>
-      <Transform Algorithm="{$this::CANONICALIZATION_METHOD}"/>
+      <Transform Algorithm="{$transformEnveloped}"/>
+      <Transform Algorithm="{$canonicalizationMethod}"/>
     </Transforms>
-    <DigestMethod Algorithm="{$this::DIGEST_METHOD}"/>
+    <DigestMethod Algorithm="{$digestMethod}"/>
     <DigestValue>{$digestValue}</DigestValue>
   </Reference>
 </SignedInfo>
@@ -302,12 +308,27 @@ XML;
     }
 
     /**
-     * Libera recursos
+     * Libera recursos OpenSSL explicitamente
+     *
+     * Deve ser chamado em finally block para garantir limpeza mesmo em caso de erro
+     *
+     * @return void
      */
-    public function __destruct()
+    public function cleanup(): void
     {
         if ($this->privateKey) {
             openssl_free_key($this->privateKey);
+            $this->privateKey = null;
         }
+
+        $this->certificate = null;
+    }
+
+    /**
+     * Libera recursos automaticamente
+     */
+    public function __destruct()
+    {
+        $this->cleanup();
     }
 }

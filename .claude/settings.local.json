@@ -13,7 +13,21 @@
       "Bash(tree:*)",
       "Bash(pnpm run typecheck:*)",
       "Bash(git add:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(git for-each-ref:*)",
+      "Bash(git reflog:*)",
+      "Bash(git gc:*)",
+      "Bash(php artisan config:clear:*)",
+      "Bash(php artisan:*)",
+      "Bash(curl:*)",
+      "Bash(python -m json.tool:*)",
+      "Bash(openssl pkcs12:*)",
+      "Bash(python resultado.py:*)",
+      "Bash(storage/logs/laravel.log)",
+      "Bash(cat:*)",
+      "Bash(php:*)",
+      "Bash(for codtrn in 1809 6826 6269 5648 6770)",
+      "Bash(do echo \"=== SINCRONIZANDO codtrn=$codtrn ===\" curl -s -X POST http://localhost:8002/api/vpo/sync/transportador -H \"Content-Type: application/json\" -d \"{\"\"codtrn\"\": $codtrn}\")"
     ],
     "deny": [],
     "ask": []

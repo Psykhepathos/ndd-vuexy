@@ -23,7 +23,7 @@ class RoteirizadorBuilder
     /**
      * Namespace do XML NDD Cargo
      */
-    private const NDD_NAMESPACE = 'http://www.nddcargo.com.br/';
+    private const NDD_NAMESPACE = 'http://www.nddigital.com.br/nddcargo';
 
     /**
      * Versão do layout XML
@@ -48,12 +48,12 @@ class RoteirizadorBuilder
         // Elemento raiz: consultarRoteirizador_envio
         $root = $xml->createElementNS(self::NDD_NAMESPACE, 'consultarRoteirizador_envio');
         $root->setAttribute('versao', self::VERSAO_LAYOUT);
+        $root->setAttribute('token', config('nddcargo.token'));
         $xml->appendChild($root);
 
         // infConsultarRoteirizador (elemento principal que será assinado)
         $inf = $xml->createElement('infConsultarRoteirizador');
         $inf->setAttribute('ID', $uuid);
-        $inf->setAttribute('versao', self::VERSAO_LAYOUT);
         $root->appendChild($inf);
 
         // cnpj
@@ -88,9 +88,7 @@ class RoteirizadorBuilder
             $pontoParada = $xml->createElement('pontoParada');
             $pontosParada->appendChild($pontoParada);
 
-            $tipoPonto = $xml->createElement('tipo', $tipo);
-            $pontoParada->appendChild($tipoPonto);
-
+            // Apenas CEP (tipo não é aceito pelo schema)
             $cepElemento = $xml->createElement('cep', $cep);
             $pontoParada->appendChild($cepElemento);
         }
