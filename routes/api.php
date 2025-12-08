@@ -309,6 +309,42 @@ Route::middleware('api')->group(function () {
             ->middleware('throttle:30,1');  // 30 requests per minute
     });
 
+    // Rotas PÚBLICAS para VPO Emissão (Vale Pedágio via NDD Cargo)
+    // Sistema de emissão assíncrona de Vale Pedágio com integração NDD Cargo
+    // @see docs/integracoes/ndd-cargo/VPO_EMISSAO_WIZARD.md (futuro)
+    Route::prefix('vpo/emissao')->group(function () {
+        // Iniciar emissão
+        Route::post('iniciar', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'iniciar'])
+            ->middleware('throttle:30,1');  // 30 requests per minute (operação pesada)
+
+        // Consultar resultado (polling)
+        Route::get('{uuid}', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'consultar'])
+            ->middleware('throttle:120,1');  // 120 requests per minute (polling frequente)
+
+        // Cancelar emissão
+        Route::post('{uuid}/cancelar', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'cancelar'])
+            ->middleware('throttle:30,1');  // 30 requests per minute
+
+        // Validação e preview
+        Route::post('validar-pacote', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'validarPacote'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        Route::post('preview-waypoints', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'previewWaypoints'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        // Listar rotas disponíveis
+        Route::get('pacote/{codpac}/rotas', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'rotasDisponiveis'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        // Histórico de emissões
+        Route::get('/', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'index'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        // Estatísticas
+        Route::get('statistics', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'statistics'])
+            ->middleware('throttle:30,1');  // 30 requests per minute
+    });
+
     // ⚠️ Compra de Viagem SemParar - MODO DE TESTE ATIVO ⚠️
     // IMPORTANTE: Todas as chamadas estão em modo simulação para evitar compras acidentais
 

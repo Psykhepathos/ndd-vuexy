@@ -30,15 +30,21 @@ class NddCargoSoapClient
     private const PROCESS_CODE_ROTEIRIZADOR = 2027;
 
     /**
+     * ProcessCode para Emitir VPO (Vale Pedágio Obrigatório)
+     */
+    private const PROCESS_CODE_EMITIR_VPO = 2028;
+
+    /**
      * MessageType (sempre 100 para Request)
      */
     private const MESSAGE_TYPE_REQUEST = 100;
 
     /**
-     * ExchangePattern: 7 = Síncrono, 8 = Consulta Assíncrona
+     * ExchangePattern: 7 = Síncrono, 8 = Consulta Assíncrona, 9 = Assíncrono
      */
     private const EXCHANGE_PATTERN_SYNC = 7;
     private const EXCHANGE_PATTERN_ASYNC_QUERY = 8;
+    private const EXCHANGE_PATTERN_ASYNC = 9;
 
     /**
      * Namespaces XML
@@ -47,7 +53,7 @@ class NddCargoSoapClient
     private const NS_TEMPURI = 'http://tempuri.org/';
     private const NS_XSD = 'http://www.w3.org/2001/XMLSchema';
     private const NS_XSI = 'http://www.w3.org/2001/XMLSchema-instance';
-    private const NS_NDD = 'http://www.ndddigital.com.br/nddcargo';
+    private const NS_NDD = 'http://www.nddigital.com.br/nddcargo';
 
     /**
      * @var string URL do endpoint SOAP
@@ -122,17 +128,83 @@ class NddCargoSoapClient
     }
 
     /**
+     * Envia emissão VPO assíncrona
+     *
+     * @param string $xmlAssinado XML de negócio já assinado digitalmente (emitirVPO_envio)
+     * @param string $guid UUID da transação
+     * @return array ['success' => bool, 'data' => array|null, 'error' => string|null]
+     *               data contém: ['uuid' => string, 'raw_response' => string]
+     */
+    public function emitirVPO(string $xmlAssinado, string $guid): array
+    {
+        try {
+            // Construir CrossTalk Message (assíncrono - retorna UUID imediatamente)
+            $crossTalkMessage = $this->buildCrossTalkMessage(
+                processCode: self::PROCESS_CODE_EMITIR_VPO,
+                messageType: self::MESSAGE_TYPE_REQUEST,
+                exchangePattern: self::EXCHANGE_PATTERN_ASYNC,
+                guid: $guid
+            );
+
+            // Construir envelope SOAP
+            $soapEnvelope = $this->buildSoapEnvelope($crossTalkMessage, $xmlAssinado);
+
+            // Enviar requisição
+            $response = $this->sendSoapRequest($soapEnvelope);
+
+            if (!$response['success']) {
+                return $response;
+            }
+
+            // Para emissão VPO assíncrona, a resposta deve conter o UUID
+            // Extrair UUID da resposta (formato pode variar, ajustar conforme necessário)
+            $sendResult = $response['data'];
+
+            Log::info('Emissão VPO enviada com sucesso', [
+                'guid' => $guid,
+                'response_size' => strlen($sendResult ?? '')
+            ]);
+
+            return [
+                'success' => true,
+                'data' => [
+                    'uuid' => $guid,  // NDD Cargo deve retornar o mesmo GUID
+                    'raw_response' => $sendResult
+                ],
+                'error' => null
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Erro ao emitir VPO via NDD Cargo', [
+                'erro' => $e->getMessage(),
+                'guid' => $guid
+            ]);
+
+            return [
+                'success' => false,
+                'data' => null,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
      * Consulta resultado de operação assíncrona
      *
      * @param string $guid UUID da transação original
+     * @param int|null $processCode Código do processo (null = usa GUID para inferir)
      * @return array ['success' => bool, 'data' => string|null, 'error' => string|null]
      */
-    public function consultarResultado(string $guid): array
+    public function consultarResultado(string $guid, ?int $processCode = null): array
     {
         try {
+            // Se processCode não foi especificado, tentar inferir do GUID ou usar roteirizador como padrão
+            // Na prática, o NDD Cargo geralmente consegue identificar pelo GUID
+            $finalProcessCode = $processCode ?? self::PROCESS_CODE_ROTEIRIZADOR;
+
             // Construir CrossTalk Message (sem rawData)
             $crossTalkMessage = $this->buildCrossTalkMessage(
-                processCode: self::PROCESS_CODE_ROTEIRIZADOR,
+                processCode: $finalProcessCode,
                 messageType: self::MESSAGE_TYPE_REQUEST,
                 exchangePattern: self::EXCHANGE_PATTERN_ASYNC_QUERY,
                 guid: $guid
@@ -142,12 +214,22 @@ class NddCargoSoapClient
             $soapEnvelope = $this->buildSoapEnvelope($crossTalkMessage, '');
 
             // Enviar requisição
-            return $this->sendSoapRequest($soapEnvelope);
+            $response = $this->sendSoapRequest($soapEnvelope);
+
+            if ($response['success']) {
+                Log::info('Resultado consultado com sucesso', [
+                    'guid' => $guid,
+                    'process_code' => $finalProcessCode
+                ]);
+            }
+
+            return $response;
 
         } catch (\Exception $e) {
             Log::error('Erro ao consultar resultado NDD Cargo', [
                 'erro' => $e->getMessage(),
-                'guid' => $guid
+                'guid' => $guid,
+                'process_code' => $processCode
             ]);
 
             return [
@@ -176,8 +258,13 @@ class NddCargoSoapClient
         // Timestamp no formato ISO8601 com timezone brasileiro
         $dateTime = now()->timezone('America/Sao_Paulo')->format('Y-m-d\TH:i:sP');
 
+        // Armazenar constantes em variáveis para usar no heredoc
+        $nsXsd = self::NS_XSD;
+        $nsXsi = self::NS_XSI;
+        $nsNdd = self::NS_NDD;
+
         $xml = <<<XML
-<CrossTalk_Message xmlns:xsd="{$this::NS_XSD}" xmlns:xsi="{$this::NS_XSI}" xmlns="{$this::NS_NDD}">
+<CrossTalk_Message xmlns:xsd="{$nsXsd}" xmlns:xsi="{$nsXsi}" xmlns="{$nsNdd}">
     <CrossTalk_Header>
         <ProcessCode>{$processCode}</ProcessCode>
         <MessageType>{$messageType}</MessageType>
@@ -208,9 +295,13 @@ XML;
         $messageCdata = $this->escapeCdata($crossTalkMessage);
         $rawDataCdata = $this->escapeCdata($rawData);
 
+        // Armazenar constantes em variáveis para usar no heredoc
+        $nsSoap = self::NS_SOAP;
+        $nsTempuri = self::NS_TEMPURI;
+
         $envelope = <<<XML
 <?xml version='1.0' encoding='utf-16'?>
-<soapenv:Envelope xmlns:soapenv="{$this::NS_SOAP}" xmlns:tem="{$this::NS_TEMPURI}">
+<soapenv:Envelope xmlns:soapenv="{$nsSoap}" xmlns:tem="{$nsTempuri}">
     <soapenv:Header/>
     <soapenv:Body>
         <tem:Send>
@@ -248,11 +339,24 @@ XML;
         // Converter para UTF-16 (CRÍTICO: NDD Cargo exige UTF-16!)
         $soapEnvelopeUtf16 = mb_convert_encoding($soapEnvelope, 'UTF-16LE', 'UTF-8');
 
-        // Log (apenas primeiros 500 chars para não lotar)
+        // Sanitizar preview para logs (remover credenciais sensíveis)
+        $previewSanitized = $soapEnvelope;
+        $previewSanitized = preg_replace(
+            '/<Token>.*?<\/Token>/s',
+            '<Token>***REDACTED***</Token>',
+            $previewSanitized
+        );
+        $previewSanitized = preg_replace(
+            '/<EnterpriseId>.*?<\/EnterpriseId>/s',
+            '<EnterpriseId>***REDACTED***</EnterpriseId>',
+            $previewSanitized
+        );
+
+        // Log (apenas primeiros 500 chars, sanitizado)
         Log::info('Enviando requisição SOAP para NDD Cargo', [
             'endpoint' => $this->endpointUrl,
             'size_bytes' => strlen($soapEnvelopeUtf16),
-            'preview' => substr($soapEnvelope, 0, 500) . '...'
+            'preview' => substr($previewSanitized, 0, 500) . '...'
         ]);
 
         try {
@@ -266,8 +370,8 @@ XML;
                 ->post($this->endpointUrl);
 
             if ($response->successful()) {
-                // Converter resposta de UTF-16 para UTF-8
-                $responseBody = mb_convert_encoding($response->body(), 'UTF-8', 'UTF-16LE');
+                // Laravel Http já faz a conversão automática para UTF-8
+                $responseBody = $response->body();
 
                 Log::info('Resposta SOAP recebida com sucesso', [
                     'status' => $response->status(),
