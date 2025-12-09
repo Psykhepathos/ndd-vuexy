@@ -331,12 +331,14 @@ class VpoDataSyncService
             $motorista = $motResult['data']['results'][0];
         }
 
+        // Se não encontrou motorista, usar dados do transportador como fallback
+        // (isso é comum em empresas pequenas onde o dono é o motorista)
+        $useFallbackToTransporte = false;
         if (!$motorista) {
-            return [
-                'success' => false,
-                'data' => null,
-                'error' => 'Motorista não encontrado para empresa'
-            ];
+            Log::info("VPO Sync: Motorista não encontrado para empresa, usando fallback para dados do transporte", [
+                'codtrn' => $codtrn
+            ]);
+            $useFallbackToTransporte = true;
         }
 
         // Buscar veículo (se placa fornecida ou buscar do transporte)
@@ -354,10 +356,16 @@ class VpoDataSyncService
             }
         }
 
-        // Buscar JOINs para bairro, município, estado (do motorista)
-        $bairroNome = $this->getBairroNome($motorista['codbai'] ?? null);
-        $municipioNome = $this->getMunicipioNome($motorista['codmun'] ?? null);
-        $estadoSigla = $this->getEstadoSigla($motorista['codest'] ?? null);
+        // Buscar JOINs para bairro, município, estado (fonte: motorista ou transportador)
+        if ($useFallbackToTransporte) {
+            $bairroNome = $this->getBairroNome($transportador['codbai'] ?? null);
+            $municipioNome = $this->getMunicipioNome($transportador['codmun'] ?? null);
+            $estadoSigla = $this->getEstadoSigla($transportador['codest'] ?? null);
+        } else {
+            $bairroNome = $this->getBairroNome($motorista['codbai'] ?? null);
+            $municipioNome = $this->getMunicipioNome($motorista['codmun'] ?? null);
+            $estadoSigla = $this->getEstadoSigla($motorista['codest'] ?? null);
+        }
 
         // Determinar modelo do veículo
         $veiculoModelo = null;
@@ -367,6 +375,61 @@ class VpoDataSyncService
             $veiculoModelo = $transportador['desvei']; // Fallback para desvei do transporte
         }
 
+        // Se fallback, usar dados do transportador (como se fosse autônomo)
+        if ($useFallbackToTransporte) {
+            return [
+                'success' => true,
+                'data' => [
+                    // Chaves Progress
+                    'codtrn' => $codtrn,
+                    'codmot' => null, // Sem motorista específico
+                    'numpla' => $placaBusca,
+                    'flgautonomo' => false, // Ainda é empresa
+
+                    // 19 campos VPO - usando dados do transportador
+                    'cpf_cnpj' => preg_replace('/\D/', '', $transportador['codcnpjcpf'] ?? ''),
+                    'antt_rntrc' => $transportador['cdantt'] ?? null,
+                    'antt_nome' => $transportador['nomtrn'] ?? null,
+                    'antt_validade' => $transportador['datvldantt'] ?? null,
+                    'antt_status' => 'Ativo',
+                    'placa' => $this->formatPlaca($placaBusca),
+                    'veiculo_tipo' => $destipcam ?? 'Não especificado',
+                    'veiculo_modelo' => $veiculoModelo,
+                    'condutor_rg' => !empty($transportador['numrg']) ? $transportador['numrg'] : ($transportador['numhab'] ?? null),
+                    'condutor_nome' => $transportador['nomtrn'] ?? null,
+                    'condutor_sexo' => 'M',
+                    'condutor_nome_mae' => $transportador['nommae'] ?? null,
+                    'condutor_data_nascimento' => $transportador['datnas'] ?? null,
+                    'endereco_rua' => $this->formatEndereco(
+                        $transportador['tiplog'] ?? null,
+                        $transportador['codlog'] ?? null,
+                        $transportador['desend'] ?? null,
+                        $transportador['numend'] ?? null
+                    ),
+                    'endereco_bairro' => $bairroNome,
+                    'endereco_cidade' => $municipioNome,
+                    'endereco_estado' => $estadoSigla,
+                    'contato_celular' => $this->formatTelefone(
+                        $transportador['dddcel'] ?? null,
+                        $transportador['numcel'] ?? null
+                    ),
+                    'contato_email' => $transportador['e-mail'] ?? null,
+
+                    // Metadados
+                    'fontes_dados' => [
+                        'progress_transporte' => true,
+                        'progress_trnmot' => false, // Sem motorista
+                        'progress_trnvei' => $veiculo !== null,
+                        'progress_tipcam' => $destipcam !== null,
+                        'fallback_to_transporte' => true,
+                    ],
+                    'ultima_sync_progress' => now(),
+                ],
+                'error' => null
+            ];
+        }
+
+        // Caminho normal: com motorista
         return [
             'success' => true,
             'data' => [

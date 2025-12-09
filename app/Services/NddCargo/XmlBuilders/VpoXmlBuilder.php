@@ -112,10 +112,17 @@ class VpoXmlBuilder
         $tac = $xml->createElement('tac');
         $ideTransp->appendChild($tac);
 
-        $this->addElement($xml, $tac, 'nomeCompleto', trim($vpoData['condutor_nome'] ?? $vpoData['antt_nome'] ?? ''));
-        $this->addElement($xml, $tac, 'nomeMae', trim($vpoData['condutor_nome_mae'] ?? ''));
-        $this->addElement($xml, $tac, 'dataNascimento', $this->formatDate($vpoData['condutor_data_nascimento'] ?? ''));
-        $this->addElement($xml, $tac, 'identidade', trim($vpoData['condutor_rg'] ?? ''));
+        // IMPORTANTE: Todos os elementos do TAC são obrigatórios pelo XSD!
+        // Usar valores padrão quando vazios
+        $nomeCompleto = trim($vpoData['condutor_nome'] ?? $vpoData['antt_nome'] ?? '');
+        $nomeMae = trim($vpoData['condutor_nome_mae'] ?? '');
+        $dataNascimento = $this->formatDate($vpoData['condutor_data_nascimento'] ?? '');
+        $identidade = trim($vpoData['condutor_rg'] ?? '');
+
+        $this->addElementRequired($xml, $tac, 'nomeCompleto', $nomeCompleto ?: 'NAO INFORMADO');
+        $this->addElementRequired($xml, $tac, 'nomeMae', $nomeMae ?: 'NAO INFORMADA');
+        $this->addElementRequired($xml, $tac, 'dataNascimento', $dataNascimento ?: '1980-01-01');
+        $this->addElementRequired($xml, $tac, 'identidade', $identidade ?: '000000000');
 
         // infTransportador/endereco
         // IMPORTANTE: A ORDEM dos elementos é CRÍTICA para o XSD!
