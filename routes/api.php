@@ -297,6 +297,10 @@ Route::middleware('api')->group(function () {
         Route::get('transportadores/{codtrn}', [VpoController::class, 'show'])
             ->middleware('throttle:60,1');  // 60 requests per minute
 
+        // Atualização de campos faltantes (preenchidos pelo usuário)
+        Route::put('transportadores/{codtrn}', [VpoController::class, 'update'])
+            ->middleware('throttle:30,1');  // 30 requests per minute
+
         // Operações de manutenção
         Route::delete('transportadores/{codtrn}', [VpoController::class, 'destroy'])
             ->middleware('throttle:30,1');  // 30 requests per minute (força resync)

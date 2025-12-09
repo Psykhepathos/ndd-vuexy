@@ -93,6 +93,8 @@ class VpoDataSyncService
 
             // 5. Salvar/Atualizar no cache local
             if ($cached) {
+                // IMPORTANTE: Preservar campos editados ANTES de atualizar
+                $mergedData = $this->preservarCamposEditados($cached, $mergedData);
                 $cached->update($mergedData);
                 $cached->refresh();
             } else {
@@ -603,10 +605,10 @@ class VpoDataSyncService
         if (!$codest) return null;
 
         try {
-            $sql = "SELECT siglaest FROM PUB.estado WHERE codest = {$codest}";
+            $sql = "SELECT sigest FROM PUB.estado WHERE codest = {$codest}";
             $result = $this->progressService->executeCustomQuery($sql);
 
-            return $result['data']['results'][0]['siglaest'] ?? null;
+            return $result['data']['results'][0]['sigest'] ?? null;
         } catch (\Exception $e) {
             return null;
         }
@@ -655,6 +657,49 @@ class VpoDataSyncService
         }
 
         return $endereco;
+    }
+
+    /**
+     * Preserva campos que foram editados manualmente pelo usuário.
+     * Quando o usuário preenche campos faltantes via frontend,
+     * esses valores NÃO devem ser sobrescritos pelo sync.
+     */
+    protected function preservarCamposEditados(VpoTransportadorCache $cached, array $mergedData): array
+    {
+        // Se não foi editado manualmente, não preservar nada
+        if (!$cached->editado_manualmente) {
+            return $mergedData;
+        }
+
+        // Campos que o usuário pode editar manualmente
+        $camposEditaveis = [
+            'antt_rntrc', 'antt_validade', 'antt_status',
+            'placa', 'veiculo_tipo', 'veiculo_modelo',
+            'condutor_rg', 'condutor_nome', 'condutor_sexo', 'condutor_nome_mae', 'condutor_data_nascimento',
+            'endereco_rua', 'endereco_numero', 'endereco_bairro', 'endereco_cidade', 'endereco_estado', 'endereco_cep',
+            'contato_telefone', 'contato_celular', 'contato_email',
+        ];
+
+        // Para cada campo editável, se o valor do cache é não-vazio, preservar
+        foreach ($camposEditaveis as $campo) {
+            $valorCache = $cached->$campo;
+            $valorNovo = $mergedData[$campo] ?? null;
+
+            // Preservar se: cache tem valor E (novo está vazio OU cache foi editado)
+            if (!empty($valorCache) && (empty($valorNovo) || $cached->editado_manualmente)) {
+                $mergedData[$campo] = $valorCache;
+            }
+        }
+
+        // Preservar flags de edição manual
+        $mergedData['editado_manualmente'] = true;
+        $mergedData['data_edicao_manual'] = $cached->data_edicao_manual;
+
+        Log::info("VPO Sync: Campos editados manualmente preservados", [
+            'codtrn' => $cached->codtrn
+        ]);
+
+        return $mergedData;
     }
 }
 

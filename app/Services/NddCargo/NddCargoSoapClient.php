@@ -30,9 +30,10 @@ class NddCargoSoapClient
     private const PROCESS_CODE_ROTEIRIZADOR = 2027;
 
     /**
-     * ProcessCode para Emitir VPO (Vale Pedágio Obrigatório)
+     * ProcessCode para Operação Vale Pedágio (OVP)
+     * @see docs/NDD-SOAP-API-Documentation.md - ProcessCode 2019
      */
-    private const PROCESS_CODE_EMITIR_VPO = 2028;
+    private const PROCESS_CODE_EMITIR_VPO = 2019;
 
     /**
      * MessageType (sempre 100 para Request)
@@ -128,9 +129,9 @@ class NddCargoSoapClient
     }
 
     /**
-     * Envia emissão VPO assíncrona
+     * Envia emissão VPO (síncrono - igual ao roteirizador!)
      *
-     * @param string $xmlAssinado XML de negócio já assinado digitalmente (emitirVPO_envio)
+     * @param string $xmlAssinado XML de negócio já assinado digitalmente (operacaoValePedagio_envio)
      * @param string $guid UUID da transação
      * @return array ['success' => bool, 'data' => array|null, 'error' => string|null]
      *               data contém: ['uuid' => string, 'raw_response' => string]
@@ -138,11 +139,11 @@ class NddCargoSoapClient
     public function emitirVPO(string $xmlAssinado, string $guid): array
     {
         try {
-            // Construir CrossTalk Message (assíncrono - retorna UUID imediatamente)
+            // Construir CrossTalk Message (síncrono - ExchangePattern 7, igual ao roteirizador!)
             $crossTalkMessage = $this->buildCrossTalkMessage(
                 processCode: self::PROCESS_CODE_EMITIR_VPO,
                 messageType: self::MESSAGE_TYPE_REQUEST,
-                exchangePattern: self::EXCHANGE_PATTERN_ASYNC,
+                exchangePattern: self::EXCHANGE_PATTERN_SYNC,  // 7 = Síncrono (não 9!)
                 guid: $guid
             );
 
@@ -373,13 +374,27 @@ XML;
                 // Laravel Http já faz a conversão automática para UTF-8
                 $responseBody = $response->body();
 
+                // Log detalhado da resposta (primeiros 2000 chars)
                 Log::info('Resposta SOAP recebida com sucesso', [
                     'status' => $response->status(),
-                    'size_bytes' => strlen($responseBody)
+                    'size_bytes' => strlen($responseBody),
+                    'response_preview' => substr($responseBody, 0, 2000)
                 ]);
 
                 // Extrair SendResult do CDATA
                 $sendResult = $this->extractSendResult($responseBody);
+
+                // Log do SendResult extraído
+                if ($sendResult) {
+                    Log::info('SendResult extraído', [
+                        'sendResult_size' => strlen($sendResult),
+                        'sendResult_preview' => substr($sendResult, 0, 1000)
+                    ]);
+                } else {
+                    Log::warning('SendResult vazio ou nulo', [
+                        'response_body' => substr($responseBody, 0, 1000)
+                    ]);
+                }
 
                 return [
                     'success' => true,

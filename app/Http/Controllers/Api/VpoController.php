@@ -20,15 +20,14 @@ class VpoController extends Controller
 
     /**
      * GET /api/vpo/test-connection
-     * Testa conexão com Progress e ANTT
      */
     public function testConnection(): JsonResponse
     {
         return response()->json([
             'success' => true,
             'services' => [
-                'progress' => true, // Já temos ProgressService funcionando
-                'antt_opendata' => true, // API pública sempre disponível
+                'progress' => true,
+                'antt_opendata' => true,
                 'database_local' => VpoTransportadorCache::count() . ' registros em cache'
             ],
             'message' => 'Todos os serviços operacionais'
@@ -37,14 +36,6 @@ class VpoController extends Controller
 
     /**
      * POST /api/vpo/sync/transportador
-     * Sincroniza UM transportador específico
-     *
-     * Body: {
-     *   "codtrn": 1,
-     *   "codmot": null,  // opcional, apenas para empresas
-     *   "placa": null,   // opcional
-     *   "force_antt_update": false
-     * }
      */
     public function syncTransportador(Request $request): JsonResponse
     {
@@ -67,12 +58,6 @@ class VpoController extends Controller
 
     /**
      * POST /api/vpo/sync/batch
-     * Sincroniza múltiplos transportadores
-     *
-     * Body: {
-     *   "codtrn_list": [1, 2, 3, 4, 5],
-     *   "force_antt_update": false
-     * }
      */
     public function syncBatch(Request $request): JsonResponse
     {
@@ -92,15 +77,6 @@ class VpoController extends Controller
 
     /**
      * GET /api/vpo/transportadores
-     * Lista transportadores do cache local (paginado)
-     *
-     * Query params:
-     * - page: página (default: 1)
-     * - per_page: itens por página (default: 15, max: 100)
-     * - search: busca por nome/rntrc/placa
-     * - status: filtro por antt_status (Ativo/Suspenso/Cancelado)
-     * - qualidade_minima: score mínimo de qualidade (0-100)
-     * - apenas_validos: apenas com RNTRC válido (true/false)
      */
     public function index(Request $request): JsonResponse
     {
@@ -108,7 +84,6 @@ class VpoController extends Controller
 
         $query = VpoTransportadorCache::query();
 
-        // Filtros
         if ($search = $request->get('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('antt_nome', 'like', "%{$search}%")
@@ -130,7 +105,6 @@ class VpoController extends Controller
             $query->rntrcValido();
         }
 
-        // Ordenação
         $query->orderByDesc('score_qualidade')
               ->orderByDesc('ultima_sync_progress');
 
@@ -150,7 +124,6 @@ class VpoController extends Controller
 
     /**
      * GET /api/vpo/transportadores/{codtrn}
-     * Busca transportador específico no cache
      */
     public function show(int $codtrn): JsonResponse
     {
@@ -166,7 +139,7 @@ class VpoController extends Controller
         return response()->json([
             'success' => true,
             'data' => $transportador,
-            'vpo_data' => $transportador->toVpoArray(), // Dados formatados para NDD Cargo
+            'vpo_data' => $transportador->toVpoArray(),
             'meta' => [
                 'needs_update' => $transportador->isStale(),
                 'rntrc_valido' => $transportador->isRntrcValido(),
@@ -177,7 +150,6 @@ class VpoController extends Controller
 
     /**
      * GET /api/vpo/statistics
-     * Estatísticas do cache VPO
      */
     public function statistics(): JsonResponse
     {
@@ -215,7 +187,6 @@ class VpoController extends Controller
 
     /**
      * DELETE /api/vpo/transportadores/{codtrn}
-     * Remove transportador do cache (força resync)
      */
     public function destroy(int $codtrn): JsonResponse
     {
@@ -236,7 +207,6 @@ class VpoController extends Controller
 
     /**
      * POST /api/vpo/transportadores/{codtrn}/recalcular-qualidade
-     * Recalcula score de qualidade
      */
     public function recalcularQualidade(int $codtrn): JsonResponse
     {
@@ -256,6 +226,85 @@ class VpoController extends Controller
             'score' => $score,
             'campos_faltantes' => $transportador->campos_faltantes,
             'avisos' => $transportador->avisos
+        ]);
+    }
+
+    /**
+     * PUT /api/vpo/transportadores/{codtrn}
+     * Atualiza campos faltantes do cache VPO (preenchidos pelo usuário)
+     */
+    public function update(Request $request, int $codtrn): JsonResponse
+    {
+        $transportador = VpoTransportadorCache::byCodtrn($codtrn)->first();
+
+        if (!$transportador) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Transportador não encontrado no cache.'
+            ], 404);
+        }
+
+        $camposEditaveis = [
+            'antt_rntrc', 'antt_validade', 'antt_status',
+            'placa', 'veiculo_tipo', 'veiculo_modelo',
+            'condutor_rg', 'condutor_nome', 'condutor_sexo', 'condutor_nome_mae', 'condutor_data_nascimento',
+            'endereco_rua', 'endereco_numero', 'endereco_bairro', 'endereco_cidade', 'endereco_estado', 'endereco_cep',
+            'contato_telefone', 'contato_celular', 'contato_email',
+        ];
+
+        $validated = $request->validate([
+            'antt_rntrc' => 'nullable|string|max:20',
+            'antt_validade' => 'nullable|date',
+            'antt_status' => 'nullable|string|max:50',
+            'placa' => 'nullable|string|max:10',
+            'veiculo_tipo' => 'nullable|string|max:50',
+            'veiculo_modelo' => 'nullable|string|max:100',
+            'condutor_rg' => 'nullable|string|max:20',
+            'condutor_nome' => 'nullable|string|max:200',
+            'condutor_sexo' => 'nullable|string|max:1|in:M,F',
+            'condutor_nome_mae' => 'nullable|string|max:200',
+            'condutor_data_nascimento' => 'nullable|date',
+            'endereco_rua' => 'nullable|string|max:200',
+            'endereco_numero' => 'nullable|string|max:20',
+            'endereco_bairro' => 'nullable|string|max:100',
+            'endereco_cidade' => 'nullable|string|max:100',
+            'endereco_estado' => 'nullable|string|max:2',
+            'endereco_cep' => 'nullable|string|max:10',
+            'contato_telefone' => 'nullable|string|max:20',
+            'contato_celular' => 'nullable|string|max:20',
+            'contato_email' => 'nullable|email|max:200',
+        ]);
+
+        $dadosParaAtualizar = [];
+        foreach ($validated as $campo => $valor) {
+            if (in_array($campo, $camposEditaveis) && $valor !== null) {
+                $dadosParaAtualizar[$campo] = $valor;
+            }
+        }
+
+        if (empty($dadosParaAtualizar)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nenhum campo válido para atualizar'
+            ], 400);
+        }
+
+        $dadosParaAtualizar['editado_manualmente'] = true;
+        $dadosParaAtualizar['data_edicao_manual'] = now();
+
+        $transportador->update($dadosParaAtualizar);
+        $transportador->refresh();
+        $score = $transportador->calculateQualityScore();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Dados atualizados com sucesso',
+            'data' => [
+                'codtrn' => $transportador->codtrn,
+                'campos_atualizados' => array_keys($dadosParaAtualizar),
+                'score_qualidade' => $score,
+                'campos_faltantes' => $transportador->campos_faltantes,
+            ]
         ]);
     }
 }

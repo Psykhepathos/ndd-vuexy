@@ -48,6 +48,8 @@ class VpoTransportadorCache extends Model
         'avisos',
         'ultimo_uso',
         'total_usos',
+        'editado_manualmente',
+        'data_edicao_manual',
     ];
 
     protected $casts = [
@@ -62,6 +64,8 @@ class VpoTransportadorCache extends Model
         'ultimo_uso' => 'datetime',
         'score_qualidade' => 'integer',
         'total_usos' => 'integer',
+        'editado_manualmente' => 'boolean',
+        'data_edicao_manual' => 'datetime',
     ];
 
     /**
@@ -70,6 +74,10 @@ class VpoTransportadorCache extends Model
     public function toVpoArray(): array
     {
         return [
+            // Flag de tipo de transportador (crítico para cpfTransportador vs cnpjTransportador)
+            'flgautonomo' => $this->flgautonomo,
+
+            // 19 campos VPO
             'cpf_cnpj' => $this->cpf_cnpj,
             'antt_rntrc' => $this->antt_rntrc,
             'antt_nome' => $this->antt_nome,

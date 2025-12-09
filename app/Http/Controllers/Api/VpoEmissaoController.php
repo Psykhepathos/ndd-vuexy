@@ -54,16 +54,23 @@ class VpoEmissaoController extends Controller
         $result = $this->emissaoService->iniciarEmissao([
             'codpac' => $request->codpac,
             'rota_id' => $request->rota_id,
+            'skip_validation' => $request->boolean('skip_validation', false), // TEMP: bypass para testes
             'usuario_id' => auth()->id() ?? null,
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
         ]);
 
         if (!$result['success']) {
-            return response()->json([
+            $response = [
                 'success' => false,
                 'message' => $result['error']
-            ], 400);
+            ];
+            // Incluir detalhes de validação se disponíveis
+            if (isset($result['validation_errors'])) {
+                $response['validation_errors'] = $result['validation_errors'];
+                $response['score_qualidade'] = $result['score_qualidade'] ?? null;
+            }
+            return response()->json($response, 400);
         }
 
         return response()->json([
