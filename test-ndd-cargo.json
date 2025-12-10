@@ -1,0 +1,15 @@
+{
+  "cnpj_empresa": "17359233000188",
+  "cnpj_contratante": "17359233000188",
+  "categoria_pedagio": 7,
+  "pontos_parada": {
+    "origem": "88508320",
+    "destino": "01218020"
+  },
+  "tipo_rota_padrao": 1,
+  "evitar_pedagogios": false,
+  "priorizar_rodovias": true,
+  "tipo_rota": 1,
+  "tipo_veiculo": 2,
+  "retornar_trecho": true
+}

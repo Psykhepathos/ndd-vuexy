@@ -262,4 +262,125 @@ class GeocodingService
 
         return $resultado;
     }
+
+    /**
+     * Busca CEP central de um município usando ViaCEP API
+     *
+     * @param string $nomeMunicipio Nome do município
+     * @param string $uf Sigla do estado (2 letras)
+     * @return string|null CEP (8 dígitos) ou null se não encontrado
+     */
+    public function getCepByMunicipio(string $nomeMunicipio, string $uf): ?string
+    {
+        try {
+            // Normalizar nome do município (remover acentos para a API)
+            $nomeLimpo = $this->removerAcentos($nomeMunicipio);
+            $uf = strtoupper(trim($uf));
+
+            // ViaCEP requer logradouro com pelo menos 3 caracteres
+            // Tentar múltiplos termos de busca comuns
+            $termosBusca = ['Avenida', 'Rua', 'Praca', 'Alameda', 'Centro'];
+
+            foreach ($termosBusca as $termo) {
+                // ViaCEP: GET https://viacep.com.br/ws/{UF}/{cidade}/{logradouro}/json/
+                $url = "https://viacep.com.br/ws/{$uf}/{$nomeLimpo}/{$termo}/json/";
+
+                Log::debug('Tentando buscar CEP via ViaCEP', [
+                    'municipio' => $nomeMunicipio,
+                    'uf' => $uf,
+                    'termo' => $termo,
+                    'url' => $url
+                ]);
+
+                $response = Http::timeout(10)->get($url);
+
+                if ($response->successful()) {
+                    $data = $response->json();
+
+                    // ViaCEP retorna array de resultados
+                    if (is_array($data) && count($data) > 0 && isset($data[0]['cep'])) {
+                        $cep = preg_replace('/\D/', '', $data[0]['cep']);
+                        Log::info('CEP encontrado via ViaCEP', [
+                            'municipio' => $nomeMunicipio,
+                            'uf' => $uf,
+                            'termo' => $termo,
+                            'cep' => $cep
+                        ]);
+                        return $cep;
+                    }
+                }
+
+                // Pequena pausa entre tentativas
+                usleep(50000); // 50ms
+            }
+
+            Log::warning('CEP não encontrado para município após tentar todos os termos', [
+                'municipio' => $nomeMunicipio,
+                'uf' => $uf
+            ]);
+
+            return null;
+
+        } catch (\Exception $e) {
+            Log::error('Erro ao buscar CEP via ViaCEP', [
+                'municipio' => $nomeMunicipio,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Busca CEPs para múltiplos municípios
+     *
+     * @param array $municipios Array com ['nome' => string, 'uf' => string]
+     * @return array CEPs encontrados ['nome_uf' => 'cep']
+     */
+    public function getCepsMunicipios(array $municipios): array
+    {
+        $ceps = [];
+
+        foreach ($municipios as $mun) {
+            $nome = $mun['nome'] ?? $mun['desMun'] ?? '';
+            $uf = $mun['uf'] ?? $mun['desEst'] ?? '';
+
+            if (empty($nome) || empty($uf)) {
+                continue;
+            }
+
+            $cep = $this->getCepByMunicipio($nome, $uf);
+            if ($cep) {
+                $key = strtoupper("{$nome}_{$uf}");
+                $ceps[$key] = $cep;
+            }
+
+            // Rate limiting para não sobrecarregar ViaCEP
+            usleep(100000); // 100ms entre chamadas
+        }
+
+        return $ceps;
+    }
+
+    /**
+     * Remove acentos de uma string (para usar na API ViaCEP)
+     */
+    private function removerAcentos(string $string): string
+    {
+        $acentos = [
+            'À' => 'A', 'Á' => 'A', 'Â' => 'A', 'Ã' => 'A', 'Ä' => 'A', 'Å' => 'A',
+            'à' => 'a', 'á' => 'a', 'â' => 'a', 'ã' => 'a', 'ä' => 'a', 'å' => 'a',
+            'È' => 'E', 'É' => 'E', 'Ê' => 'E', 'Ë' => 'E',
+            'è' => 'e', 'é' => 'e', 'ê' => 'e', 'ë' => 'e',
+            'Ì' => 'I', 'Í' => 'I', 'Î' => 'I', 'Ï' => 'I',
+            'ì' => 'i', 'í' => 'i', 'î' => 'i', 'ï' => 'i',
+            'Ò' => 'O', 'Ó' => 'O', 'Ô' => 'O', 'Õ' => 'O', 'Ö' => 'O',
+            'ò' => 'o', 'ó' => 'o', 'ô' => 'o', 'õ' => 'o', 'ö' => 'o',
+            'Ù' => 'U', 'Ú' => 'U', 'Û' => 'U', 'Ü' => 'U',
+            'ù' => 'u', 'ú' => 'u', 'û' => 'u', 'ü' => 'u',
+            'Ç' => 'C', 'ç' => 'c',
+            'Ñ' => 'N', 'ñ' => 'n',
+        ];
+
+        return strtr($string, $acentos);
+    }
 }

@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste VPO - Validação de Campos</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        .section h2 {
+            color: #667eea;
+            font-size: 20px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .form-group label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        .form-group input {
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .response-box {
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            min-height: 150px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .response-box pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .success {
+            color: #28a745;
+            font-weight: 600;
+        }
+        .error {
+            color: #dc3545;
+            font-weight: 600;
+        }
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .warning h3 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+        .validation-error {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        .validation-error h3 {
+            color: #721c24;
+            margin-bottom: 10px;
+        }
+        .validation-error ul {
+            margin-left: 20px;
+            color: #721c24;
+        }
+        .validation-error li {
+            margin: 5px 0;
+        }
+        .score-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .score-low { background: #f8d7da; color: #721c24; }
+        .score-medium { background: #fff3cd; color: #856404; }
+        .score-high { background: #d4edda; color: #155724; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Teste VPO - Validação de Campos Obrigatórios</h1>
+            <p>Verifica se todos os 19 campos obrigatórios estão presentes antes de emitir VPO</p>
+        </div>
+
+        <div class="content">
+            <!-- Warning Box -->
+            <div class="warning">
+                <h3>⚠️ Teste de Validação</h3>
+                <p>Este teste verifica se a validação de campos obrigatórios está funcionando corretamente.</p>
+                <p>Se algum campo estiver faltando, a emissão será bloqueada e você verá uma mensagem detalhada.</p>
+            </div>
+
+            <!-- Form Section -->
+            <div class="section">
+                <h2>📋 Parâmetros da Emissão</h2>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Código do Pacote (codpac):</label>
+                        <input type="number" id="codpac" value="3048790">
+                    </div>
+                    <div class="form-group">
+                        <label>ID da Rota SemParar (rota_id):</label>
+                        <input type="number" id="rota_id" value="204">
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="testarValidacao()">
+                        🚀 Testar Validação
+                    </button>
+                    <button class="btn btn-secondary" onclick="limparResposta()">
+                        🗑️ Limpar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Response Section -->
+            <div class="section">
+                <h2>📤 Resposta da API</h2>
+                <div id="response" class="response-box">
+                    <p style="color: #999; text-align: center;">Aguardando requisição...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8002/api/vpo/emissao';
+
+        async function testarValidacao() {
+            const responseDiv = document.getElementById('response');
+
+            // Show loading
+            responseDiv.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Testando validação de campos obrigatórios...</p>
+                </div>
+            `;
+
+            const codpac = document.getElementById('codpac').value;
+            const rota_id = document.getElementById('rota_id').value;
+
+            try {
+                const startTime = performance.now();
+                const response = await fetch(`${API_BASE}/iniciar`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        codpac: parseInt(codpac),
+                        rota_id: parseInt(rota_id)
+                    })
+                });
+
+                const endTime = performance.now();
+                const duration = ((endTime - startTime) / 1000).toFixed(2);
+
+                const result = await response.json();
+
+                let html = '';
+
+                if (!result.success && result.validation_errors) {
+                    // Validation error - Expected!
+                    html = `
+                        <div style="margin-bottom: 20px;">
+                            <p class="error">
+                                ❌ Validação Falhou (esperado!)
+                                (${response.status} - ${duration}s)
+                            </p>
+                        </div>
+                    `;
+
+                    // Score badge
+                    const score = result.score_qualidade || 0;
+                    let scoreClass = 'score-low';
+                    if (score >= 80) scoreClass = 'score-high';
+                    else if (score >= 50) scoreClass = 'score-medium';
+
+                    html += `
+                        <div class="validation-error">
+                            <h3>🚫 Campos Obrigatórios Faltando</h3>
+                            <p><strong>Score de Qualidade:</strong> <span class="score-badge ${scoreClass}">${score}/100</span></p>
+                            <p><strong>Total de Campos Faltantes:</strong> ${result.validation_errors.length}</p>
+                            <br>
+                            <p><strong>Mensagem para o Usuário:</strong></p>
+                            <pre style="background: white; padding: 15px; border-radius: 5px; white-space: pre-wrap;">${result.message}</pre>
+                        </div>
+                    `;
+
+                    // Group by category
+                    const porCategoria = {};
+                    result.validation_errors.forEach(campo => {
+                        if (!porCategoria[campo.categoria]) {
+                            porCategoria[campo.categoria] = [];
+                        }
+                        porCategoria[campo.categoria].push(campo);
+                    });
+
+                    html += `<div style="background: white; padding: 15px; border-radius: 8px; margin-top: 15px;">`;
+                    html += `<h4 style="color: #667eea; margin-bottom: 10px;">📊 Campos Agrupados por Categoria:</h4>`;
+
+                    for (const [categoria, campos] of Object.entries(porCategoria)) {
+                        html += `
+                            <div style="margin-bottom: 15px;">
+                                <strong style="color: #333;">${categoria}:</strong>
+                                <ul>
+                                    ${campos.map(c => `<li><code>${c.campo}</code> - ${c.descricao}</li>`).join('')}
+                                </ul>
+                            </div>
+                        `;
+                    }
+
+                    html += `</div>`;
+
+                } else if (result.success) {
+                    // Unexpected success
+                    html = `
+                        <div class="success">
+                            <p>✅ Sucesso (inesperado!) - Todos os campos estão presentes</p>
+                            <p>UUID: ${result.data?.uuid || 'N/A'}</p>
+                        </div>
+                    `;
+                } else {
+                    // Other error
+                    html = `
+                        <div class="error">
+                            <p>❌ Erro: ${result.message || 'Erro desconhecido'}</p>
+                        </div>
+                    `;
+                }
+
+                html += `
+                    <details style="margin-top: 15px;">
+                        <summary style="cursor: pointer; color: #667eea; font-weight: 600; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+                            📄 JSON Completo
+                        </summary>
+                        <pre style="margin-top: 10px; background: #282c34; color: #61dafb; padding: 15px; border-radius: 8px; overflow-x: auto;">${JSON.stringify(result, null, 2)}</pre>
+                    </details>
+                `;
+
+                responseDiv.innerHTML = html;
+
+            } catch (error) {
+                responseDiv.innerHTML = `
+                    <div class="error">
+                        <p>❌ Erro na requisição:</p>
+                        <pre>${error.message}</pre>
+                    </div>
+                `;
+            }
+        }
+
+        function limparResposta() {
+            document.getElementById('response').innerHTML = `
+                <p style="color: #999; text-align: center;">Aguardando requisição...</p>
+            `;
+        }
+    </script>
+</body>
+</html>

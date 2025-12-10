@@ -55,10 +55,15 @@ class SemPararRotaController extends Controller
                 'timestamp' => now()->toIso8601String()
             ]);
 
+            // Normalizar campos lowercase do Progress JDBC para camelCase esperado pelo frontend
+            $rotasNormalizadas = array_map(function ($rota) {
+                return $this->normalizarCamposRota($rota);
+            }, $result['data']['results'] ?? []);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Rotas SemParar obtidas com sucesso',
-                'data' => $result['data']['results'],
+                'data' => $rotasNormalizadas,
                 'pagination' => $result['data']['pagination'] ?? null
             ]);
 
@@ -432,10 +437,24 @@ class SemPararRotaController extends Controller
                 ], $result['error'] === 'Rota não encontrada' ? 404 : 500);
             }
 
+            // Normalizar campos para camelCase esperado pelo frontend
+            $rotaNormalizada = isset($result['data']['rota'])
+                ? $this->normalizarCamposRota($result['data']['rota'])
+                : null;
+
+            $municipiosNormalizados = isset($result['data']['municipios'])
+                ? array_map(function ($mun) {
+                    return $this->normalizarCamposMunicipio($mun);
+                }, $result['data']['municipios'])
+                : [];
+
             return response()->json([
                 'success' => true,
                 'message' => 'Rota com municípios obtida com sucesso',
-                'data' => $result['data']
+                'data' => [
+                    'rota' => $rotaNormalizada,
+                    'municipios' => $municipiosNormalizados,
+                ]
             ]);
 
         } catch (\Exception $e) {
@@ -518,5 +537,46 @@ class SemPararRotaController extends Controller
                 'message' => 'Erro interno do servidor'
             ], 500);
         }
+    }
+
+    /**
+     * Normaliza campos lowercase do Progress JDBC para camelCase esperado pelo frontend
+     *
+     * Progress JDBC retorna todos os campos em lowercase, mas o frontend
+     * usa interfaces TypeScript com camelCase (ex: sPararRotID, desSPararRot)
+     */
+    private function normalizarCamposRota(array $rota): array
+    {
+        return [
+            'sPararRotID' => $rota['spararrotid'] ?? $rota['sPararRotID'] ?? null,
+            'desSPararRot' => $rota['desspararrot'] ?? $rota['desSPararRot'] ?? '',
+            'tempoViagem' => $rota['tempoviagem'] ?? $rota['tempoViagem'] ?? 0,
+            'flgCD' => (bool) ($rota['flgcd'] ?? $rota['flgCD'] ?? false),
+            'flgRetorno' => (bool) ($rota['flgretorno'] ?? $rota['flgRetorno'] ?? false),
+            'resAtu' => $rota['resatu'] ?? $rota['resAtu'] ?? '',
+            'datAtu' => $rota['datatu'] ?? $rota['datAtu'] ?? '',
+            'totalMunicipios' => $rota['totalmunicipios'] ?? $rota['totalMunicipios'] ?? 0,
+        ];
+    }
+
+    /**
+     * Normaliza campos de município
+     */
+    private function normalizarCamposMunicipio(array $municipio): array
+    {
+        return [
+            'sPararRotID' => $municipio['spararrotid'] ?? $municipio['sPararRotID'] ?? null,
+            'sPararMuSeq' => $municipio['spararmuseq'] ?? $municipio['sPararMuSeq'] ?? 0,
+            'codMun' => $municipio['codmun'] ?? $municipio['codMun'] ?? 0,
+            'codEst' => $municipio['codest'] ?? $municipio['codEst'] ?? 0,
+            'desMun' => $municipio['desmun'] ?? $municipio['desMun'] ?? '',
+            'desEst' => $municipio['desest'] ?? $municipio['desEst'] ?? '',
+            'cdibge' => $municipio['cdibge'] ?? '',
+            // Coordenadas do cache GPS (retornadas pelo ProgressService)
+            'lat' => $municipio['lat'] ?? null,
+            'lon' => $municipio['lon'] ?? null,
+            'gps_fonte' => $municipio['gps_fonte'] ?? null,
+            'gps_cached' => $municipio['gps_cached'] ?? false,
+        ];
     }
 }

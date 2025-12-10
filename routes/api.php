@@ -14,6 +14,8 @@ use App\Http\Controllers\Api\SemPararController;
 use App\Http\Controllers\Api\SemPararRotaController;
 use App\Http\Controllers\Api\TransporteController;
 use App\Http\Controllers\Api\NddCargoController;
+use App\Http\Controllers\Api\VpoController;
+use App\Http\Controllers\Api\MotoristaEmpresaController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -154,14 +156,14 @@ Route::middleware('api')->group(function () {
         Route::post('proximidade', [PracaPedagioController::class, 'proximidade'])
             ->middleware('throttle:60,1');  // 60 requests per minute
 
-        // Importar CSV (público por ora, considerar auth futuramente)
-        // CORREÇÃO BUG #43: Rate limiting aplicado corretamente
+        // Importar CSV - Requer autenticação admin
+        // CORREÇÃO BUG #43: Rate limiting + autenticação
         Route::post('importar', [PracaPedagioController::class, 'importar'])
-            ->middleware('throttle:5,1');   // 5 requests per minute (operação pesada)
+            ->middleware(['auth:sanctum', 'throttle:5,1']);   // 5 requests per minute (operação pesada)
 
-        // Limpar todas as praças (público por ora, considerar auth futuramente)
+        // Limpar todas as praças - Requer autenticação admin
         Route::delete('limpar', [PracaPedagioController::class, 'limpar'])
-            ->middleware('throttle:2,1');   // 2 requests per minute (operação crítica)
+            ->middleware(['auth:sanctum', 'throttle:2,1']);   // 2 requests per minute (operação crítica)
 
         // Listagem com filtros e paginação (público)
         Route::get('/', [PracaPedagioController::class, 'index'])
@@ -261,7 +263,7 @@ Route::middleware('api')->group(function () {
         Route::get('info', [NddCargoController::class, 'info'])
             ->middleware('throttle:120,1');  // 120 requests per minute
         Route::get('test-connection', [NddCargoController::class, 'testConnection'])
-            ->middleware('throttle:10,1');  // 10 requests per minute
+            ->middleware('throttle:5,1');  // 5 requests per minute (proteção contra abuso)
 
         // Consultas de roteirizador (públicas para simulação)
         Route::post('roteirizador', [NddCargoController::class, 'consultarRoteirizador'])
@@ -272,6 +274,135 @@ Route::middleware('api')->group(function () {
         // Consulta de resultado assíncrono
         Route::get('resultado/{guid}', [NddCargoController::class, 'consultarResultado'])
             ->middleware('throttle:60,1');  // 60 requests per minute
+    });
+
+    // Rotas PÚBLICAS para VPO (Vale Pedágio Obrigatório) Data Sync
+    // Sistema de sincronização Progress → ANTT → Cache Local
+    // @see docs/integracoes/ndd-cargo/VPO_DATA_SYNC.md
+    Route::prefix('vpo')->group(function () {
+        // Health check e info
+        Route::get('test-connection', [VpoController::class, 'testConnection'])
+            ->middleware('throttle:10,1');  // 10 requests per minute
+
+        // Sincronização de dados (operações de escrita)
+        Route::post('sync/transportador', [VpoController::class, 'syncTransportador'])
+            ->middleware('throttle:30,1');  // 30 requests per minute (sincronização individual)
+
+        Route::post('sync/batch', [VpoController::class, 'syncBatch'])
+            ->middleware('throttle:10,1');  // 10 requests per minute (operação pesada)
+
+        // Consultas ao cache (operações de leitura)
+        Route::get('transportadores', [VpoController::class, 'index'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        Route::get('transportadores/{codtrn}', [VpoController::class, 'show'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        // Atualização de campos faltantes (preenchidos pelo usuário)
+        Route::put('transportadores/{codtrn}', [VpoController::class, 'update'])
+            ->middleware('throttle:30,1');  // 30 requests per minute
+
+        // Operações de manutenção
+        Route::delete('transportadores/{codtrn}', [VpoController::class, 'destroy'])
+            ->middleware('throttle:30,1');  // 30 requests per minute (força resync)
+
+        Route::post('transportadores/{codtrn}/recalcular-qualidade', [VpoController::class, 'recalcularQualidade'])
+            ->middleware('throttle:30,1');  // 30 requests per minute
+
+        // Estatísticas
+        Route::get('statistics', [VpoController::class, 'statistics'])
+            ->middleware('throttle:30,1');  // 30 requests per minute
+
+        // Calcular praças de pedágio para rota (IBGE → CEP → NDD Cargo)
+        Route::post('calcular-pracas', [VpoController::class, 'calcularPracas'])
+            ->middleware('throttle:20,1');  // 20 requests per minute (operação externa)
+
+        // Logs de Emissão VPO (Auditoria)
+        Route::prefix('emissao/logs')->group(function () {
+            // Estatísticas (ANTES de rotas com parâmetros)
+            Route::get('statistics', [VpoController::class, 'estatisticasLogs'])
+                ->middleware('throttle:60,1');
+
+            // Buscar por UUID
+            Route::get('uuid/{uuid}', [VpoController::class, 'buscarLogPorUuid'])
+                ->middleware('throttle:60,1');
+
+            // Listar logs com filtros
+            Route::get('/', [VpoController::class, 'listarLogs'])
+                ->middleware('throttle:60,1');
+
+            // Detalhe de um log
+            Route::get('{id}', [VpoController::class, 'detalheLog'])
+                ->middleware('throttle:60,1');
+        });
+
+        // Iniciar emissão VPO (com log)
+        Route::post('emissao/iniciar', [VpoController::class, 'iniciarEmissao'])
+            ->middleware('throttle:20,1');
+
+        // Motoristas de Empresas (CNPJ) - Cache para dados complementares VPO
+        // @see docs/integracoes/ndd-cargo/MOTORISTA_EMPRESA_CACHE.md (futuro)
+        Route::prefix('motoristas')->group(function () {
+            // Verificar se transportador é empresa e tem motoristas
+            Route::get('{codtrn}/verificar', [MotoristaEmpresaController::class, 'verificar'])
+                ->middleware('throttle:60,1');  // 60 requests per minute
+
+            // Listar motoristas completos (prontos para VPO)
+            Route::get('{codtrn}/completos', [MotoristaEmpresaController::class, 'completos'])
+                ->middleware('throttle:60,1');  // 60 requests per minute
+
+            // Listar todos motoristas de um transportador
+            Route::get('{codtrn}', [MotoristaEmpresaController::class, 'index'])
+                ->middleware('throttle:60,1');  // 60 requests per minute
+
+            // Buscar motorista específico
+            Route::get('{codtrn}/{codmot}', [MotoristaEmpresaController::class, 'show'])
+                ->middleware('throttle:60,1');  // 60 requests per minute
+
+            // Salvar/atualizar dados de motorista
+            Route::post('{codtrn}/{codmot}', [MotoristaEmpresaController::class, 'store'])
+                ->middleware('throttle:30,1');  // 30 requests per minute (escrita)
+        });
+    });
+
+    // Rotas PÚBLICAS para VPO Emissão (Vale Pedágio via NDD Cargo)
+    // Sistema de emissão assíncrona de Vale Pedágio com integração NDD Cargo
+    // @see docs/integracoes/ndd-cargo/VPO_EMISSAO_WIZARD.md (futuro)
+    Route::prefix('vpo/emissao')->group(function () {
+        // Rotas específicas ANTES das rotas com parâmetros {uuid}
+
+        // Iniciar emissão
+        Route::post('iniciar', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'iniciar'])
+            ->middleware('throttle:30,1');  // 30 requests per minute (operação pesada)
+
+        // Validação e preview
+        Route::post('validar-pacote', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'validarPacote'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        Route::post('preview-waypoints', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'previewWaypoints'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        // Listar rotas disponíveis
+        Route::get('pacote/{codpac}/rotas', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'rotasDisponiveis'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        // Estatísticas (ANTES de {uuid} para não ser capturado)
+        Route::get('statistics', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'statistics'])
+            ->middleware('throttle:30,1');  // 30 requests per minute
+
+        // Histórico de emissões
+        Route::get('/', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'index'])
+            ->middleware('throttle:60,1');  // 60 requests per minute
+
+        // Rotas com parâmetros {uuid} - DEVEM VIR POR ÚLTIMO
+
+        // Consultar resultado (polling)
+        Route::get('{uuid}', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'consultar'])
+            ->middleware('throttle:120,1');  // 120 requests per minute (polling frequente)
+
+        // Cancelar emissão
+        Route::post('{uuid}/cancelar', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'cancelar'])
+            ->middleware('throttle:30,1');  // 30 requests per minute
     });
 
     // ⚠️ Compra de Viagem SemParar - MODO DE TESTE ATIVO ⚠️

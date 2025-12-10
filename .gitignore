@@ -64,3 +64,4 @@ public/mockServiceWorker.js
 # Env files
 .env*
 !.env.example
+docs/integracoes/ndd-cargo/transportadores_rntrc_10_2025.csv

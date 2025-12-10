@@ -600,7 +600,8 @@ class ProgressService
             $carga = $cargas[0];
 
             // Buscar pedidos/entregas seguindo a estrutura: pacote -> carga -> pedido (como no itinerario.p)
-            $sqlEntregas = "SELECT ped.numseqped as seqent, cli.codcli, cli.descnt as razcli, est.sigest as uf, mun.desmun, bai.desbai, cli.desend, ped.valtotateped as valnot, ped.pesped as peso, ped.volped as volume, ard.latitute as latitude, ard.longitude FROM PUB.carga car INNER JOIN PUB.pedido ped ON ped.codcar = car.codcar INNER JOIN PUB.cliente cli ON cli.codcli = ped.codcli INNER JOIN PUB.estado est ON est.codest = cli.codest INNER JOIN PUB.municipio mun ON mun.codest = cli.codest AND mun.codmun = cli.codmun INNER JOIN PUB.bairro bai ON bai.codest = cli.codest AND bai.codmun = cli.codmun AND bai.codbai = cli.codbai LEFT JOIN PUB.arqrdnt ard ON ard.asdped = ped.asdped WHERE car.codpac = $pacoteParaBuscar AND ped.valtotateped > 0 AND ped.tipped != 'RAS' ORDER BY ped.numseqped";
+            // IMPORTANTE: Incluir mun.cdibge para pontosParada do NDD Cargo
+            $sqlEntregas = "SELECT ped.numseqped as seqent, cli.codcli, cli.descnt as razcli, est.sigest as uf, mun.desmun, mun.cdibge, bai.desbai, cli.desend, ped.valtotateped as valnot, ped.pesped as peso, ped.volped as volume, ard.latitute as latitude, ard.longitude FROM PUB.carga car INNER JOIN PUB.pedido ped ON ped.codcar = car.codcar INNER JOIN PUB.cliente cli ON cli.codcli = ped.codcli INNER JOIN PUB.estado est ON est.codest = cli.codest INNER JOIN PUB.municipio mun ON mun.codest = cli.codest AND mun.codmun = cli.codmun INNER JOIN PUB.bairro bai ON bai.codest = cli.codest AND bai.codmun = cli.codmun AND bai.codbai = cli.codbai LEFT JOIN PUB.arqrdnt ard ON ard.asdped = ped.asdped WHERE car.codpac = $pacoteParaBuscar AND ped.valtotateped > 0 AND ped.tipped != 'RAS' ORDER BY ped.numseqped";
 
             $resultEntregas = $this->executeJavaConnector('query', $sqlEntregas);
             
@@ -1743,10 +1744,15 @@ class ProgressService
                 $municipios = $resultMunicipios['data']['results'];
 
                 // Buscar coordenadas do cache local (instantâneo!)
+                // Estratégia: ProgressMunicipioGps → MunicipioCoordenada → Auto-geocoding
                 foreach ($municipios as &$municipio) {
                     $codMun = intval($municipio['codmun']);
                     $codEst = intval($municipio['codest']);
+                    $cdibge = $municipio['cdibge'] ?? null;
+                    $desMun = $municipio['desmun'] ?? '';
+                    $desEst = $municipio['desest'] ?? '';
 
+                    // 1. Tentar ProgressMunicipioGps (cache por códigos Progress)
                     $gpsCache = \App\Models\ProgressMunicipioGps::findByProgress($codMun, $codEst);
 
                     if ($gpsCache && $gpsCache->hasValidCoordinates()) {
@@ -1754,12 +1760,74 @@ class ProgressService
                         $municipio['lon'] = $gpsCache->longitude;
                         $municipio['gps_fonte'] = $gpsCache->fonte;
                         $municipio['gps_cached'] = true;
-                    } else {
-                        $municipio['lat'] = null;
-                        $municipio['lon'] = null;
-                        $municipio['gps_fonte'] = null;
-                        $municipio['gps_cached'] = false;
+                        continue;
                     }
+
+                    // 2. Tentar MunicipioCoordenada (cache por IBGE)
+                    if ($cdibge) {
+                        $ibgeCache = \App\Models\MunicipioCoordenada::where('cdibge', $cdibge)->first();
+
+                        if ($ibgeCache && $ibgeCache->latitude && $ibgeCache->longitude) {
+                            $municipio['lat'] = (float) $ibgeCache->latitude;
+                            $municipio['lon'] = (float) $ibgeCache->longitude;
+                            $municipio['gps_fonte'] = $ibgeCache->fonte ?? 'ibge_cache';
+                            $municipio['gps_cached'] = true;
+
+                            // Salvar também em ProgressMunicipioGps para próximas consultas
+                            try {
+                                \App\Models\ProgressMunicipioGps::findOrCreateByProgress(
+                                    $codMun, $codEst,
+                                    [
+                                        'des_mun' => $desMun,
+                                        'des_est' => $desEst,
+                                        'cdibge' => $cdibge,
+                                        'latitude' => $ibgeCache->latitude,
+                                        'longitude' => $ibgeCache->longitude,
+                                        'fonte' => 'ibge_cache_sync',
+                                        'geocoded_at' => now(),
+                                    ]
+                                );
+                            } catch (\Exception $e) {
+                                Log::warning('Falha ao sincronizar cache IBGE->Progress', ['error' => $e->getMessage()]);
+                            }
+                            continue;
+                        }
+                    }
+
+                    // 3. Auto-geocoding via Google (último recurso)
+                    if ($cdibge && $desMun && $desEst) {
+                        try {
+                            $geocodingService = app(\App\Services\GeocodingService::class);
+                            $coordenadas = $geocodingService->getCoordenadasByIbge($cdibge, $desMun, $desEst);
+
+                            if ($coordenadas && isset($coordenadas['lat']) && isset($coordenadas['lon'])) {
+                                $municipio['lat'] = (float) $coordenadas['lat'];
+                                $municipio['lon'] = (float) $coordenadas['lon'];
+                                $municipio['gps_fonte'] = $coordenadas['fonte'] ?? 'google_auto';
+                                $municipio['gps_cached'] = false;
+
+                                Log::info('Auto-geocoding realizado para município', [
+                                    'municipio' => $desMun,
+                                    'cdibge' => $cdibge,
+                                    'lat' => $coordenadas['lat'],
+                                    'lon' => $coordenadas['lon'],
+                                ]);
+                                continue;
+                            }
+                        } catch (\Exception $e) {
+                            Log::warning('Falha no auto-geocoding', [
+                                'municipio' => $desMun,
+                                'cdibge' => $cdibge,
+                                'error' => $e->getMessage()
+                            ]);
+                        }
+                    }
+
+                    // Fallback: sem coordenadas
+                    $municipio['lat'] = null;
+                    $municipio['lon'] = null;
+                    $municipio['gps_fonte'] = null;
+                    $municipio['gps_cached'] = false;
                 }
             }
 
