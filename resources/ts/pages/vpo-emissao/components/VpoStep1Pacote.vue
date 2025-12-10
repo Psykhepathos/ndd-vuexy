@@ -88,6 +88,64 @@ const buscarPacote = async () => {
     const transportadorData = syncData.data as TransportadorVpo
     const transportadorIsEmpresa = isEmpresa(transportadorData.cpf_cnpj || '')
 
+    // Carregar itinerário do pacote (entregas com GPS)
+    let entregas: Array<{
+      numseqped: number
+      razcli: string
+      cidcli: string
+      sigufs: string
+      lat: number | null
+      lon: number | null
+    }> = []
+
+    try {
+      const itinerarioResponse = await fetch('http://localhost:8002/api/pacotes/itinerario', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ codPac: pacote.codpac }),
+      })
+      const itinerarioData = await itinerarioResponse.json()
+
+      if (itinerarioData.success && itinerarioData.data?.pedidos) {
+        // Processar GPS - API já retorna em formato decimal
+        const processGps = (gpsValue: number | string | null): number | null => {
+          if (gpsValue === null || gpsValue === undefined) return null
+          const value = typeof gpsValue === 'string' ? parseFloat(gpsValue) : gpsValue
+          if (isNaN(value) || value === 0) return null
+          return value
+        }
+
+        // Filtrar pedidos com GPS válido
+        // Campos da API: seqent, razcli, desmun, uf, gps_lat, gps_lon
+        const pedidosComGps = itinerarioData.data.pedidos
+          .map((p: any) => ({
+            numseqped: p.seqent || p.numseqped || 0,
+            razcli: (p.razcli || 'Cliente').trim(),
+            cidcli: (p.desmun || p.cidcli || '').trim(),
+            sigufs: p.uf || p.sigufs || '',
+            lat: processGps(p.gps_lat),
+            lon: processGps(p.gps_lon),
+          }))
+          .filter((p: any) => p.lat !== null && p.lon !== null)
+
+        // Pegar apenas primeira e última entrega
+        if (pedidosComGps.length > 0) {
+          const primeira = pedidosComGps[0]
+          const ultima = pedidosComGps[pedidosComGps.length - 1]
+          entregas = primeira.numseqped === ultima.numseqped
+            ? [primeira]
+            : [primeira, ultima]
+
+          console.log(`✅ Entregas carregadas: ${entregas.length} (de ${pedidosComGps.length} com GPS)`)
+        }
+      }
+    } catch (error) {
+      console.warn('Não foi possível carregar entregas do pacote:', error)
+    }
+
     // Atualizar form data
     const updated: VpoEmissaoFormData = {
       ...props.formData,
@@ -122,6 +180,10 @@ const buscarPacote = async () => {
               status_semparar: null,
             }
           : null,
+      },
+      rota: {
+        ...props.formData.rota,
+        entregas: entregas,  // Primeira e última entrega do pacote
       },
       step1Completo: true,
       step2Completo: !transportadorIsEmpresa,

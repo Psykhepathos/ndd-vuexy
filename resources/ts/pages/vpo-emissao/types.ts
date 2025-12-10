@@ -158,10 +158,20 @@ export interface PracaPedagioVpo {
 // Alias para uso simplificado
 export type PracaPedagio = PracaPedagioVpo
 
+export interface EntregaVpo {
+  numseqped: number
+  razcli: string
+  cidcli: string
+  sigufs: string
+  lat: number | null
+  lon: number | null
+}
+
 export interface RotaData {
   rota: RotaVpo | null
   municipios: MunicipioRota[]
   pracas: PracaPedagioVpo[]
+  entregas: EntregaVpo[]  // Primeira e última entrega do pacote
   rotaSugerida: RotaVpo | null
 }
 

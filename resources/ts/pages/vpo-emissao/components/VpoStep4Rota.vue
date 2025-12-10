@@ -101,7 +101,23 @@ const carregarRotas = async () => {
   }
 }
 
+// Guard para evitar chamadas duplicadas
+let isSelectingRota = false
+
 const selecionarRota = async (rota: RotaVpo) => {
+  // Evitar chamadas duplicadas
+  if (isSelectingRota) {
+    console.log('selecionarRota: Ignorando chamada duplicada')
+    return
+  }
+
+  // Evitar re-seleção da mesma rota
+  if (selectedRotaId.value === rota.sPararRotID) {
+    console.log('selecionarRota: Rota já selecionada, ignorando')
+    return
+  }
+
+  isSelectingRota = true
   console.log('selecionarRota chamado:', rota)
   selectedRotaId.value = rota.sPararRotID
   loadingMunicipios.value = true
@@ -119,13 +135,14 @@ const selecionarRota = async (rota: RotaVpo) => {
       const municipiosData: MunicipioRota[] = data.data?.municipios || []
       console.log('Municípios carregados:', municipiosData.length, municipiosData)
 
-      // Atualizar formData
+      // Atualizar formData - PRESERVAR entregas do Step 1!
       const updated: VpoEmissaoFormData = {
         ...props.formData,
         rota: {
           rota: rota,
           municipios: municipiosData,
           pracas: [],
+          entregas: props.formData.rota.entregas,  // Preservar entregas do pacote
           rotaSugerida: null,
         },
         step4Completo: true,
@@ -141,6 +158,7 @@ const selecionarRota = async (rota: RotaVpo) => {
     errorMessage.value = error.message || 'Erro ao carregar municípios'
   } finally {
     loadingMunicipios.value = false
+    isSelectingRota = false
     console.log('loadingMunicipios set to false')
   }
 }
@@ -155,6 +173,7 @@ const limparRota = () => {
       rota: null,
       municipios: [],
       pracas: [],
+      entregas: props.formData.rota.entregas,  // Preservar entregas do pacote
       rotaSugerida: null,
     },
     custo: {
@@ -257,20 +276,24 @@ const calcularPracas = async () => {
       console.log('GUID para consulta assíncrona:', data.guid)
       errorMessage.value = 'Calculando praças de pedágio... Aguarde.'
 
-      // Polling para obter resultado (máximo 30 segundos, intervalo de 3 segundos)
-      const maxAttempts = 10
+      // Polling para obter resultado (máximo 60 segundos, intervalo de 3 segundos)
+      const maxAttempts = 20
       let attempt = 0
       let resultadoObtido = false
 
       while (attempt < maxAttempts && !resultadoObtido) {
         attempt++
-        console.log(`Polling tentativa ${attempt}/${maxAttempts}...`)
+        const tempoRestante = (maxAttempts - attempt) * 3
+        console.log(`Polling tentativa ${attempt}/${maxAttempts}... (${tempoRestante}s restantes)`)
+        errorMessage.value = `Calculando praças de pedágio... Tentativa ${attempt}/${maxAttempts}`
 
         // Aguardar 3 segundos antes de consultar
         await new Promise(resolve => setTimeout(resolve, 3000))
 
         try {
-          const resultResponse = await fetch(`http://localhost:8002/api/ndd-cargo/resultado/${data.guid}`)
+          const resultResponse = await fetch(`http://localhost:8002/api/ndd-cargo/resultado/${data.guid}`, {
+            headers: { 'Accept': 'application/json' }
+          })
           const resultData = await resultResponse.json()
           console.log(`Resultado polling (tentativa ${attempt}):`, resultData)
 
@@ -310,11 +333,19 @@ const calcularPracas = async () => {
             if (pracasResult.length === 0) {
               errorMessage.value = 'Rota calculada com sucesso! (Não há praças de pedágio neste trecho)'
             }
-          } else if (resultData.status === -2 || resultData.status === 404) {
+          } else if (
+            resultData.status === -2 ||
+            resultData.status === 404 ||
+            resultData.status === 202 ||
+            resultResponse.status === 202 ||
+            resultResponse.status === 400 ||
+            (resultData.message && resultData.message.includes('processada'))
+          ) {
             // Resultado ainda não disponível, continuar polling
-            console.log('Resultado ainda não disponível, aguardando...')
+            // Status 202 = ainda processando, 400 = GUID não pronto ainda
+            console.log('Resultado ainda não disponível, aguardando...', resultData.status || resultResponse.status)
           } else {
-            // Erro no resultado
+            // Erro definitivo no resultado
             console.error('Erro ao obter resultado:', resultData)
             errorMessage.value = resultData.message || 'Erro ao obter resultado do cálculo'
             break

@@ -156,14 +156,14 @@ Route::middleware('api')->group(function () {
         Route::post('proximidade', [PracaPedagioController::class, 'proximidade'])
             ->middleware('throttle:60,1');  // 60 requests per minute
 
-        // Importar CSV (público por ora, considerar auth futuramente)
-        // CORREÇÃO BUG #43: Rate limiting aplicado corretamente
+        // Importar CSV - Requer autenticação admin
+        // CORREÇÃO BUG #43: Rate limiting + autenticação
         Route::post('importar', [PracaPedagioController::class, 'importar'])
-            ->middleware('throttle:5,1');   // 5 requests per minute (operação pesada)
+            ->middleware(['auth:sanctum', 'throttle:5,1']);   // 5 requests per minute (operação pesada)
 
-        // Limpar todas as praças (público por ora, considerar auth futuramente)
+        // Limpar todas as praças - Requer autenticação admin
         Route::delete('limpar', [PracaPedagioController::class, 'limpar'])
-            ->middleware('throttle:2,1');   // 2 requests per minute (operação crítica)
+            ->middleware(['auth:sanctum', 'throttle:2,1']);   // 2 requests per minute (operação crítica)
 
         // Listagem com filtros e paginação (público)
         Route::get('/', [PracaPedagioController::class, 'index'])

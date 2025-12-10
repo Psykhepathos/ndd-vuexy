@@ -155,11 +155,23 @@ const importCSV = async () => {
     const formData = new FormData()
     formData.append('file', selectedFile.value)
 
-    const response = await apiFetch(`${window.location.origin}/api/pracas-pedagio/importar`, {
+    // Para FormData, precisamos definir headers manualmente:
+    // - Authorization: Bearer token (para auth:sanctum)
+    // - Accept: application/json
+    // - NÃO incluir Content-Type (browser define automaticamente com boundary)
+    const accessToken = useCookie('accessToken').value
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+    }
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`
+    }
+
+    const response = await fetch(`${window.location.origin}/api/pracas-pedagio/importar`, {
       method: 'POST',
       body: formData,
-      // Remove Content-Type header para FormData (browser define automaticamente)
-      headers: {} as any
+      headers,
     })
     const data = await response.json()
     importResult.value = data
