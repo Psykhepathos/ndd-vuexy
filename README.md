@@ -1,283 +1,239 @@
-# 🚛 Sistema NDD - Gestão de Transporte
+# Sistema NDD - Gestao de Transporte
 
-Sistema unificado para gestão de transportes com integração Progress OpenEdge, desenvolvido com Laravel + Vue.js utilizando o template Vuexy.
+Sistema unificado para gestao de transportes com integracao Progress OpenEdge, SemParar SOAP e NDD Cargo.
 
-## 📋 Sobre o Projeto
+## Stack Tecnologica
 
-O Sistema NDD é uma modernização completa da arquitetura de transporte da empresa, migrando de uma estrutura Flutter + Laravel separados para um sistema unificado Laravel + Vue.js com template profissional Vuexy.
+| Camada | Tecnologia |
+|--------|------------|
+| Frontend | Vue 3.5.14 + TypeScript 5.8.3 + Vuexy + Vuetify 3.8.5 |
+| Backend | Laravel 12.15.0 + Sanctum |
+| Database | Progress OpenEdge (JDBC) + SQLite (cache) |
+| Mapas | Leaflet + OpenStreetMap + OSRM (100% gratuito) |
+| Build | Vite 6.3.5 + PNPM |
 
-### 🎯 Objetivos
-
-- **Unificação**: Sistema único Laravel + Vue.js substituindo arquiteturas separadas
-- **Modernização**: Interface moderna e responsiva com Vuexy TypeScript
-- **Performance**: Conexão direta ODBC Progress eliminando overhead do Kafka
-- **Usabilidade**: Interface intuitiva seguindo padrões Material Design
-
-## 🚀 Funcionalidades
-
-### ✅ Implementadas
-
-#### 🔐 Autenticação
-- Login/logout com Laravel Sanctum
-- Gerenciamento de usuários
-- Controle de sessões
-
-#### 🚚 Gestão de Transportadores
-- **Listagem paginada** com 6.913+ registros Progress
-- **Busca avançada** por código numérico e nome
-- **Interface responsiva** seguindo padrão Vuexy
-- **Paginação otimizada** com controle de itens por página
-
-#### 🔧 APIs REST
-- **TransporteController** com endpoints CRUD
-- **Paginação server-side** com Progress SQL
-- **CORS configurado** para integração frontend
-- **Filtros dinâmicos** para busca eficiente
-
-### 🔄 Em Desenvolvimento
-
-#### 👥 Gestão de Motoristas
-- CRUD completo de motoristas
-- Integração com CNH e documentos
-- Controle de status (ativo/inativo/suspenso)
-
-#### 📊 Dashboard Executivo
-- Métricas de transporte em tempo real
-- Gráficos de performance
-- Indicadores de produtividade
-
-#### 🧾 Sistema CIOT
-- Gestão de Conhecimentos de Transporte
-- Integração com órgãos reguladores
-- Controle fiscal automatizado
-
-#### 💳 Vale Pedágio
-- Gestão de vales pedagio
-- Controle de rotas e tarifas
-- Relatórios financeiros
-
-## 🛠️ Stack Tecnológica
-
-### Backend
-- **Laravel 12.15.0** - Framework PHP moderno
-- **Progress OpenEdge** - Banco de dados corporativo
-- **JDBC Connection** - Conectividade direta com Progress
-- **Laravel Sanctum** - Autenticação API
-
-### Frontend
-- **Vue 3.5.14** - Framework JavaScript reativo
-- **TypeScript 5.8.3** - Tipagem estática
-- **Vuexy Template** - Template profissional
-- **Vuetify 3.8.5** - Material Design Components
-- **Pinia 3.0.2** - Gerenciamento de estado
-
-### DevOps & Ferramentas
-- **Vite 6.3.5** - Build tool moderna
-- **PNPM** - Gerenciador de pacotes eficiente
-- **ESLint** - Linting código
-- **Git** - Controle de versão
-
-## 🏗️ Arquitetura
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Vue/Vuexy     │    │   Laravel API   │    │ Progress OpenEdge│
-│   Frontend      │◄──►│   Backend       │◄──►│   Database      │
-│   Port: 5174    │    │   Port: 8002    │    │   JDBC Direct   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
-
-### Migração Arquitetural
-
-**ANTES (Deprecado)**:
-```
-Flutter App ← REST API → Laravel ← Kafka → Progress (via Java JDBC)
-```
-
-**AGORA (Ativo)**:
-```
-Vue/Vuexy ← REST API → Laravel ← ODBC DIRETO → Progress Database
-```
-
-## 📦 Instalação
-
-### Pré-requisitos
-- PHP 8.2+
-- Composer
-- Node.js 18+
-- PNPM
-- Progress OpenEdge Client
-
-### Setup do Projeto
+## Quick Start
 
 ```bash
-# Clone o repositório
-git clone https://github.com/Psykhepathos/ndd-vuexy.git
-cd ndd-vuexy
-
-# Instalar dependências PHP
-composer install
-
-# Instalar dependências Node.js
-pnpm install
-
-# Configurar ambiente
-cp .env.example .env
-# Editar .env com credenciais Progress
-
-# Gerar chave da aplicação
-php artisan key:generate
-
-# Executar migrações
-php artisan migrate
-
-# Criar usuários padrão
-php artisan db:seed
-```
-
-### Executar em Desenvolvimento
-
-```bash
-# Terminal 1: Laravel API
+# Backend (SEMPRE usar porta 8002!)
 php artisan serve --port=8002
 
-# Terminal 2: Frontend Vue
+# Frontend
 pnpm run dev
 
-# Acessar aplicação
-# Frontend: http://localhost:5174
-# API: http://localhost:8002
+# Acessar
+http://localhost:8002
+# Login: admin@ndd.com / Admin@123
 ```
 
-### Login Padrão
+## Modulos Implementados
+
+### Gestao de Transportes
+- Listagem paginada com 6.913+ transportadores
+- Filtros por tipo (Autonomo/Empresa), status, natureza
+- Detalhes com motoristas e veiculos associados
+
+### Gestao de Pacotes
+- Listagem com filtros avancados (data, situacao, rota)
+- Flag TCD para pacotes especiais
+- Itinerario com GPS para simulacao no mapa
+
+### Rotas SemParar (Mapa Interativo)
+- Mapa Leaflet com municipios ordenados
+- Drag & drop para reordenar
+- Roteamento OSRM (gratuito) via proxy Laravel
+- Simulacao de pacotes com entregas reais
+
+### Compra de Viagem SemParar
+- Wizard 5 etapas (Pacote -> Veiculo -> Rota -> Preco -> Confirmacao)
+- Integracao SOAP com SemParar
+- Geracao de recibos PDF + WhatsApp/Email
+
+### VPO Emission (Vale Pedagio Obrigatorio) - NOVO
+- Wizard completo para emissao de VPO
+- Integracao NDD Cargo com assinatura digital RSA-SHA1
+- Suporte para Autonomo (CPF) e Empresa (CNPJ)
+- Roteirizador com pracas de pedagio enriquecidas
+- Processamento assincrono com polling de resultado
+
+### Pracas de Pedagio
+- Import CSV da ANTT
+- Busca por proximidade geografica
+- Enriquecimento com coordenadas para mapa
+
+## Arquitetura
 
 ```
-Email: admin@ndd.com
-Senha: 123456
+Vue/Vuexy Frontend (Port 5173/4/6)
+        |
+        v HTTP API
+Laravel Backend (Port 8002)
+        |
+        v JDBC Direct
+Progress OpenEdge Database (192.168.80.113)
+
+APIs Externas:
+- Google Geocoding (IBGE -> coordenadas, cache 80%+)
+- OSRM Public (roteamento gratuito, 3 servers com retry)
+- SemParar SOAP (pedagio, 2 WSDLs)
+- NDD Cargo SOAP (VPO, CrossTalk + RSA-SHA1)
+- Python Flask (PDF + WhatsApp/Email)
 ```
 
-## 🗄️ Configuração do Banco
+## Endpoints Principais
 
-### Progress OpenEdge
-
-```env
-# Progress Database
-PROGRESS_HOST=192.168.80.113
-PROGRESS_DATABASE=tambasa
-PROGRESS_USERNAME=
-PROGRESS_PASSWORD=
+### Transportes
+```
+GET  /api/transportes              - Lista paginada
+GET  /api/transportes/{id}         - Detalhes + motoristas + veiculos
+GET  /api/transportes/statistics   - Estatisticas
 ```
 
-### Estrutura Atual
-
-```sql
--- Tabela principal de transportadores
-PUB.transporte (
-  codtrn INTEGER,    -- Código do transportador
-  nomtrn VARCHAR     -- Nome do transportador
-)
-
--- 6.913+ registros ativos
+### Pacotes
+```
+GET  /api/pacotes                  - Lista com filtros
+GET  /api/pacotes/{id}             - Detalhes
+POST /api/pacotes/itinerario       - Itinerario com GPS
 ```
 
-## 📊 Performance
-
-### Métricas Atuais
-
-- **6.913 transportadores** indexados
-- **Busca otimizada** usando `LEFT()` function
-- **Paginação server-side** com TOP queries
-- **Tempo de resposta** < 500ms para consultas
-
-### Otimizações Implementadas
-
-- Conexão JDBC direta eliminando overhead
-- Queries SQL otimizadas para Progress
-- Cache de resultados em memória
-- Paginação eficiente com TOP/SKIP
-
-## 🚦 Roadmap
-
-### 📅 Próximas Versões
-
-#### v2.0 - Gestão Completa
-- [ ] CRUD Motoristas
-- [ ] Sistema CIOT
-- [ ] Vale Pedágio
-- [ ] Relatórios avançados
-
-#### v2.1 - Dashboard Executivo
-- [ ] Métricas em tempo real
-- [ ] Gráficos interativos
-- [ ] Exportação de relatórios
-- [ ] Notificações push
-
-#### v2.2 - Mobile & PWA
-- [ ] Aplicativo móvel
-- [ ] Progressive Web App
-- [ ] Sincronização offline
-- [ ] Geolocalização
-
-## 🤝 Desenvolvimento
-
-### Padrões de Código
-
-- **Frontend**: Seguir templates Vuexy rigorosamente
-- **Backend**: PSR-12 PHP Standards
-- **Git**: Conventional Commits
-- **Testes**: Cobertura mínima 80%
-
-### Estrutura de Diretórios
-
+### Rotas SemParar
 ```
-ndd-vuexy/
-├── app/
-│   ├── Http/Controllers/Api/    # Controllers da API
-│   ├── Services/                # Lógica de negócio
-│   └── Models/                  # Models Eloquent
-├── resources/ts/
-│   ├── pages/                   # Páginas Vue
-│   ├── components/              # Componentes reutilizáveis
-│   └── plugins/                 # Configurações Vue
-├── routes/api.php              # Rotas da API
-└── CLAUDE.md                   # Diretrizes de desenvolvimento
+GET  /api/semparar-rotas           - Lista rotas
+GET  /api/semparar-rotas/{id}/municipios - Rota + municipios
+PUT  /api/semparar-rotas/{id}/municipios - Atualizar ordem
 ```
 
-### Comandos Úteis
+### SemParar SOAP
+```
+GET  /api/semparar/test-connection - Testar conexao
+POST /api/semparar/roteirizar      - Encontrar pracas
+POST /api/semparar/comprar-viagem  - Comprar viagem ($$)
+POST /api/semparar/gerar-recibo    - Gerar PDF
+```
+
+### VPO / NDD Cargo
+```
+POST /api/vpo/sync/transportador   - Sincronizar transportador
+GET  /api/vpo/transportadores      - Listar cache
+POST /api/vpo/emissao/validate     - Validar para emissao
+POST /api/vpo/emissao/emit         - Emitir VPO
+
+POST /api/ndd-cargo/roteirizador/consultar  - Consultar pracas
+GET  /api/ndd-cargo/resultado/{guid}        - Resultado assincrono
+```
+
+### Geocoding & Routing
+```
+POST /api/geocoding/ibge           - Coordenadas por IBGE
+POST /api/geocoding/lote           - Batch geocoding
+POST /api/routing/route            - Proxy OSRM (gratuito)
+```
+
+## Regras Criticas
+
+### 1. Progress Database - SEM TRANSACOES!
+```php
+// NUNCA usar beginTransaction/commit/rollBack
+// Progress JDBC nao suporta!
+$this->executeUpdate($sql1);
+$this->executeUpdate($sql2);
+```
+
+### 2. OSRM - SEMPRE usar proxy Laravel
+```typescript
+// NUNCA usar leaflet-routing-machine direto (CORS)
+// SEMPRE usar /api/routing/route
+```
+
+### 3. SemParar SOAP - Parametros posicionais
+```php
+// ERRADO: $client->method(['param' => $value]);
+// CERTO:  $client->method($param1, $param2, $param3);
+```
+
+### 4. VPO Autonomo vs Empresa
+```php
+// Autonomo: dados em PUB.transporte
+// Empresa: motorista em PUB.trnmot, veiculo em PUB.trnvei
+if ($transportador['flgautonomo']) {
+    $condutor = $transportador['nomtrn'];
+} else {
+    $motorista = $this->getMotoristaByCode($codmot);
+    $condutor = $motorista['nommot'];
+}
+```
+
+## Estrutura do Projeto
+
+```
+app/
+  Http/Controllers/Api/
+    TransporteController.php      - Transportadores
+    PacoteController.php          - Pacotes
+    SemPararRotaController.php    - Rotas CRUD
+    SemPararController.php        - SOAP API
+    CompraViagemController.php    - Wizard compra
+    VpoController.php             - VPO sync/cache
+    VpoEmissaoController.php      - VPO emissao
+    NddCargoController.php        - NDD Cargo SOAP
+    GeocodingController.php       - Geocoding
+    RoutingController.php         - OSRM proxy
+  Services/
+    ProgressService.php           - JDBC (2574 linhas!)
+    GeocodingService.php          - Google + cache
+    SemParar/                     - SOAP client
+    Vpo/                          - VPO services
+    NddCargo/                     - NDD Cargo services
+
+resources/ts/pages/
+    transportes/                  - Lista transportadores
+    pacotes/                      - Lista pacotes
+    rotas-padrao/                 - Rotas + mapa interativo
+    compra-viagem/                - Wizard compra
+    vpo-emissao/                  - Wizard VPO
+    pracas-pedagio/               - Pracas ANTT
+```
+
+## Comandos Uteis
 
 ```bash
 # Desenvolvimento
-pnpm run dev              # Frontend dev server
-php artisan serve         # Backend dev server
+php artisan serve --port=8002     # Backend
+pnpm run dev                      # Frontend
 
-# Build & Deploy
-pnpm run build           # Build produção
-php artisan optimize     # Otimizar Laravel
+# Testes
+pnpm run typecheck                # TypeScript
+pnpm run lint                     # ESLint
+php artisan test                  # PHPUnit
 
-# Testes & Qualidade
-pnpm run lint            # ESLint frontend
-php artisan test         # PHPUnit backend
-pnpm run typecheck       # Verificação TypeScript
+# Build
+pnpm run build                    # Producao
+
+# Testar conexoes
+curl http://localhost:8002/api/progress/test-connection
+curl http://localhost:8002/api/semparar/test-connection
+curl http://localhost:8002/api/ndd-cargo/test-connection
 ```
 
-## 📞 Suporte
+## Documentacao Adicional
 
-### Documentação
-- [Laravel Documentation](https://laravel.com/docs)
-- [Vue.js Guide](https://vuejs.org/guide/)
-- [Vuexy Documentation](https://pixinvent.com/vuexy-vuejs-admin-template/)
+- `CLAUDE.md` - Guia completo de desenvolvimento (LEIA PRIMEIRO!)
+- `docs/integracoes/ndd-cargo/` - Documentacao NDD Cargo (15 arquivos)
+- `docs/audits/` - Auditorias de seguranca
+- `docs/bug-fixes/` - Correcoes aplicadas
 
-### Contato
-- **Desenvolvedor**: Psykhepathos
-- **Repositório**: [GitHub](https://github.com/Psykhepathos/ndd-vuexy)
-- **Issues**: [GitHub Issues](https://github.com/Psykhepathos/ndd-vuexy/issues)
+## Estatisticas
+
+- 21 Controllers
+- 14 Services
+- 60+ API Endpoints
+- 21 Tabelas Progress (JDBC)
+- 13 Tabelas Laravel (SQLite)
+- 6.913+ Transportadores
+- 800.000+ Pacotes
 
 ---
 
-<div align="center">
+**NDD Transport Management System**
 
-**🚛 Sistema NDD - Transportando o Futuro**
-
-Desenvolvido com ❤️ utilizando tecnologias modernas
-
-</div>
+Desenvolvido por Psykhepathos
