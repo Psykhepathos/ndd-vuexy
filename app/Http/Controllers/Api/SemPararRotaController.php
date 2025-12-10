@@ -572,6 +572,11 @@ class SemPararRotaController extends Controller
             'desMun' => $municipio['desmun'] ?? $municipio['desMun'] ?? '',
             'desEst' => $municipio['desest'] ?? $municipio['desEst'] ?? '',
             'cdibge' => $municipio['cdibge'] ?? '',
+            // Coordenadas do cache GPS (retornadas pelo ProgressService)
+            'lat' => $municipio['lat'] ?? null,
+            'lon' => $municipio['lon'] ?? null,
+            'gps_fonte' => $municipio['gps_fonte'] ?? null,
+            'gps_cached' => $municipio['gps_cached'] ?? false,
         ];
     }
 }

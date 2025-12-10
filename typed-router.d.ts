@@ -158,6 +158,7 @@ declare module 'vue-router/auto-routes' {
     'transportes-id': RouteRecordInfo<'transportes-id', '/transportes/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
     'vale-pedagio': RouteRecordInfo<'vale-pedagio', '/vale-pedagio', Record<never, never>, Record<never, never>>,
     'vpo-emissao': RouteRecordInfo<'vpo-emissao', '/vpo-emissao', Record<never, never>, Record<never, never>>,
+    'vpo-emissao-components-vpo-mapa-rota': RouteRecordInfo<'vpo-emissao-components-vpo-mapa-rota', '/vpo-emissao/components/VpoMapaRota', Record<never, never>, Record<never, never>>,
     'vpo-emissao-components-vpo-step1-pacote': RouteRecordInfo<'vpo-emissao-components-vpo-step1-pacote', '/vpo-emissao/components/VpoStep1Pacote', Record<never, never>, Record<never, never>>,
     'vpo-emissao-components-vpo-step2-motorista': RouteRecordInfo<'vpo-emissao-components-vpo-step2-motorista', '/vpo-emissao/components/VpoStep2Motorista', Record<never, never>, Record<never, never>>,
     'vpo-emissao-components-vpo-step3-veiculo': RouteRecordInfo<'vpo-emissao-components-vpo-step3-veiculo', '/vpo-emissao/components/VpoStep3Veiculo', Record<never, never>, Record<never, never>>,

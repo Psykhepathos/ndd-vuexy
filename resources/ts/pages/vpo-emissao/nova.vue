@@ -11,6 +11,9 @@ import VpoStep3Veiculo from './components/VpoStep3Veiculo.vue'
 import VpoStep4Rota from './components/VpoStep4Rota.vue'
 import VpoStep5Confirmacao from './components/VpoStep5Confirmacao.vue'
 
+// Importar componente do mapa
+import VpoMapaRota from './components/VpoMapaRota.vue'
+
 // ============================================================================
 // WIZARD STEPS CONFIGURATION
 // ============================================================================
@@ -102,6 +105,7 @@ const formData = ref<VpoEmissaoFormData>({
     rota: null,
     municipios: [],
     pracas: [],
+    entregas: [],
     rotaSugerida: null,
   },
   periodo: {
@@ -423,196 +427,117 @@ const getStepComponent = (stepIndex: number) => {
           </VCardText>
         </VCol>
 
-        <!-- RIGHT COLUMN: Info Panel -->
+        <!-- RIGHT COLUMN: Map + Summary -->
         <VCol cols="12" md="7" lg="8">
-          <VCardText class="pa-6">
-            <!-- Resumo do VPO sendo criado -->
-            <h6 class="text-h6 mb-4">Resumo da Emissão</h6>
+          <div class="d-flex flex-column h-100">
+            <!-- Summary Cards Row -->
+            <div class="pa-4 pb-2 summary-row">
+              <VRow dense>
+                <!-- Pacote Selecionado -->
+                <VCol v-if="formData.pacote.pacote" cols="12" sm="6" lg="4">
+                  <VCard variant="tonal" color="primary" class="h-100">
+                    <VCardItem class="py-2">
+                      <template #prepend>
+                        <VIcon icon="tabler-package" size="24" />
+                      </template>
+                      <VCardTitle class="text-body-1">
+                        Pacote #{{ formData.pacote.pacote.codpac }}
+                      </VCardTitle>
+                      <VCardSubtitle class="text-caption">
+                        {{ formData.pacote.pacote.nomtrn }}
+                      </VCardSubtitle>
+                    </VCardItem>
+                  </VCard>
+                </VCol>
 
-            <!-- Pacote Selecionado -->
-            <VCard
-              v-if="formData.pacote.pacote"
-              variant="tonal"
-              color="primary"
-              class="mb-4"
-            >
-              <VCardItem>
-                <template #prepend>
-                  <VIcon icon="tabler-package" size="32" />
-                </template>
-                <VCardTitle>Pacote #{{ formData.pacote.pacote.codpac }}</VCardTitle>
-                <VCardSubtitle>
-                  {{ formData.pacote.pacote.nomtrn }}
-                </VCardSubtitle>
-              </VCardItem>
-            </VCard>
+                <!-- Transportador -->
+                <VCol v-if="formData.pacote.transportador" cols="12" sm="6" lg="4">
+                  <VCard variant="outlined" class="h-100">
+                    <VCardItem class="py-2">
+                      <template #prepend>
+                        <VAvatar :color="formData.motorista.isEmpresa ? 'info' : 'success'" size="32" variant="tonal">
+                          <VIcon :icon="formData.motorista.isEmpresa ? 'tabler-building' : 'tabler-user'" size="18" />
+                        </VAvatar>
+                      </template>
+                      <VCardTitle class="text-body-2">
+                        {{ formData.pacote.transportador.antt_nome || formData.pacote.transportador.nomtrn }}
+                      </VCardTitle>
+                      <VCardSubtitle class="text-caption">
+                        <VChip
+                          :color="formData.motorista.isEmpresa ? 'info' : 'success'"
+                          size="x-small"
+                          class="me-1"
+                        >
+                          {{ formData.motorista.isEmpresa ? 'Empresa' : 'Autônomo' }}
+                        </VChip>
+                        Score: {{ formData.pacote.transportador.score_qualidade }}%
+                      </VCardSubtitle>
+                    </VCardItem>
+                  </VCard>
+                </VCol>
 
-            <!-- Transportador Info -->
-            <VCard
-              v-if="formData.pacote.transportador"
-              variant="outlined"
-              class="mb-4"
-            >
-              <VCardItem>
-                <template #prepend>
-                  <VAvatar color="primary" variant="tonal">
-                    <VIcon :icon="formData.motorista.isEmpresa ? 'tabler-building' : 'tabler-user'" />
-                  </VAvatar>
-                </template>
+                <!-- Veículo -->
+                <VCol v-if="formData.veiculo.veiculo" cols="12" sm="6" lg="4">
+                  <VCard variant="outlined" class="h-100">
+                    <VCardItem class="py-2">
+                      <template #prepend>
+                        <VAvatar color="info" size="32" variant="tonal">
+                          <VIcon icon="tabler-car" size="18" />
+                        </VAvatar>
+                      </template>
+                      <VCardTitle class="text-body-2">
+                        {{ formData.veiculo.veiculo.placa }}
+                      </VCardTitle>
+                      <VCardSubtitle class="text-caption">
+                        {{ formData.veiculo.veiculo.modelo }} • {{ formData.veiculo.veiculo.eixos }} eixos
+                      </VCardSubtitle>
+                    </VCardItem>
+                  </VCard>
+                </VCol>
 
-                <VCardTitle>
-                  {{ formData.pacote.transportador.antt_nome || formData.pacote.transportador.nomtrn }}
-                </VCardTitle>
+                <!-- Rota -->
+                <VCol v-if="formData.rota.rota" cols="12" sm="6" lg="4">
+                  <VCard variant="outlined" class="h-100">
+                    <VCardItem class="py-2">
+                      <template #prepend>
+                        <VAvatar color="warning" size="32" variant="tonal">
+                          <VIcon icon="tabler-route" size="18" />
+                        </VAvatar>
+                      </template>
+                      <VCardTitle class="text-body-2">
+                        {{ formData.rota.rota.desSPararRot }}
+                      </VCardTitle>
+                      <VCardSubtitle class="text-caption">
+                        {{ formData.rota.municipios.length }} municípios • {{ formData.rota.rota.tempoViagem }}h
+                      </VCardSubtitle>
+                    </VCardItem>
+                  </VCard>
+                </VCol>
 
-                <VCardSubtitle>
-                  <VChip
-                    :color="formData.motorista.isEmpresa ? 'info' : 'success'"
-                    size="small"
-                    class="me-2"
-                  >
-                    {{ formData.motorista.isEmpresa ? 'Empresa (CNPJ)' : 'Autônomo (CPF)' }}
-                  </VChip>
-                  {{ formData.pacote.transportador.cpf_cnpj }}
-                </VCardSubtitle>
+                <!-- Custo -->
+                <VCol v-if="formData.custo.calculado && formData.custo.custo" cols="12" sm="6" lg="4">
+                  <VCard variant="tonal" color="success" class="h-100">
+                    <VCardItem class="py-2">
+                      <template #prepend>
+                        <VIcon icon="tabler-cash" size="24" color="success" />
+                      </template>
+                      <VCardTitle class="text-body-1 text-success">
+                        R$ {{ formData.custo.custo.valor_total.toFixed(2) }}
+                      </VCardTitle>
+                      <VCardSubtitle class="text-caption">
+                        {{ formData.custo.custo.pedagios.length }} pedágios • {{ formData.custo.custo.km_total }} km
+                      </VCardSubtitle>
+                    </VCardItem>
+                  </VCard>
+                </VCol>
+              </VRow>
+            </div>
 
-                <template #append>
-                  <VChip
-                    :color="formData.pacote.transportador.score_qualidade >= 70 ? 'success' : 'warning'"
-                    size="small"
-                  >
-                    Score: {{ formData.pacote.transportador.score_qualidade }}%
-                  </VChip>
-                </template>
-              </VCardItem>
-
-              <!-- Campos Faltantes -->
-              <VCardText v-if="formData.pacote.transportador.campos_faltantes.length > 0">
-                <VAlert type="warning" variant="tonal" density="compact">
-                  <template #prepend>
-                    <VIcon icon="tabler-alert-triangle" />
-                  </template>
-                  <div class="text-caption">
-                    Campos faltantes: {{ formData.pacote.transportador.campos_faltantes.join(', ') }}
-                  </div>
-                </VAlert>
-              </VCardText>
-            </VCard>
-
-            <!-- Motorista Selecionado (se empresa) -->
-            <VCard
-              v-if="formData.motorista.motoristaSelecionado"
-              variant="outlined"
-              class="mb-4"
-            >
-              <VCardItem>
-                <template #prepend>
-                  <VAvatar color="success" variant="tonal">
-                    <VIcon icon="tabler-user-check" />
-                  </VAvatar>
-                </template>
-
-                <VCardTitle>{{ formData.motorista.motoristaSelecionado.nommot }}</VCardTitle>
-
-                <VCardSubtitle>
-                  Motorista selecionado
-                  <VChip
-                    v-if="formData.motorista.motoristaSelecionado.dados_completos"
-                    color="success"
-                    size="x-small"
-                    class="ms-2"
-                  >
-                    Dados Completos
-                  </VChip>
-                </VCardSubtitle>
-              </VCardItem>
-            </VCard>
-
-            <!-- Veículo Selecionado -->
-            <VCard
-              v-if="formData.veiculo.veiculo"
-              variant="outlined"
-              class="mb-4"
-            >
-              <VCardItem>
-                <template #prepend>
-                  <VAvatar color="info" variant="tonal">
-                    <VIcon icon="tabler-car" />
-                  </VAvatar>
-                </template>
-
-                <VCardTitle>{{ formData.veiculo.veiculo.placa }}</VCardTitle>
-
-                <VCardSubtitle>
-                  {{ formData.veiculo.veiculo.modelo }} • {{ formData.veiculo.veiculo.eixos }} eixos
-                </VCardSubtitle>
-              </VCardItem>
-            </VCard>
-
-            <!-- Rota Selecionada -->
-            <VCard
-              v-if="formData.rota.rota"
-              variant="outlined"
-              class="mb-4"
-            >
-              <VCardItem>
-                <template #prepend>
-                  <VAvatar color="warning" variant="tonal">
-                    <VIcon icon="tabler-route" />
-                  </VAvatar>
-                </template>
-
-                <VCardTitle>{{ formData.rota.rota.desSPararRot }}</VCardTitle>
-
-                <VCardSubtitle>
-                  {{ formData.rota.municipios.length }} municípios •
-                  {{ formData.rota.rota.tempoViagem }}h estimado
-                </VCardSubtitle>
-              </VCardItem>
-            </VCard>
-
-            <!-- Custo Calculado -->
-            <VCard
-              v-if="formData.custo.calculado && formData.custo.custo"
-              variant="tonal"
-              color="success"
-            >
-              <VCardItem>
-                <template #prepend>
-                  <VIcon icon="tabler-cash" size="32" color="success" />
-                </template>
-
-                <VCardTitle class="text-h5">
-                  R$ {{ formData.custo.custo.valor_total.toFixed(2) }}
-                </VCardTitle>
-
-                <VCardSubtitle>
-                  {{ formData.custo.custo.pedagios.length }} praças de pedágio •
-                  {{ formData.custo.custo.km_total }} km
-                </VCardSubtitle>
-              </VCardItem>
-            </VCard>
-
-            <!-- Placeholder quando nada selecionado -->
-            <VAlert
-              v-if="!formData.pacote.pacote"
-              type="info"
-              variant="tonal"
-              class="mt-4"
-            >
-              <template #prepend>
-                <VIcon icon="tabler-info-circle" />
-              </template>
-              <div>
-                <div class="font-weight-medium mb-1">
-                  Emissão de Vale Pedágio Obrigatório
-                </div>
-                <div class="text-caption">
-                  Selecione um pacote para iniciar o processo de emissão.
-                  O sistema irá calcular automaticamente as praças de pedágio e valores.
-                </div>
-              </div>
-            </VAlert>
-          </VCardText>
+            <!-- Map Component -->
+            <div class="flex-grow-1 map-wrapper">
+              <VpoMapaRota :form-data="formData" />
+            </div>
+          </div>
         </VCol>
       </VRow>
     </VCard>
@@ -628,6 +553,27 @@ const getStepComponent = (stepIndex: number) => {
   transition: none !important;
 }
 
+/* Map wrapper styles */
+.map-wrapper {
+  min-height: 400px;
+  height: calc(100vh - 350px);
+  max-height: 700px;
+  padding: 0 16px 16px 16px;
+}
+
+.map-wrapper > * {
+  height: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+/* Summary row styles */
+.summary-row {
+  background: rgba(var(--v-theme-surface), 0.5);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
 @media (max-width: 960px) {
   .border-e {
     border-inline-end: none !important;
@@ -635,6 +581,11 @@ const getStepComponent = (stepIndex: number) => {
 
   .border-b {
     border-block-end: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)) !important;
+  }
+
+  .map-wrapper {
+    min-height: 300px;
+    height: 350px;
   }
 }
 </style>
