@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\PracaPedagio;
 use App\Services\NddCargo\NddCargoService;
 use App\Services\NddCargo\DTOs\ConsultarRoteirizadorRequest;
 use Illuminate\Http\JsonResponse;
@@ -241,9 +242,23 @@ class NddCargoController extends Controller
 
             // Retornar resposta
             if ($response->sucesso) {
+                // Converter resposta para array
+                $responseData = $response->toArray();
+
+                // Enriquecer praças de pedágio com coordenadas da tabela ANTT
+                if (!empty($responseData['pracas_pedagio'])) {
+                    $responseData['pracas_pedagio'] = $this->enriquecerPracasComCoordenadas($responseData['pracas_pedagio']);
+
+                    Log::info('consultarResultado: Praças enriquecidas', [
+                        'guid' => $guid,
+                        'total_pracas' => count($responseData['pracas_pedagio']),
+                        'com_coordenadas' => count(array_filter($responseData['pracas_pedagio'], fn($p) => !empty($p['lat']) && !empty($p['lon'])))
+                    ]);
+                }
+
                 return response()->json([
                     'success' => true,
-                    'data' => $response->toArray()
+                    'data' => $responseData
                 ]);
             } else {
                 return response()->json([
@@ -265,6 +280,188 @@ class NddCargoController extends Controller
                 'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
             ], 500);
         }
+    }
+
+    /**
+     * Enriquece praças de pedágio com coordenadas da tabela ANTT
+     *
+     * @param array $pracasNdd Array de praças vindas do NDD Cargo
+     * @return array Praças enriquecidas com lat/lon
+     */
+    private function enriquecerPracasComCoordenadas(array $pracasNdd): array
+    {
+        if (empty($pracasNdd)) {
+            return [];
+        }
+
+        $pracasEnriquecidas = [];
+
+        foreach ($pracasNdd as $praca) {
+            $pracaEnriquecida = $praca;
+
+            // Se já tem coordenadas do NDD, apenas valida
+            if (!empty($praca['latitude']) && !empty($praca['longitude'])) {
+                $pracaEnriquecida['lat'] = (float) $praca['latitude'];
+                $pracaEnriquecida['lon'] = (float) $praca['longitude'];
+                $pracaEnriquecida['coordenadas_fonte'] = 'ndd_cargo';
+                $pracasEnriquecidas[] = $pracaEnriquecida;
+                continue;
+            }
+
+            // Buscar coordenadas na tabela pracas_pedagio
+            $pracaAntt = $this->buscarPracaAntt($praca);
+
+            if ($pracaAntt) {
+                $pracaEnriquecida['lat'] = (float) $pracaAntt->latitude;
+                $pracaEnriquecida['lon'] = (float) $pracaAntt->longitude;
+                $pracaEnriquecida['coordenadas_fonte'] = 'antt_cache';
+                $pracaEnriquecida['antt_match'] = [
+                    'id' => $pracaAntt->id,
+                    'praca' => $pracaAntt->praca,
+                    'rodovia' => $pracaAntt->rodovia,
+                    'km' => $pracaAntt->km,
+                    'municipio' => $pracaAntt->municipio,
+                ];
+
+                Log::info('Praça enriquecida com coordenadas', [
+                    'ndd_nome' => $praca['nome'] ?? 'N/A',
+                    'ndd_rodovia' => $praca['rodovia'] ?? 'N/A',
+                    'antt_praca' => $pracaAntt->praca,
+                    'lat' => $pracaAntt->latitude,
+                    'lon' => $pracaAntt->longitude,
+                ]);
+            } else {
+                // Não encontrou match - deixa sem coordenadas
+                $pracaEnriquecida['lat'] = null;
+                $pracaEnriquecida['lon'] = null;
+                $pracaEnriquecida['coordenadas_fonte'] = null;
+
+                Log::warning('Praça sem coordenadas - match não encontrado', [
+                    'ndd_nome' => $praca['nome'] ?? 'N/A',
+                    'ndd_rodovia' => $praca['rodovia'] ?? 'N/A',
+                    'ndd_km' => $praca['km'] ?? 'N/A',
+                ]);
+            }
+
+            $pracasEnriquecidas[] = $pracaEnriquecida;
+        }
+
+        return $pracasEnriquecidas;
+    }
+
+    /**
+     * Busca praça de pedágio na tabela ANTT usando várias estratégias
+     *
+     * @param array $pracaNdd Praça do NDD Cargo
+     * @return PracaPedagio|null
+     */
+    private function buscarPracaAntt(array $pracaNdd): ?PracaPedagio
+    {
+        $nome = $pracaNdd['nome'] ?? '';
+        $rodovia = $pracaNdd['rodovia'] ?? '';
+        $km = $pracaNdd['km'] ?? null;
+        $concessionaria = $pracaNdd['concessionaria'] ?? '';
+
+        $nomeNormalizado = $this->normalizarNomePraca($nome);
+        $rodoviaNormalizada = $this->normalizarRodovia($rodovia);
+
+        // 1. Busca por nome exato
+        $praca = PracaPedagio::where(function ($q) use ($nome, $nomeNormalizado) {
+            $q->whereRaw('LOWER(praca) = ?', [strtolower($nome)])
+              ->orWhereRaw('LOWER(praca) = ?', [strtolower($nomeNormalizado)]);
+        })
+        ->whereNotNull('latitude')
+        ->whereNotNull('longitude')
+        ->first();
+
+        if ($praca) {
+            return $praca;
+        }
+
+        // 2. Busca por rodovia + km aproximado (±5km)
+        if ($rodoviaNormalizada && $km !== null) {
+            $praca = PracaPedagio::where(function ($q) use ($rodoviaNormalizada) {
+                $q->whereRaw('LOWER(rodovia) = ?', [strtolower($rodoviaNormalizada)])
+                  ->orWhereRaw('LOWER(rodovia) LIKE ?', ['%' . strtolower($rodoviaNormalizada) . '%']);
+            })
+            ->whereBetween('km', [$km - 5, $km + 5])
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->orderByRaw('ABS(km - ?)', [$km])
+            ->first();
+
+            if ($praca) {
+                return $praca;
+            }
+        }
+
+        // 3. Busca por nome parcial (LIKE)
+        if (strlen($nomeNormalizado) >= 4) {
+            $praca = PracaPedagio::whereRaw('LOWER(praca) LIKE ?', ['%' . strtolower($nomeNormalizado) . '%'])
+                ->whereNotNull('latitude')
+                ->whereNotNull('longitude')
+                ->first();
+
+            if ($praca) {
+                return $praca;
+            }
+        }
+
+        // 4. Busca por rodovia + nome parcial
+        if ($rodoviaNormalizada && strlen($nomeNormalizado) >= 3) {
+            $praca = PracaPedagio::where(function ($q) use ($rodoviaNormalizada) {
+                $q->whereRaw('LOWER(rodovia) LIKE ?', ['%' . strtolower($rodoviaNormalizada) . '%']);
+            })
+            ->where(function ($q) use ($nomeNormalizado) {
+                $q->whereRaw('LOWER(praca) LIKE ?', ['%' . strtolower($nomeNormalizado) . '%']);
+            })
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->first();
+
+            if ($praca) {
+                return $praca;
+            }
+        }
+
+        // 5. Busca por concessionária + rodovia (última tentativa)
+        if ($concessionaria && $rodoviaNormalizada) {
+            $praca = PracaPedagio::whereRaw('LOWER(concessionaria) LIKE ?', ['%' . strtolower($concessionaria) . '%'])
+                ->where(function ($q) use ($rodoviaNormalizada) {
+                    $q->whereRaw('LOWER(rodovia) LIKE ?', ['%' . strtolower($rodoviaNormalizada) . '%']);
+                })
+                ->whereNotNull('latitude')
+                ->whereNotNull('longitude')
+                ->first();
+
+            if ($praca) {
+                return $praca;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Normaliza nome de praça para busca
+     */
+    private function normalizarNomePraca(string $nome): string
+    {
+        $nome = preg_replace('/^(praca|praça|prç|pc|pça)\s*/i', '', $nome);
+        $nome = preg_replace('/\s+(I{1,3}|IV|V|VI{0,3}|\d+)\s*$/i', '', $nome);
+        $nome = preg_replace('/\s+/', ' ', trim($nome));
+        return $nome;
+    }
+
+    /**
+     * Normaliza nome de rodovia para busca
+     */
+    private function normalizarRodovia(string $rodovia): string
+    {
+        if (preg_match('/(BR|SP|MG|RJ|PR|RS|SC|BA|GO|MT|MS|PE|CE|MA|PA|AM|PI|RN|PB|SE|AL|ES|RO|AC|AP|RR|TO|DF)[\s\-]*(\d+)/i', $rodovia, $matches)) {
+            return strtoupper($matches[1]) . '-' . $matches[2];
+        }
+        return trim($rodovia);
     }
 
     /**
