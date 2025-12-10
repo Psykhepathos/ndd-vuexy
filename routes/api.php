@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\SemPararRotaController;
 use App\Http\Controllers\Api\TransporteController;
 use App\Http\Controllers\Api\NddCargoController;
 use App\Http\Controllers\Api\VpoController;
+use App\Http\Controllers\Api\MotoristaEmpresaController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -311,6 +312,57 @@ Route::middleware('api')->group(function () {
         // Estatísticas
         Route::get('statistics', [VpoController::class, 'statistics'])
             ->middleware('throttle:30,1');  // 30 requests per minute
+
+        // Calcular praças de pedágio para rota (IBGE → CEP → NDD Cargo)
+        Route::post('calcular-pracas', [VpoController::class, 'calcularPracas'])
+            ->middleware('throttle:20,1');  // 20 requests per minute (operação externa)
+
+        // Logs de Emissão VPO (Auditoria)
+        Route::prefix('emissao/logs')->group(function () {
+            // Estatísticas (ANTES de rotas com parâmetros)
+            Route::get('statistics', [VpoController::class, 'estatisticasLogs'])
+                ->middleware('throttle:60,1');
+
+            // Buscar por UUID
+            Route::get('uuid/{uuid}', [VpoController::class, 'buscarLogPorUuid'])
+                ->middleware('throttle:60,1');
+
+            // Listar logs com filtros
+            Route::get('/', [VpoController::class, 'listarLogs'])
+                ->middleware('throttle:60,1');
+
+            // Detalhe de um log
+            Route::get('{id}', [VpoController::class, 'detalheLog'])
+                ->middleware('throttle:60,1');
+        });
+
+        // Iniciar emissão VPO (com log)
+        Route::post('emissao/iniciar', [VpoController::class, 'iniciarEmissao'])
+            ->middleware('throttle:20,1');
+
+        // Motoristas de Empresas (CNPJ) - Cache para dados complementares VPO
+        // @see docs/integracoes/ndd-cargo/MOTORISTA_EMPRESA_CACHE.md (futuro)
+        Route::prefix('motoristas')->group(function () {
+            // Verificar se transportador é empresa e tem motoristas
+            Route::get('{codtrn}/verificar', [MotoristaEmpresaController::class, 'verificar'])
+                ->middleware('throttle:60,1');  // 60 requests per minute
+
+            // Listar motoristas completos (prontos para VPO)
+            Route::get('{codtrn}/completos', [MotoristaEmpresaController::class, 'completos'])
+                ->middleware('throttle:60,1');  // 60 requests per minute
+
+            // Listar todos motoristas de um transportador
+            Route::get('{codtrn}', [MotoristaEmpresaController::class, 'index'])
+                ->middleware('throttle:60,1');  // 60 requests per minute
+
+            // Buscar motorista específico
+            Route::get('{codtrn}/{codmot}', [MotoristaEmpresaController::class, 'show'])
+                ->middleware('throttle:60,1');  // 60 requests per minute
+
+            // Salvar/atualizar dados de motorista
+            Route::post('{codtrn}/{codmot}', [MotoristaEmpresaController::class, 'store'])
+                ->middleware('throttle:30,1');  // 30 requests per minute (escrita)
+        });
     });
 
     // Rotas PÚBLICAS para VPO Emissão (Vale Pedágio via NDD Cargo)

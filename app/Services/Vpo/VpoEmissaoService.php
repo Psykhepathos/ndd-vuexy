@@ -130,15 +130,41 @@ class VpoEmissaoService
                 return ['success' => false, 'data' => $emissao, 'error' => $envioResult['error']];
             }
 
-            // 6. Atualizar com UUID real
+            // 6. Atualizar com UUID real e salvar request XML
             $emissao->update([
                 'uuid' => $envioResult['uuid'],
                 'ndd_request_xml' => $envioResult['xml_enviado'],
             ]);
 
+            // 7. Verificar se a resposta síncrona já indica conclusão
+            $rawResponse = $envioResult['raw_response'] ?? null;
+
+            if (!empty($rawResponse)) {
+                Log::info("VPO Emissao: Verificando resposta síncrona", [
+                    'uuid' => $emissao->uuid,
+                    'response_size' => strlen($rawResponse),
+                    'preview' => substr($rawResponse, 0, 500)
+                ]);
+
+                // Se já concluiu (resposta síncrona contém resultado)
+                if ($this->isProcessoConcluido($rawResponse)) {
+                    Log::info("VPO Emissao: Resposta síncrona indica conclusão!", ['uuid' => $emissao->uuid]);
+                    $this->processarResultadoConcluido($emissao, $rawResponse);
+                    return ['success' => true, 'data' => $emissao->fresh(), 'error' => null];
+                }
+
+                // Se teve erro na resposta
+                if ($this->isProcessoComErro($rawResponse)) {
+                    $errorMessage = $this->extrairMensagemErro($rawResponse);
+                    $emissao->markAsFailed($errorMessage, 'NDD_CARGO_ERROR');
+                    return ['success' => false, 'data' => $emissao, 'error' => $errorMessage];
+                }
+            }
+
+            // 8. Resposta ainda não pronta (202) - marcar como processing para polling
             $emissao->markAsProcessing();
 
-            Log::info("VPO Emissao: Iniciada com sucesso", ['emissao_id' => $emissao->id, 'uuid' => $emissao->uuid]);
+            Log::info("VPO Emissao: Iniciada com sucesso (aguardando polling)", ['emissao_id' => $emissao->id, 'uuid' => $emissao->uuid]);
 
             return ['success' => true, 'data' => $emissao, 'error' => null];
 
@@ -150,57 +176,93 @@ class VpoEmissaoService
 
     /**
      * Consultar resultado (polling)
+     *
+     * @param string $uuid UUID da emissão
+     * @param bool $forceRetry Se true, tenta novamente mesmo se falhou com TIMEOUT
      */
-    public function consultarResultado(string $uuid): array
+    public function consultarResultado(string $uuid, bool $forceRetry = false): array
     {
         try {
-            $emissao = VpoEmissao::byUuid($uuid)->first();
+            // Carregar emissão com relacionamento usuario
+            $emissao = VpoEmissao::byUuid($uuid)->with('usuario')->first();
 
             if (!$emissao) {
                 return ['success' => false, 'data' => null, 'status' => 'not_found', 'error' => "Nao encontrada"];
             }
 
+            // Se a emissão falhou com TIMEOUT ou NDD_CARGO_ERROR e forceRetry=true, resetar para processing
+            if ($forceRetry && $emissao->isFailed() && in_array($emissao->error_code, ['TIMEOUT', 'NDD_CARGO_ERROR'])) {
+                Log::info("VPO Emissao: Forçando retry de emissão com {$emissao->error_code}", ['uuid' => $uuid, 'error_code' => $emissao->error_code]);
+                $emissao->update([
+                    'status' => 'processing',
+                    'error_message' => null,
+                    'error_code' => null,
+                    'failed_at' => null,
+                    'requested_at' => now(), // Resetar timestamp para evitar isStuck() imediato
+                ]);
+                $emissao->refresh();
+            }
+
+            // Se completou com sucesso ou falhou (não-timeout), retornar dados existentes
             if ($emissao->isFinished()) {
                 return ['success' => true, 'data' => $emissao, 'status' => $emissao->status, 'error' => $emissao->error_message];
             }
 
-            if ($emissao->isStuck()) {
-                $emissao->markAsFailed("Timeout", 'TIMEOUT');
-                return ['success' => false, 'data' => $emissao, 'status' => 'failed', 'error' => 'Timeout'];
-            }
-
-            if ($emissao->hasExceededPollingLimit()) {
-                $emissao->markAsFailed("Limite polling", 'POLLING_LIMIT');
-                return ['success' => false, 'data' => $emissao, 'status' => 'failed', 'error' => 'Limite excedido'];
-            }
-
-            if (!$emissao->canPollAgain(5)) {
-                return ['success' => true, 'data' => $emissao, 'status' => 'processing', 'error' => null, 'retry_after' => 5];
-            }
-
+            // Registrar tentativa de polling
             $emissao->registerPolling();
 
             // Consultar NDD Cargo via SOAP (passar processCode para OVP: 2019)
+            // NOTA: Sempre tenta consultar primeiro, mesmo se isStuck() for true
+            Log::info("VPO Emissao: Consultando NDD Cargo (polling)", [
+                'uuid' => $uuid,
+                'tentativa' => $emissao->tentativas_polling
+            ]);
+
             $consultaResult = $this->nddCargoSoapClient->consultarResultado($emissao->uuid, 2019);
 
             if (!$consultaResult['success']) {
                 Log::warning("VPO Emissao: Erro ao consultar NDD Cargo", ['uuid' => $uuid, 'error' => $consultaResult['error']]);
+
+                // Só marca como timeout se a emissão está travada (>10 min) E o NDD Cargo não respondeu
+                if ($emissao->isStuck()) {
+                    $emissao->markAsFailed("Timeout - NDD Cargo não respondeu após múltiplas tentativas", 'TIMEOUT');
+                    return ['success' => false, 'data' => $emissao->load('usuario'), 'status' => 'failed', 'error' => 'Timeout'];
+                }
+
+                // Só marca como limite excedido se passou de 50 tentativas E o NDD Cargo não respondeu
+                if ($emissao->hasExceededPollingLimit(50)) {
+                    $emissao->markAsFailed("Limite de polling excedido", 'POLLING_LIMIT');
+                    return ['success' => false, 'data' => $emissao->load('usuario'), 'status' => 'failed', 'error' => 'Limite excedido'];
+                }
+
+                // Ainda em processamento - tentar novamente depois
                 return ['success' => true, 'data' => $emissao, 'status' => 'processing', 'error' => null, 'retry_after' => 5];
             }
 
             $response = $consultaResult['data'];
 
+            // Log da resposta para debug
+            Log::info("VPO Emissao: Resposta do polling recebida", [
+                'uuid' => $uuid,
+                'response_type' => gettype($response),
+                'response_size' => is_string($response) ? strlen($response) : 0,
+                'preview' => is_string($response) ? substr($response, 0, 1000) : json_encode($response)
+            ]);
+
             // Processar resposta
             if ($this->isProcessoConcluido($response)) {
+                Log::info("VPO Emissao: isProcessoConcluido = TRUE, processando resultado");
                 $this->processarResultadoConcluido($emissao, $response);
-                return ['success' => true, 'data' => $emissao->fresh(), 'status' => 'completed', 'error' => null];
+                return ['success' => true, 'data' => $emissao->fresh()->load('usuario'), 'status' => 'completed', 'error' => null];
             } elseif ($this->isProcessoComErro($response)) {
                 $errorMessage = $this->extrairMensagemErro($response);
+                Log::warning("VPO Emissao: isProcessoComErro = TRUE", ['error' => $errorMessage]);
                 $emissao->markAsFailed($errorMessage, 'NDD_CARGO_ERROR');
-                return ['success' => false, 'data' => $emissao, 'status' => 'failed', 'error' => $errorMessage];
+                return ['success' => false, 'data' => $emissao->load('usuario'), 'status' => 'failed', 'error' => $errorMessage];
             }
 
-            // Ainda processando
+            // Ainda processando (202 ou resposta vazia)
+            Log::info("VPO Emissao: Ainda processando (202), aguardando próximo polling", ['uuid' => $uuid]);
             return ['success' => true, 'data' => $emissao, 'status' => 'processing', 'error' => null, 'retry_after' => 5];
 
         } catch (\Exception $e) {
@@ -407,6 +469,7 @@ class VpoEmissaoService
                     'success' => false,
                     'uuid' => null,
                     'xml_enviado' => $xmlAssinado,
+                    'raw_response' => null,
                     'error' => 'Erro SOAP: ' . ($soapResponse['error'] ?? 'Desconhecido')
                 ];
             }
@@ -417,14 +480,17 @@ class VpoEmissaoService
                     'success' => false,
                     'uuid' => null,
                     'xml_enviado' => $xmlAssinado,
+                    'raw_response' => $soapResponse['data']['raw_response'] ?? null,
                     'error' => 'UUID nao retornado pela NDD Cargo'
                 ];
             }
 
+            // 7. Retornar resposta completa (incluindo raw_response para verificar se já concluiu)
             return [
                 'success' => true,
                 'uuid' => $soapResponse['data']['uuid'],
                 'xml_enviado' => $xmlAssinado,
+                'raw_response' => $soapResponse['data']['raw_response'] ?? null,
                 'error' => null
             ];
 
@@ -968,37 +1034,272 @@ class VpoEmissaoService
 
     /**
      * Verificar se processo concluiu com sucesso
+     *
+     * A resposta do NDD Cargo vem como STRING XML, não array!
+     * Verificamos pelo ResponseCode (200 = sucesso) E ausência de erro nas mensagens
+     *
+     * @param string|array $response
+     * @return bool
      */
     protected function isProcessoConcluido($response): bool
     {
-        return isset($response['status']) && $response['status'] === 'concluido';
+        // Se for array antigo, manter compatibilidade
+        if (is_array($response)) {
+            return isset($response['status']) && $response['status'] === 'concluido';
+        }
+
+        // Resposta vem como STRING XML
+        if (!is_string($response) || empty($response)) {
+            return false;
+        }
+
+        // Verificar se ainda está processando (202)
+        if ($this->isAindaProcessando($response)) {
+            return false;
+        }
+
+        // IMPORTANTE: Verificar se tem erro ANTES de considerar concluído
+        // Mesmo com retornoOperacaoValePedagio, pode conter mensagens de erro
+        if ($this->isRespostaComErro($response)) {
+            return false;
+        }
+
+        // ResponseCode 200 = sucesso
+        if (preg_match('/<ResponseCode>(\d+)<\/ResponseCode>/i', $response, $matches)) {
+            if ($matches[1] === '200') {
+                Log::info("VPO Emissao: ResponseCode 200 - Processo concluído");
+                return true;
+            }
+        }
+
+        // Se tiver protocolo (e não teve erro), está concluído
+        if (preg_match('/<protocolo>([^<]+)<\/protocolo>/i', $response) ||
+            preg_match('/&lt;protocolo&gt;([^&]+)&lt;\/protocolo&gt;/i', $response)) {
+            Log::info("VPO Emissao: protocolo encontrado - Processo concluído");
+            return true;
+        }
+
+        // NOTA: retornoOperacaoValePedagio NÃO significa sucesso!
+        // Ele pode conter mensagens de erro mesmo quando presente
+        // Só é sucesso se tiver ResponseCode 200 ou protocolo
+
+        return false;
     }
 
     /**
      * Verificar se processo teve erro
+     *
+     * Estrutura NDD Cargo CrossTalk:
+     * - ResponseCode >= 300 (ex: 500) = erro de servidor
+     * - ResponseCodeMessage contém descrição do erro
+     * - mensagens > mensagem > codigo 778 = erro na emissão VPO
+     *
+     * @param string|array $response
+     * @return bool
      */
     protected function isProcessoComErro($response): bool
     {
-        return isset($response['status']) && $response['status'] === 'erro';
+        // Se for array antigo, manter compatibilidade
+        if (is_array($response)) {
+            return isset($response['status']) && $response['status'] === 'erro';
+        }
+
+        // Resposta vem como STRING XML
+        if (!is_string($response) || empty($response)) {
+            return false;
+        }
+
+        // ResponseCode >= 300 ou == 0 = erro (ex: 500 = erro de servidor)
+        if (preg_match('/<ResponseCode>(\d+)<\/ResponseCode>/i', $response, $matches)) {
+            $code = (int) $matches[1];
+            if ($code >= 300 || $code === 0) {
+                Log::warning("VPO Emissao: ResponseCode {$code} - Erro detectado");
+                return true;
+            }
+        }
+
+        // Verificar mensagens de erro NDD Cargo (estrutura: mensagens > mensagem > codigo)
+        // Código 778 = "Não foi possível emitir a Operação de Vale-Pedágio"
+        if (preg_match('/<codigo>778<\/codigo>/i', $response) ||
+            preg_match('/&lt;codigo&gt;778&lt;\/codigo&gt;/i', $response)) {
+            Log::warning("VPO Emissao: Código 778 encontrado - Erro na emissão VPO");
+            return true;
+        }
+
+        // Verificar se tem "Não foi possível emitir" ou "Não foi possível realizar a compra"
+        if (str_contains($response, 'Não foi possível emitir') ||
+            str_contains($response, 'Não foi possível realizar a compra')) {
+            Log::warning("VPO Emissao: Mensagem de erro de emissão encontrada");
+            return true;
+        }
+
+        // Verificar padrões genéricos de erro
+        $erroPatterns = [
+            '/<erro>/i',
+            '/&lt;erro&gt;/i',
+            '/<codigoRetorno>[^0]<\/codigoRetorno>/i',  // codigoRetorno != 0
+            '/&lt;codigoRetorno&gt;[^0]&lt;\/codigoRetorno&gt;/i',
+        ];
+
+        foreach ($erroPatterns as $pattern) {
+            if (preg_match($pattern, $response)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
-     * Extrair mensagem de erro da resposta
+     * Extrair mensagem de erro da resposta NDD Cargo
+     *
+     * Estrutura CrossTalk:
+     * - ResponseCodeMessage: Descrição geral do erro
+     * - mensagens > mensagem > mensagem: Mensagem específica
+     * - mensagens > mensagem > observacao: Detalhes adicionais
+     *
+     * @param string|array $response
+     * @return string
      */
     protected function extrairMensagemErro($response): string
     {
-        return $response['mensagem'] ?? $response['erro'] ?? 'Erro desconhecido na NDD Cargo';
+        // Se for array antigo, manter compatibilidade
+        if (is_array($response)) {
+            return $response['mensagem'] ?? $response['erro'] ?? 'Erro desconhecido na NDD Cargo';
+        }
+
+        // Resposta vem como STRING XML
+        if (!is_string($response)) {
+            return 'Erro desconhecido na NDD Cargo';
+        }
+
+        $mensagens = [];
+
+        // 1. Extrair ResponseCodeMessage (descrição geral do erro)
+        if (preg_match('/<ResponseCodeMessage>([^<]+)<\/ResponseCodeMessage>/i', $response, $m)) {
+            $mensagens[] = trim($m[1]);
+        }
+
+        // 2. Extrair TODAS as mensagens do bloco <mensagens> (sucesso + erro)
+        // Estrutura: <mensagens><mensagem><mensagem>TEXTO</mensagem><observacao>DETALHE</observacao></mensagem></mensagens>
+        // NOTA: A tag interna também se chama "mensagem" (sim, é confuso!)
+        // IMPORTANTE: Incluir todas as mensagens para que o usuário veja contexto completo
+        if (preg_match_all('/<mensagem>\s*<categoria>(\d+)<\/categoria>\s*<codigo>(\d+)<\/codigo>\s*<mensagem>([^<]+)<\/mensagem>\s*<observacao>([^<]*)<\/observacao>/is', $response, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $match) {
+                $categoria = $match[1];
+                $codigo = $match[2];
+                $texto = trim($match[3]);
+                $observacao = trim($match[4]);
+
+                // Prefixar categoria 004 como "[INFO]" (mensagens de sucesso de cadastro)
+                // Prefixar outras categorias (010, etc) como "[ERRO]"
+                $prefix = ($categoria === '004') ? '[INFO]' : '[ERRO]';
+
+                // Incluir mensagem com prefixo
+                if (!empty($texto)) {
+                    $mensagens[] = "{$prefix} {$texto}";
+                }
+                if (!empty($observacao) && $observacao !== $texto) {
+                    $mensagens[] = "{$prefix} {$observacao}";
+                }
+            }
+        }
+
+        // 3. Fallback: padrões genéricos
+        if (empty($mensagens)) {
+            $patterns = [
+                '/<mensagem>([^<]+)<\/mensagem>/i',
+                '/&lt;mensagem&gt;([^&]+)&lt;\/mensagem&gt;/i',
+                '/<erro>([^<]+)<\/erro>/i',
+                '/&lt;erro&gt;([^&]+)&lt;\/erro&gt;/i',
+            ];
+
+            foreach ($patterns as $pattern) {
+                if (preg_match($pattern, $response, $m)) {
+                    $mensagens[] = trim($m[1]);
+                    break;
+                }
+            }
+        }
+
+        // Retornar mensagens concatenadas ou mensagem padrão
+        if (!empty($mensagens)) {
+            return implode(' | ', array_unique($mensagens));
+        }
+
+        return 'Erro desconhecido na NDD Cargo';
     }
 
     /**
-     * Processar resultado concluido (extrair pracas, custos, etc)
+     * Processar resultado concluido (extrair dados do XML de resposta)
+     *
+     * @param VpoEmissao $emissao
+     * @param string|array $response
      */
-    protected function processarResultadoConcluido(VpoEmissao $emissao, array $response): void
+    protected function processarResultadoConcluido(VpoEmissao $emissao, $response): void
     {
-        $pracas = $response['pracas'] ?? $response['pracas_pedagio'] ?? [];
-        $custo = $response['valor_total'] ?? $response['custo_total'] ?? 0;
-        $distancia = $response['distancia_km'] ?? 0;
-        $tempo = $response['tempo_minutos'] ?? 0;
+        $pracas = [];
+        $custo = 0;
+        $distancia = 0;
+        $tempo = 0;
+        $protocolo = null;
+
+        // Se for array antigo, manter compatibilidade
+        if (is_array($response)) {
+            $pracas = $response['pracas'] ?? $response['pracas_pedagio'] ?? [];
+            $custo = $response['valor_total'] ?? $response['custo_total'] ?? 0;
+            $distancia = $response['distancia_km'] ?? 0;
+            $tempo = $response['tempo_minutos'] ?? 0;
+        } elseif (is_string($response) && !empty($response)) {
+            // Resposta vem como STRING XML - extrair dados
+            Log::info("VPO Emissao: Processando resposta XML", [
+                'size_bytes' => strlen($response),
+                'preview' => substr($response, 0, 500)
+            ]);
+
+            // Extrair protocolo
+            if (preg_match('/<protocolo>([^<]+)<\/protocolo>/i', $response, $m) ||
+                preg_match('/&lt;protocolo&gt;([^&]+)&lt;\/protocolo&gt;/i', $response, $m)) {
+                $protocolo = trim($m[1]);
+            }
+
+            // Extrair valor total
+            if (preg_match('/<valorTotal>([0-9.,]+)<\/valorTotal>/i', $response, $m) ||
+                preg_match('/&lt;valorTotal&gt;([0-9.,]+)&lt;\/valorTotal&gt;/i', $response, $m)) {
+                $custo = (float) str_replace(',', '.', $m[1]);
+            }
+
+            // Extrair distância
+            if (preg_match('/<distancia>([0-9.,]+)<\/distancia>/i', $response, $m) ||
+                preg_match('/&lt;distancia&gt;([0-9.,]+)&lt;\/distancia&gt;/i', $response, $m)) {
+                $distancia = (float) str_replace(',', '.', $m[1]);
+            }
+
+            // Extrair tempo
+            if (preg_match('/<tempo>([0-9]+)<\/tempo>/i', $response, $m) ||
+                preg_match('/&lt;tempo&gt;([0-9]+)&lt;\/tempo&gt;/i', $response, $m)) {
+                $tempo = (int) $m[1];
+            }
+
+            // Extrair praças da resposta (mesmo método usado no roteirizador)
+            $pracas = $this->extrairPracasDoRoteirizador($response);
+
+            // Se não encontrou praças na resposta, usar as do request (já calculadas pelo roteirizador)
+            if (empty($pracas) && !empty($emissao->ndd_request_xml)) {
+                Log::info("VPO Emissao: Praças não encontradas na resposta, extraindo do request XML");
+                $pracas = $this->extrairPracasDoRoteirizador($emissao->ndd_request_xml);
+            }
+        }
+
+        // Se ainda não tem praças, verificar se o custo já foi calculado no envio
+        if (empty($pracas) && $custo == 0) {
+            // Tentar extrair do ndd_request_xml as praças que foram enviadas
+            $pracasDoRequest = $this->extrairPracasDoRequestXml($emissao->ndd_request_xml);
+            if (!empty($pracasDoRequest)) {
+                $pracas = $pracasDoRequest;
+                $custo = array_sum(array_column($pracas, 'valor'));
+            }
+        }
 
         $emissao->update([
             'pracas_pedagio' => $pracas,
@@ -1006,16 +1307,81 @@ class VpoEmissaoService
             'custo_total' => $custo,
             'distancia_km' => $distancia,
             'tempo_minutos' => $tempo,
+            'ndd_response' => is_string($response) ? ['raw' => substr($response, 0, 10000)] : $response,
         ]);
 
-        $emissao->markAsCompleted($response);
+        $emissao->markAsCompleted(is_string($response) ? ['raw' => $response, 'protocolo' => $protocolo] : $response);
 
         Log::info("VPO Emissao: Processamento concluido", [
             'emissao_id' => $emissao->id,
             'uuid' => $emissao->uuid,
             'total_pracas' => count($pracas),
-            'custo_total' => $custo
+            'custo_total' => $custo,
+            'protocolo' => $protocolo
         ]);
+    }
+
+    /**
+     * Extrair praças do XML de request (operacaoValePedagio_envio)
+     *
+     * Estrutura: pracaPedagio_envio > pracas > praca
+     *
+     * @param string|null $requestXml
+     * @return array
+     */
+    protected function extrairPracasDoRequestXml(?string $requestXml): array
+    {
+        if (empty($requestXml)) {
+            return [];
+        }
+
+        $pracas = [];
+
+        // Padrão para extrair praças do XML de envio (HTML-encoded ou não)
+        $patterns = [
+            // HTML-encoded
+            '/&lt;praca&gt;(.*?)&lt;\/praca&gt;/s',
+            // XML normal
+            '/<praca>(.*?)<\/praca>/s',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match_all($pattern, $requestXml, $matches)) {
+                foreach ($matches[1] as $pracaContent) {
+                    $praca = [];
+
+                    // Extrair codigoPraca (obrigatório no VPO)
+                    if (preg_match('/(?:&lt;|<)codigoPraca(?:&gt;|>)([^<&]+)(?:&lt;|<)\/codigoPraca(?:&gt;|>)/', $pracaContent, $m)) {
+                        $praca['codigo'] = trim($m[1]);
+                        $praca['codigoPraca'] = trim($m[1]);
+                    }
+
+                    // Extrair valor
+                    if (preg_match('/(?:&lt;|<)valor(?:&gt;|>)([0-9.,]+)(?:&lt;|<)\/valor(?:&gt;|>)/', $pracaContent, $m)) {
+                        $praca['valor'] = (float) str_replace(',', '.', $m[1]);
+                    }
+
+                    // Extrair nome (se existir)
+                    if (preg_match('/(?:&lt;|<)nome(?:&gt;|>)([^<&]+)(?:&lt;|<)\/nome(?:&gt;|>)/', $pracaContent, $m)) {
+                        $praca['nome'] = trim($m[1]);
+                    }
+
+                    if (!empty($praca['codigo'])) {
+                        $pracas[] = $praca;
+                    }
+                }
+
+                if (!empty($pracas)) {
+                    Log::info("VPO Emissao: Praças extraídas do request XML", [
+                        'total' => count($pracas),
+                        'valor_total' => array_sum(array_column($pracas, 'valor'))
+                    ]);
+                    return $pracas;
+                }
+            }
+        }
+
+        return $pracas;
     }
 
     /**

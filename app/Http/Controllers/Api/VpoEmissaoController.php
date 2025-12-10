@@ -83,11 +83,17 @@ class VpoEmissaoController extends Controller
     /**
      * 2. Consultar resultado (polling UUID)
      *
-     * GET /api/vpo/emissao/{uuid}
+     * GET /api/vpo/emissao/{uuid}?force_retry=1
+     *
+     * Retorna dados completos da emissão para atualização no frontend
+     *
+     * Query params:
+     * - force_retry: Se 1, tenta novamente mesmo se falhou com TIMEOUT
      */
-    public function consultar(string $uuid): JsonResponse
+    public function consultar(Request $request, string $uuid): JsonResponse
     {
-        $result = $this->emissaoService->consultarResultado($uuid);
+        $forceRetry = $request->boolean('force_retry', false);
+        $result = $this->emissaoService->consultarResultado($uuid, $forceRetry);
 
         if (!$result['success'] && $result['status'] === 'not_found') {
             return response()->json([
@@ -96,9 +102,21 @@ class VpoEmissaoController extends Controller
             ], 404);
         }
 
+        // Retornar dados completos, não apenas o summary
+        $emissao = $result['data'];
+        $data = $emissao ? $emissao->toArray() : null;
+
+        // Incluir relacionamento usuario se existir
+        if ($emissao && $emissao->usuario) {
+            $data['usuario'] = [
+                'id' => $emissao->usuario->id,
+                'name' => $emissao->usuario->name,
+            ];
+        }
+
         $response = [
             'success' => $result['success'],
-            'data' => $result['data']?->getSummary(),
+            'data' => $data,
             'status' => $result['status'],
             'message' => $result['error'] ?? 'Consulta realizada'
         ];
@@ -396,16 +414,29 @@ class VpoEmissaoController extends Controller
                 $avgSeconds = round($totalSeconds / $emissoes->count(), 2);
             }
 
+            // Formato plano para o frontend
+            $pending = VpoEmissao::where('status', 'pending')->count();
+            $processing = VpoEmissao::processing()->count();
+            $completed = VpoEmissao::completed()->count();
+            $failed = VpoEmissao::failed()->count();
+            $cancelled = VpoEmissao::where('status', 'cancelled')->count();
+            $custoTotal = VpoEmissao::completed()->sum('custo_total') ?? 0;
+
             $stats = [
                 'total' => VpoEmissao::count(),
+                'pending' => $pending,
+                'processing' => $processing,
+                'completed' => $completed,
+                'failed' => $failed,
+                'cancelled' => $cancelled,
+                'custo_total' => $custoTotal,
                 'por_status' => [
-                    'pending' => VpoEmissao::where('status', 'pending')->count(),
-                    'processing' => VpoEmissao::processing()->count(),
-                    'completed' => VpoEmissao::completed()->count(),
-                    'failed' => VpoEmissao::failed()->count(),
-                    'cancelled' => VpoEmissao::where('status', 'cancelled')->count(),
+                    'pending' => $pending,
+                    'processing' => $processing,
+                    'completed' => $completed,
+                    'failed' => $failed,
+                    'cancelled' => $cancelled,
                 ],
-                'custo_total' => VpoEmissao::completed()->sum('custo_total') ?? 0,
                 'media_tempo_processamento' => $avgSeconds,
                 'ultimas_24h' => VpoEmissao::where('created_at', '>=', now()->subDay())->count(),
             ];

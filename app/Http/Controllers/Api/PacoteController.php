@@ -296,7 +296,7 @@ class PacoteController extends Controller
             // CORREÇÃO BUG #24: TOP 20 é adequado para autocomplete
             // UX best practice: Limitar resultados para não sobrecarregar dropdown
             // Se necessário mais resultados, usar endpoint index() com paginação
-            $sql = "SELECT TOP 20 p.codpac, p.codrot, p.datforpac, p.sitpac, p.nroped, t.nomtrn FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn WHERE 1=1";
+            $sql = "SELECT TOP 20 p.codpac, p.codtrn, p.numpla, p.codrot, p.datforpac, p.sitpac, p.nroped, t.nomtrn FROM PUB.pacote p LEFT JOIN PUB.transporte t ON p.codtrn = t.codtrn WHERE 1=1";
 
             if (!empty($search)) {
                 // Se for número, buscar por código usando range numérico
@@ -374,10 +374,12 @@ class PacoteController extends Controller
 
             $pacotes = $result['data']['results'] ?? [];
 
-            // Formatar para autocomplete
+            // Formatar para autocomplete (incluindo codtrn e placa para VPO)
             $formatted = array_map(function($pacote) {
                 return [
                     'codpac' => (int)$pacote['codpac'],
+                    'codtrn' => (int)($pacote['codtrn'] ?? 0),
+                    'placa' => $pacote['numpla'] ?? null,
                     'codrot' => $pacote['codrot'] ?? 'N/D',
                     'datforpac' => $pacote['datforpac'] ?? '',
                     'sitpac' => $pacote['sitpac'] ?? '',

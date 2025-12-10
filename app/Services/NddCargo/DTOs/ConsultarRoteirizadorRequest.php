@@ -16,13 +16,13 @@ class ConsultarRoteirizadorRequest
     /**
      * @param string $cnpjEmpresa CNPJ da empresa solicitante (14 dígitos)
      * @param string $cnpjContratante CNPJ do contratante do serviço (14 dígitos)
-     * @param int $categoriaPedagio Categoria do pedágio (1-7, recomendado: 7 para caminhão pesado)
+     * @param int $categoriaPedagio Categoria do pedágio (1-7, padrão: 7 = caminhão pesado 6+ eixos)
      * @param array $pontosParada Array de CEPs ['origem' => '01310100', 'destino' => '20040020']
      * @param int $tipoRotaPadrao Tipo de rota (1=menor custo, 2=menor tempo, 3=menor distância)
      * @param bool $evitarPedagios Se deve evitar pedágios (0=não, 1=sim)
      * @param bool $priorizarRodovias Se deve priorizar rodovias (0=não, 1=sim)
-     * @param int $tipoRota Tipo de rota (1=cidade-cidade, 2=ponto-ponto, 3=trajeto)
-     * @param int $tipoVeiculo Tipo de veículo (1-10, ex: 1=carro, 5=caminhão)
+     * @param int $tipoRota Tipo de rota (1=asfalto, 2=terra, 3=mista)
+     * @param int $tipoVeiculo Tipo de veículo (1=passeio, 2=caminhão, 3=ônibus, 4=caminhão trator)
      * @param bool $retornarTrecho Se deve retornar trechos detalhados (0=não, 1=sim)
      */
     public function __construct(
@@ -32,9 +32,9 @@ class ConsultarRoteirizadorRequest
         public readonly array $pontosParada = [],
         public readonly int $tipoRotaPadrao = 1,
         public readonly bool $evitarPedagios = false,
-        public readonly bool $priorizarRodovias = false,
+        public readonly bool $priorizarRodovias = true,
         public readonly int $tipoRota = 1,
-        public readonly int $tipoVeiculo = 5,
+        public readonly int $tipoVeiculo = 2,
         public readonly bool $retornarTrecho = false
     ) {
         $this->validate();
@@ -87,9 +87,9 @@ class ConsultarRoteirizadorRequest
             throw new \InvalidArgumentException('Tipo de rota deve estar entre 1 e 3');
         }
 
-        // Validar tipo de veículo (1-10)
-        if ($this->tipoVeiculo < 1 || $this->tipoVeiculo > 10) {
-            throw new \InvalidArgumentException('Tipo de veículo deve estar entre 1 e 10');
+        // Validar tipo de veículo (1-4: 1=passeio, 2=caminhão, 3=ônibus, 4=caminhão trator)
+        if ($this->tipoVeiculo < 1 || $this->tipoVeiculo > 4) {
+            throw new \InvalidArgumentException('Tipo de veículo deve estar entre 1 e 4 (1=passeio, 2=caminhão, 3=ônibus, 4=caminhão trator)');
         }
     }
 

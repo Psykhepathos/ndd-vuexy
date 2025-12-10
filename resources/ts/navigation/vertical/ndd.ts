@@ -39,6 +39,11 @@ export default [
         to: 'compra-viagem',
         icon: { icon: 'tabler-shopping-cart' },
       },
+      {
+        title: 'Emissão VPO',
+        to: 'vpo-emissao',
+        icon: { icon: 'tabler-file-certificate' },
+      },
     ],
   },
 ]

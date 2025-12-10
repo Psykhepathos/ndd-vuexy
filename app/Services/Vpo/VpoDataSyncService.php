@@ -3,6 +3,7 @@
 namespace App\Services\Vpo;
 
 use App\Models\VpoTransportadorCache;
+use App\Models\MotoristaEmpresaCache;
 use App\Services\ProgressService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -208,7 +209,20 @@ class VpoDataSyncService
             }
 
             $transportador = $result['data']['results'][0];
-            $isAutonomo = (bool) $transportador['flgautonomo'];
+
+            // === DETERMINAÇÃO EMPRESA vs AUTÔNOMO ===
+            // IMPORTANTE: flgautonomo não é confiável! Usar tamanho do documento:
+            // - CPF (11 dígitos) = Autônomo
+            // - CNPJ (14 dígitos) = Empresa
+            $documento = preg_replace('/\D/', '', $transportador['codcnpjcpf'] ?? '');
+            $isAutonomo = strlen($documento) !== 14;
+
+            Log::info("VPO Sync: Determinação de tipo", [
+                'codtrn' => $codtrn,
+                'documento_length' => strlen($documento),
+                'flgautonomo_original' => $transportador['flgautonomo'] ?? null,
+                'is_autonomo_calculado' => $isAutonomo
+            ]);
 
             // Buscar JOIN com tipcam para destipcam
             $tipcam = $transportador['tipcam'] ?? null;
@@ -306,6 +320,11 @@ class VpoDataSyncService
 
     /**
      * Mapeia dados de EMPRESA do Progress
+     *
+     * Fluxo:
+     * 1. Busca motorista do Progress (trnmot)
+     * 2. Verifica se existe cache complementar (motorista_empresa_cache)
+     * 3. Mescla dados Progress + Cache para VPO
      */
     protected function mapEmpresaData(array $transportador, ?string $destipcam, ?int $codmot, ?string $placa): array
     {
@@ -339,6 +358,24 @@ class VpoDataSyncService
                 'codtrn' => $codtrn
             ]);
             $useFallbackToTransporte = true;
+        }
+
+        // === INTEGRAÇÃO COM CACHE DE MOTORISTAS ===
+        // Verifica se existe dados complementares no cache SQLite
+        $motoristaCache = null;
+        $usouCacheMotorista = false;
+
+        if ($motorista) {
+            $motoristaCache = MotoristaEmpresaCache::findByMotorista($codtrn, (int) $motorista['codmot']);
+
+            if ($motoristaCache && $motoristaCache->dados_completos) {
+                Log::info("VPO Sync: Usando dados do cache de motoristas empresa", [
+                    'codtrn' => $codtrn,
+                    'codmot' => $motorista['codmot'],
+                    'cache_id' => $motoristaCache->id
+                ]);
+                $usouCacheMotorista = true;
+            }
         }
 
         // Buscar veículo (se placa fornecida ou buscar do transporte)
@@ -422,6 +459,7 @@ class VpoDataSyncService
                         'progress_trnvei' => $veiculo !== null,
                         'progress_tipcam' => $destipcam !== null,
                         'fallback_to_transporte' => true,
+                        'cache_motorista' => false,
                     ],
                     'ultima_sync_progress' => now(),
                 ],
@@ -429,7 +467,68 @@ class VpoDataSyncService
             ];
         }
 
-        // Caminho normal: com motorista
+        // === MONTAR DADOS DO MOTORISTA ===
+        // Prioridade: Cache > Progress (para campos VPO obrigatórios)
+
+        // CPF: Cache tem prioridade (Progress normalmente não tem para empresas)
+        $cpfCnpj = $usouCacheMotorista && !empty($motoristaCache->cpf)
+            ? $motoristaCache->cpf
+            : preg_replace('/\D/', '', $motorista['codcpf'] ?? '');
+
+        // RNTRC: Cache > Progress trnmot > Progress transporte
+        $rntrc = $usouCacheMotorista && !empty($motoristaCache->rntrc)
+            ? $motoristaCache->rntrc
+            : ($motorista['codrntrc'] ?? $transportador['cdantt'] ?? null);
+
+        // Nome da mãe: Cache > Progress
+        $nomeMae = $usouCacheMotorista && !empty($motoristaCache->nommae)
+            ? $motoristaCache->nommae
+            : ($motorista['nommae'] ?? null);
+
+        // Data nascimento: Cache > Progress
+        $dataNascimento = $usouCacheMotorista && $motoristaCache->data_nascimento
+            ? $motoristaCache->data_nascimento->format('Y-m-d')
+            : ($motorista['datnas'] ?? null);
+
+        // Nome do motorista: Cache preserva nome do Progress
+        $nomeMotorista = $usouCacheMotorista && !empty($motoristaCache->nommot)
+            ? $motoristaCache->nommot
+            : ($motorista['nommot'] ?? null);
+
+        // RG: Progress tem prioridade
+        $rgMotorista = $motorista['numrg'] ?? null;
+
+        // Endereço: Cache > Progress (se cache completo)
+        $enderecoRua = $this->formatEndereco(
+            $motorista['tiplog'] ?? null,
+            $motorista['codlog'] ?? null,
+            $motorista['desend'] ?? null,
+            null
+        );
+        $enderecoBairro = $bairroNome;
+        $enderecoCidade = $municipioNome;
+        $enderecoEstado = $estadoSigla;
+
+        if ($usouCacheMotorista) {
+            // Se cache tem endereço, usar do cache
+            if (!empty($motoristaCache->endereco_logradouro)) {
+                $enderecoRua = $motoristaCache->endereco_logradouro;
+                if (!empty($motoristaCache->endereco_numero)) {
+                    $enderecoRua .= ", {$motoristaCache->endereco_numero}";
+                }
+            }
+            if (!empty($motoristaCache->endereco_bairro)) {
+                $enderecoBairro = $motoristaCache->endereco_bairro;
+            }
+            if (!empty($motoristaCache->endereco_cidade)) {
+                $enderecoCidade = $motoristaCache->endereco_cidade;
+            }
+            if (!empty($motoristaCache->endereco_uf)) {
+                $enderecoEstado = $motoristaCache->endereco_uf;
+            }
+        }
+
+        // Caminho normal: com motorista (mesclado com cache se disponível)
         return [
             'success' => true,
             'data' => [
@@ -439,29 +538,24 @@ class VpoDataSyncService
                 'numpla' => $placaBusca,
                 'flgautonomo' => false,
 
-                // 19 campos VPO
-                'cpf_cnpj' => preg_replace('/\D/', '', $motorista['codcpf'] ?? ''),
-                'antt_rntrc' => $motorista['codrntrc'] ?? $transportador['cdantt'] ?? null,
-                'antt_nome' => $motorista['nommot'] ?? null,
+                // 19 campos VPO (mesclados Progress + Cache)
+                'cpf_cnpj' => $cpfCnpj,
+                'antt_rntrc' => $rntrc,
+                'antt_nome' => $nomeMotorista,
                 'antt_validade' => $motorista['datvldrntrc'] ?? null,
                 'antt_status' => 'Ativo', // Será atualizado pela ANTT
                 'placa' => $this->formatPlaca($placaBusca),
                 'veiculo_tipo' => $destipcam ?? 'Não especificado',
                 'veiculo_modelo' => $veiculoModelo,
-                'condutor_rg' => $motorista['numrg'] ?? null,
-                'condutor_nome' => $motorista['nommot'] ?? null,
+                'condutor_rg' => $rgMotorista,
+                'condutor_nome' => $nomeMotorista,
                 'condutor_sexo' => 'M', // Padrão
-                'condutor_nome_mae' => $motorista['nommae'] ?? null,
-                'condutor_data_nascimento' => $motorista['datnas'] ?? null,
-                'endereco_rua' => $this->formatEndereco(
-                    $motorista['tiplog'] ?? null,
-                    $motorista['codlog'] ?? null,
-                    $motorista['desend'] ?? null,
-                    null
-                ),
-                'endereco_bairro' => $bairroNome,
-                'endereco_cidade' => $municipioNome,
-                'endereco_estado' => $estadoSigla,
+                'condutor_nome_mae' => $nomeMae,
+                'condutor_data_nascimento' => $dataNascimento,
+                'endereco_rua' => $enderecoRua,
+                'endereco_bairro' => $enderecoBairro,
+                'endereco_cidade' => $enderecoCidade,
+                'endereco_estado' => $enderecoEstado,
                 'contato_celular' => $this->formatTelefone(
                     $motorista['dddtel'] ?? null,
                     $motorista['numtel'] ?? null
@@ -474,6 +568,8 @@ class VpoDataSyncService
                     'progress_trnmot' => true,
                     'progress_trnvei' => $veiculo !== null,
                     'progress_tipcam' => $destipcam !== null,
+                    'cache_motorista' => $usouCacheMotorista,
+                    'cache_motorista_id' => $motoristaCache?->id,
                 ],
                 'ultima_sync_progress' => now(),
             ],

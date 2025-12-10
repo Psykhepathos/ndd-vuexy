@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - [Recent Changes](#-recent-changes-dec-2025) - Latest security updates
 - [Critical Rules](#-critical-rules) - MUST READ before coding
 - [Architecture](#-architecture) - System overview
-- [Backend Controllers](#-backend-controllers-18-controllers) - Complete API reference
+- [Backend Controllers](#-backend-controllers-21-controllers) - Complete API reference
 - [Services Layer](#-services-layer) - Business logic
 - [Frontend Modules](#-frontend-modules) - Vue pages and components
 - [Database](#-database-architecture) - Progress + SQLite/MySQL
@@ -19,9 +19,41 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 🔄 Recent Changes (Dec 2025)
 
+### VPO Emission Wizard & NDD Cargo Integration (Dec 8-9, 2025)
+
+**Current Branch:** `feature/vpo-emissao-wizard`
+
+Complete VPO (Vale Pedágio Obrigatório) emission system integrated with NDD Cargo:
+
+**New Components:**
+- ✅ **VpoDataSyncService** - Progress → ANTT → Cache synchronization (660 lines)
+- ✅ **VpoEmissaoService** - VPO emission business logic
+- ✅ **MotoristaEmpresaCacheService** - Driver cache for companies (trnmot)
+- ✅ **NDD Cargo Integration** - CrossTalk SOAP + RSA-SHA1 digital signature
+
+**Key Features:**
+- 100% VPO field coverage (19/19 campos mapeados)
+- Conditional logic for autônomo vs empresa transporters
+- ANTT Open Data integration (CKAN API)
+- Quality score system (0-100)
+
+**Endpoints:**
+```
+POST /api/vpo/sync/transportador    - Sync single transporter
+POST /api/vpo/sync/batch            - Batch sync
+GET  /api/vpo/transportadores       - List cached transporters
+GET  /api/vpo/statistics            - Sync statistics
+POST /api/vpo/emissao/validate      - Validate for emission
+POST /api/vpo/emissao/emit          - Emit VPO (NDD Cargo)
+```
+
+**Documentation:** `docs/integracoes/ndd-cargo/INDEX.md` (15 docs, 8000+ lines)
+
+---
+
 ### Major Security Audit & Bug Fixes (Dec 4-5, 2025)
 
-**Current Branch:** `refactor/controller-bug-audit`
+**Previous Branch:** `refactor/controller-bug-audit` (merged)
 
 A comprehensive security audit identified and fixed **81 bugs** across all controllers:
 
@@ -194,7 +226,46 @@ $user = User::find($userId);  // Laravel users
 - **Progress tables (PUB.*)** → Raw JDBC via ProgressService ✅
 - **Laravel tables (users, cache, etc.)** → Eloquent ORM ✅
 
-### 6. Git Commits
+### 6. VPO Autônomo vs Empresa Logic
+
+```php
+// VPO data comes from DIFFERENT tables based on transporter type!
+
+// ✅ CORRECT - Check flgautonomo FIRST, then fetch from appropriate table
+$transportador = $this->progressService->getTransporteById($codtrn);
+
+if ($transportador['flgautonomo']) {
+    // AUTÔNOMO: All data from PUB.transporte
+    $condutor_nome = $transportador['nomtrn'];
+    $condutor_cpf = $transportador['codcnpjcpf'];
+    $condutor_rg = $transportador['numrg'];
+    $condutor_nome_mae = $transportador['NomMae'];
+    $veiculo_modelo = $transportador['desvei'];  // desvei = modelo!
+    $veiculo_placa = $transportador['numpla'];
+} else {
+    // EMPRESA: Driver from PUB.trnmot, vehicle from PUB.trnvei
+    $motorista = $this->progressService->getMotoristaByCode($codmot);
+    $condutor_nome = $motorista['nommot'];
+    $condutor_cpf = $motorista['codcpf'];
+    $condutor_rg = $motorista['numrg'];
+    $condutor_nome_mae = $motorista['nommae'];
+
+    $veiculo = $this->progressService->getVeiculoByPlaca($placa);
+    $veiculo_modelo = $veiculo['modvei'];
+    $veiculo_placa = $veiculo['numpla'];
+}
+
+// ❌ WRONG - Using same field for both types
+$condutor_nome = $transportador['nomtrn'];  // Only works for autônomo!
+```
+
+**Key Tables:**
+- **Autônomo:** `PUB.transporte` (driver IS the transporter)
+- **Empresa:** `PUB.transporte` + `PUB.trnmot` (drivers) + `PUB.trnvei` (vehicles)
+
+**Documentation:** `docs/integracoes/ndd-cargo/TABELA_MAPEAMENTO_VPO.md`
+
+### 7. Git Commits
 
 ```bash
 # Configure user
@@ -245,7 +316,7 @@ External APIs:
 
 ---
 
-## 🎯 Backend Controllers (18 Controllers)
+## 🎯 Backend Controllers (21 Controllers)
 
 ### Authentication & Core
 
@@ -578,6 +649,48 @@ DELETE /api/pracas-pedagio/limpar           - ⚠️ Clear all! (2 req/min)
 
 ---
 
+### VPO & NDD Cargo Integration (NEW - Dec 2025)
+
+#### **VpoController**
+```
+GET    /api/vpo/test-connection                    - Test Progress + ANTT
+POST   /api/vpo/sync/transportador                 - Sync single transporter
+POST   /api/vpo/sync/batch                         - Batch sync (max 50)
+GET    /api/vpo/transportadores                    - List cached transporters
+GET    /api/vpo/transportadores/{codtrn}           - Get cached data
+DELETE /api/vpo/transportadores/{codtrn}           - Remove from cache
+POST   /api/vpo/transportadores/{codtrn}/recalcular-qualidade  - Recalc score
+GET    /api/vpo/statistics                         - Sync statistics
+```
+
+**Service:** `VpoDataSyncService`
+**Tables:** `vpo_transportadores_cache` (Laravel/SQLite)
+**Documentation:** `docs/integracoes/ndd-cargo/VPO_DATA_SYNC.md`
+
+#### **VpoEmissaoController**
+```
+POST   /api/vpo/emissao/validate                   - Validate for emission
+POST   /api/vpo/emissao/preview                    - Preview XML (no emit)
+POST   /api/vpo/emissao/emit                       - ⚠️ EMIT VPO (real!)
+GET    /api/vpo/emissao/motoristas/{codtrn}        - Get drivers (empresa)
+```
+
+**Service:** `VpoEmissaoService`, `MotoristaEmpresaCacheService`
+**Documentation:** `docs/integracoes/ndd-cargo/VPO_EMISSAO_WIZARD.md`
+
+#### **NddCargoController**
+```
+GET    /api/nddcargo/test-connection               - Test NDD Cargo SOAP
+POST   /api/nddcargo/roteirizador/consultar        - Query toll plazas
+GET    /api/nddcargo/roteirizador/resultado/{guid} - Get async result
+```
+
+**Service:** `NddCargoService`, `DigitalSignature`, `NddCargoSoapClient`
+**Protocol:** CrossTalk over SOAP 1.1 + RSA-SHA1 digital signature
+**Documentation:** `docs/integracoes/ndd-cargo/IMPLEMENTACAO_BACKEND.md`
+
+---
+
 ## 🔧 Services Layer
 
 ### ProgressService (MASSIVE - 2574 lines!)
@@ -663,6 +776,76 @@ DB::connection('progress')->beginTransaction();
 4. Rate limit: 200ms between API calls
 
 **Cache Hit Rate:** 80%+ after first use
+
+### VPO Services (NEW - Dec 2025)
+
+**Path:** `app/Services/Vpo/`
+
+#### VpoDataSyncService (660 lines)
+```php
+// Sync transporter data: Progress → ANTT → Cache
+$result = $vpoDataSyncService->syncTransportador($codtrn, $codmot, $placa);
+
+// Batch sync multiple transporters
+$results = $vpoDataSyncService->syncBatch([1809, 6826, 6269]);
+
+// Key methods:
+- fetchFromProgress($codtrn, $codmot, $placa)  // Get Progress data
+- fetchFromAntt($rntrc)                         // Enrich with ANTT
+- mergeData($progressData, $anttData)           // Combine sources
+- calculateQualityScore($data)                  // Score 0-100
+```
+
+#### VpoEmissaoService
+```php
+// Validate transporter for VPO emission
+$validation = $vpoEmissaoService->validateForEmission($codtrn);
+
+// Emit VPO via NDD Cargo
+$result = $vpoEmissaoService->emit($codtrn, $codmot, $placa, $rotaId);
+```
+
+#### MotoristaEmpresaCacheService
+```php
+// Cache drivers for empresa transporters (from PUB.trnmot)
+$motoristas = $motoristaService->getMotoristasByTransportador($codtrn);
+$motorista = $motoristaService->getMotoristaByCode($codmot);
+```
+
+**Tables:**
+- `vpo_transportadores_cache` - Synced transporter data (Laravel/SQLite)
+- `motorista_empresa_cache` - Driver cache for empresas (Laravel/SQLite)
+
+### NDD Cargo Services
+
+**Path:** `app/Services/NddCargo/`
+
+#### NddCargoService (278 lines)
+```php
+// Query roteirizador (toll plazas for route)
+$result = $nddCargoService->consultarRoteirizador($pontos);
+
+// Get async result by GUID
+$result = $nddCargoService->consultarResultado($guid);
+```
+
+#### DigitalSignature (322 lines)
+```php
+// Sign XML with RSA-SHA1 (required for NDD Cargo)
+$signedXml = $digitalSignature->signXml($xmlContent);
+```
+
+#### NddCargoSoapClient (374 lines)
+```php
+// CrossTalk SOAP 1.1 protocol
+$response = $soapClient->call($method, $signedPayload);
+```
+
+**Configuration:** `config/nddcargo.php` (certificate paths, endpoints)
+
+**Documentation:** `docs/integracoes/ndd-cargo/IMPLEMENTACAO_BACKEND.md`
+
+---
 
 ### SemPararService (Business Logic)
 
@@ -1752,7 +1935,10 @@ ndd-vuexy/
 │   │   ├── MapController.php               # Unified map service
 │   │   ├── PracaPedagioController.php      # Toll plazas
 │   │   ├── GoogleMapsQuotaController.php   # API quota tracking
-│   │   └── ProgressController.php          # Raw Progress queries
+│   │   ├── ProgressController.php          # Raw Progress queries
+│   │   ├── VpoController.php               # VPO sync & cache (NEW!)
+│   │   ├── VpoEmissaoController.php        # VPO emission (NEW!)
+│   │   └── NddCargoController.php          # NDD Cargo SOAP (NEW!)
 │   └── Services/
 │       ├── ProgressService.php             # Progress JDBC (2574 lines!)
 │       ├── GeocodingService.php            # Google Geocoding + cache
@@ -1769,6 +1955,14 @@ ndd-vuexy/
 │       ├── SemParar/
 │       │   ├── SemPararService.php         # Business logic
 │       │   ├── SemPararSoapClient.php      # Low-level SOAP
+│       ├── Vpo/                            # VPO Services (NEW!)
+│       │   ├── VpoDataSyncService.php      # Progress → ANTT → Cache sync
+│       │   ├── VpoEmissaoService.php       # VPO emission business logic
+│       │   └── MotoristaEmpresaCacheService.php # Driver cache for empresas
+│       ├── NddCargo/                       # NDD Cargo SOAP (NEW!)
+│       │   ├── NddCargoService.php         # Roteirizador integration
+│       │   ├── NddCargoSoapClient.php      # CrossTalk SOAP client
+│       │   └── DigitalSignature.php        # RSA-SHA1 XML signing
 │       │   └── XmlBuilders/
 │       │       └── PontosParadaBuilder.php # Progress dataset XML
 │       └── PracaPedagioImportService.php   # ANTT CSV import
@@ -1797,6 +1991,8 @@ ndd-vuexy/
 │   │   │       ├── CompraViagemStep4Preco.vue
 │   │   │       ├── CompraViagemStep5Confirmacao.vue
 │   │   │       └── CompraViagemMapaFixo.vue
+│   │   ├── vpo-emissao/                    # VPO Emission Wizard (NEW!)
+│   │   │   └── index.vue                   # VPO emission wizard
 │   │   └── apps/                           # Vuexy template examples (REFERENCE!)
 │   │       ├── user/list/index.vue         # List template
 │   │       └── user/view/UserBioPanel.vue  # Form template
@@ -1909,7 +2105,7 @@ ndd-vuexy/
 **Repository:**
 - GitHub: https://github.com/Psykhepathos/ndd-vuexy.git
 - Main Branch: `master`
-- Current Branch: `refactor/controller-bug-audit` (security audit work)
+- Current Branch: `feature/vpo-emissao-wizard` (VPO emission wizard)
 - Developer: Psykhepathos
 
 **Deprecated Systems:**
@@ -1994,11 +2190,11 @@ VITE_API_BASE_URL=http://localhost:8002
 ## 📊 System Statistics
 
 **Backend:**
-- 18 Controllers
-- 11 Services (ProgressService: 2574 lines!)
-- 50+ API Endpoints
+- 21 Controllers (18 original + 3 VPO/NDD Cargo)
+- 14 Services (ProgressService: 2574 lines, VpoDataSyncService: 660 lines)
+- 60+ API Endpoints
 - 21 Progress Tables (JDBC, no transactions)
-- 11 Laravel Tables (SQLite/MySQL)
+- 13 Laravel Tables (SQLite/MySQL, +2 VPO cache tables)
 
 **Frontend:**
 - 15+ Vue Pages
@@ -2010,13 +2206,15 @@ VITE_API_BASE_URL=http://localhost:8002
 **Database:**
 - Progress OpenEdge (main)
 - SQLite (cache, 80%+ hit rate)
-- 6,913+ Transporters
+- 6,913+ Transporters (4,913 autônomos + 2,000 empresas)
 - 800,000+ Packages
 
 **External APIs:**
 - Google Geocoding (IBGE → coordinates)
 - OSRM Public (free routing, 3 servers)
 - SemParar SOAP (toll management, 2 WSDLs)
+- NDD Cargo SOAP (CrossTalk + RSA-SHA1 signature)
+- ANTT Open Data (CKAN API - RNTRC validation)
 - Python Flask (PDF generation)
 
 **Performance:**
@@ -2051,7 +2249,7 @@ VITE_API_BASE_URL=http://localhost:8002
 
 ---
 
-**Last Updated:** 2025-12-05
+**Last Updated:** 2025-12-09
 **Version:** 2.1.0
 **Maintainer:** Psykhepathos
 

@@ -4,18 +4,34 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\Vpo\VpoDataSyncService;
+use App\Services\Vpo\VpoEmissaoLogService;
+use App\Services\GeocodingService;
+use App\Services\NddCargo\NddCargoService;
+use App\Services\NddCargo\DTOs\ConsultarRoteirizadorRequest;
 use App\Models\VpoTransportadorCache;
+use App\Models\VpoEmissaoLog;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class VpoController extends Controller
 {
     protected VpoDataSyncService $syncService;
+    protected VpoEmissaoLogService $logService;
+    protected GeocodingService $geocodingService;
+    protected NddCargoService $nddCargoService;
 
-    public function __construct(VpoDataSyncService $syncService)
-    {
+    public function __construct(
+        VpoDataSyncService $syncService,
+        VpoEmissaoLogService $logService,
+        GeocodingService $geocodingService,
+        NddCargoService $nddCargoService
+    ) {
         $this->syncService = $syncService;
+        $this->logService = $logService;
+        $this->geocodingService = $geocodingService;
+        $this->nddCargoService = $nddCargoService;
     }
 
     /**
@@ -230,6 +246,174 @@ class VpoController extends Controller
     }
 
     /**
+     * POST /api/vpo/calcular-pracas
+     *
+     * Calcula praças de pedágio para uma lista de municípios usando NDD Cargo.
+     * Converte municípios (IBGE) → CEPs (ViaCEP) → NDD Cargo roteirizador.
+     *
+     * Body:
+     * {
+     *   "municipios": [
+     *     {"desMun": "SAO PAULO", "desEst": "SP"},
+     *     {"desMun": "RIO DE JANEIRO", "desEst": "RJ"}
+     *   ],
+     *   "categoria_pedagio": 7,
+     *   "tipo_veiculo": 5
+     * }
+     */
+    public function calcularPracas(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'municipios' => 'required|array|min:2|max:50',
+                'municipios.*.desMun' => 'required|string|max:100',
+                'municipios.*.desEst' => 'required|string|max:2',
+                'categoria_pedagio' => 'nullable|integer|min:1|max:7',
+                'tipo_veiculo' => 'nullable|integer|min:1|max:4', // 1=passeio, 2=caminhão, 3=ônibus, 4=caminhão trator
+            ]);
+
+            $municipios = $validated['municipios'];
+            $categoriaPedagio = $validated['categoria_pedagio'] ?? 7;
+            // tipoVeiculo: 1=passeio, 2=caminhão, 3=ônibus, 4=caminhão trator (NÃO usar 5!)
+            $tipoVeiculo = $validated['tipo_veiculo'] ?? 2;
+
+            Log::info('calcularPracas: Iniciando cálculo', [
+                'municipios_count' => count($municipios),
+                'categoria_pedagio' => $categoriaPedagio
+            ]);
+
+            // 1. Converter municípios para CEPs via ViaCEP
+            $ceps = [];
+            $cepsNaoEncontrados = [];
+
+            foreach ($municipios as $index => $mun) {
+                $nome = $mun['desMun'];
+                $uf = strtoupper($mun['desEst']);
+
+                $cep = $this->geocodingService->getCepByMunicipio($nome, $uf);
+
+                if ($cep && strlen($cep) === 8) {
+                    $ceps[] = [
+                        'municipio' => $nome,
+                        'uf' => $uf,
+                        'cep' => $cep,
+                        'index' => $index
+                    ];
+                    Log::info("CEP encontrado: {$nome}/{$uf} → {$cep}");
+                } else {
+                    $cepsNaoEncontrados[] = "{$nome}/{$uf}";
+                    Log::warning("CEP não encontrado: {$nome}/{$uf}");
+                }
+            }
+
+            // Verificar se temos pelo menos origem e destino
+            if (count($ceps) < 2) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Não foi possível encontrar CEPs suficientes para a rota',
+                    'ceps_encontrados' => count($ceps),
+                    'ceps_nao_encontrados' => $cepsNaoEncontrados,
+                    'detalhe' => 'São necessários pelo menos 2 municípios com CEP válido'
+                ], 400);
+            }
+
+            // 2. Montar request para NDD Cargo
+            $cepOrigem = $ceps[0]['cep'];
+            $cepDestino = $ceps[count($ceps) - 1]['cep'];
+
+            Log::info('calcularPracas: Chamando NDD Cargo', [
+                'cep_origem' => $cepOrigem,
+                'cep_destino' => $cepDestino,
+                'ceps_intermediarios' => count($ceps) - 2
+            ]);
+
+            // 3. Chamar NDD Cargo roteirizador
+            $response = $this->nddCargoService->consultarRotaSimples(
+                cepOrigem: $cepOrigem,
+                cepDestino: $cepDestino,
+                categoriaPedagio: $categoriaPedagio
+            );
+
+            // 4. Processar resposta
+            if ($response->sucesso) {
+                // Converter array de PracaPedagioDTO para arrays simples
+                $pracasArray = array_map(
+                    fn($praca) => $praca->toArray(),
+                    $response->pracasPedagio
+                );
+
+                Log::info('calcularPracas: Sucesso!', [
+                    'pracas_count' => count($response->pracasPedagio)
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'pracas' => $pracasArray,
+                        'valor_total' => $response->valorTotalPedagios ?? 0,
+                        'distancia_km' => $response->distanciaKm ?? 0,
+                        'tempo_estimado_min' => $response->tempoMinutos ?? 0,
+                        'ceps_utilizados' => [
+                            'origem' => $cepOrigem,
+                            'destino' => $cepDestino,
+                        ],
+                        'municipios_processados' => count($ceps),
+                        'ceps_nao_encontrados' => $cepsNaoEncontrados,
+                    ]
+                ]);
+            } else {
+                // Se retornou 202 (processamento assíncrono)
+                if ($response->status === 202 && $response->guid) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Processamento em andamento',
+                        'status' => 202,
+                        'guid' => $response->guid,
+                        'consultar_em' => url("/api/ndd-cargo/resultado/{$response->guid}"),
+                        'ceps_utilizados' => [
+                            'origem' => $cepOrigem,
+                            'destino' => $cepDestino,
+                        ]
+                    ], 202);
+                }
+
+                Log::error('calcularPracas: Erro NDD Cargo', [
+                    'mensagem' => $response->mensagem,
+                    'status' => $response->status
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => $response->mensagem ?? 'Erro ao calcular rota',
+                    'status' => $response->status,
+                    'ceps_utilizados' => [
+                        'origem' => $cepOrigem,
+                        'destino' => $cepDestino,
+                    ]
+                ], 400);
+            }
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Dados inválidos',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('calcularPracas: Erro interno', [
+                'erro' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao calcular praças de pedágio',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
+
+    /**
      * PUT /api/vpo/transportadores/{codtrn}
      * Atualiza campos faltantes do cache VPO (preenchidos pelo usuário)
      */
@@ -306,5 +490,260 @@ class VpoController extends Controller
                 'campos_faltantes' => $transportador->campos_faltantes,
             ]
         ]);
+    }
+
+    // =========================================================================
+    // LOGS DE EMISSÃO VPO
+    // =========================================================================
+
+    /**
+     * GET /api/vpo/emissao/logs
+     *
+     * Lista logs de emissão VPO com paginação e filtros
+     *
+     * Query params:
+     * - page: int (default 1)
+     * - per_page: int (default 15, max 100)
+     * - status: string (iniciado|calculando|aguardando|sucesso|erro|cancelado)
+     * - codtrn: int
+     * - codpac: int
+     * - placa: string
+     * - search: string (busca em transportador, placa, rota, uuid)
+     * - data_inicio: string (Y-m-d)
+     * - data_fim: string (Y-m-d)
+     */
+    public function listarLogs(Request $request): JsonResponse
+    {
+        $filters = $request->only([
+            'status',
+            'codtrn',
+            'codpac',
+            'placa',
+            'search',
+            'data_inicio',
+            'data_fim',
+        ]);
+
+        $perPage = min($request->input('per_page', 15), 100);
+
+        $logs = $this->logService->listar($filters, $perPage);
+
+        return response()->json([
+            'success' => true,
+            'data' => $logs->items(),
+            'pagination' => [
+                'current_page' => $logs->currentPage(),
+                'last_page' => $logs->lastPage(),
+                'per_page' => $logs->perPage(),
+                'total' => $logs->total(),
+            ]
+        ]);
+    }
+
+    /**
+     * GET /api/vpo/emissao/logs/{id}
+     *
+     * Retorna detalhes completos de um log de emissão
+     */
+    public function detalheLog(int $id): JsonResponse
+    {
+        $log = $this->logService->buscarPorId($id);
+
+        if (!$log) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Log não encontrado'
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $log
+        ]);
+    }
+
+    /**
+     * GET /api/vpo/emissao/logs/uuid/{uuid}
+     *
+     * Busca log por UUID
+     */
+    public function buscarLogPorUuid(string $uuid): JsonResponse
+    {
+        $log = $this->logService->buscarPorUuid($uuid);
+
+        if (!$log) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Log não encontrado'
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $log
+        ]);
+    }
+
+    /**
+     * GET /api/vpo/emissao/logs/statistics
+     *
+     * Retorna estatísticas dos logs de emissão
+     *
+     * Query params:
+     * - data_inicio: string (Y-m-d)
+     * - data_fim: string (Y-m-d)
+     */
+    public function estatisticasLogs(Request $request): JsonResponse
+    {
+        $dataInicio = $request->input('data_inicio');
+        $dataFim = $request->input('data_fim');
+
+        $stats = $this->logService->estatisticas($dataInicio, $dataFim);
+
+        return response()->json([
+            'success' => true,
+            'data' => $stats
+        ]);
+    }
+
+    /**
+     * POST /api/vpo/emissao/iniciar
+     *
+     * Inicia uma nova emissão VPO e cria o log
+     *
+     * Body:
+     * {
+     *   "codpac": 12345,
+     *   "rota_id": 204,
+     *   "pracas_pedagio": [...],
+     *   "valor_total": 150.00,
+     *   "km_total": 500,
+     *   "data_inicio": "2025-12-10",
+     *   "data_fim": "2025-12-15",
+     *   "codmot": null,
+     *   "placa": "ABC1234",
+     *   "eixos": 6
+     * }
+     */
+    public function iniciarEmissao(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'codpac' => 'required|integer',
+                'codtrn' => 'required|integer',
+                'rota_id' => 'nullable|integer',
+                'pracas_pedagio' => 'nullable|array',
+                'valor_total' => 'nullable|numeric',
+                'km_total' => 'nullable|numeric',
+                'data_inicio' => 'nullable|date',
+                'data_fim' => 'nullable|date',
+                'codmot' => 'nullable|integer',
+                'placa' => 'nullable|string|max:10',
+                'eixos' => 'nullable|integer|min:2|max:9',
+                // Dados completos do formulário
+                'transportador_nome' => 'nullable|string',
+                'transportador_cpf_cnpj' => 'nullable|string',
+                'transportador_autonomo' => 'nullable|boolean',
+                'transportador_rntrc' => 'nullable|string',
+                'motorista_nome' => 'nullable|string',
+                'motorista_cpf' => 'nullable|string',
+                'veiculo_modelo' => 'nullable|string',
+                'rota_nome' => 'nullable|string',
+                'rota_municipios' => 'nullable|array',
+                // NDD Cargo data
+                'roteirizador_guid' => 'nullable|string',
+                'roteirizador_request' => 'nullable|array',
+                'roteirizador_response' => 'nullable|array',
+                'emissao_guid' => 'nullable|string',
+                'emissao_request' => 'nullable|array',
+                'emissao_response' => 'nullable|array',
+                'ndd_codigo_retorno' => 'nullable|string',
+                'ndd_mensagem_retorno' => 'nullable|string',
+                'ndd_protocolo' => 'nullable|string',
+            ]);
+
+            // Preparar dados do log
+            $eixos = $validated['eixos'] ?? 6;
+            $logData = [
+                'codpac' => $validated['codpac'],
+                'codtrn' => $validated['codtrn'],
+                'transportador_nome' => $validated['transportador_nome'] ?? null,
+                'transportador_cpf_cnpj' => $validated['transportador_cpf_cnpj'] ?? null,
+                'transportador_autonomo' => $validated['transportador_autonomo'] ?? false,
+                'transportador_rntrc' => $validated['transportador_rntrc'] ?? null,
+                'codmot' => $validated['codmot'] ?? null,
+                'motorista_nome' => $validated['motorista_nome'] ?? null,
+                'motorista_cpf' => $validated['motorista_cpf'] ?? null,
+                'veiculo_placa' => $validated['placa'] ?? null,
+                'veiculo_modelo' => $validated['veiculo_modelo'] ?? null,
+                'veiculo_eixos' => $eixos,
+                'categoria_pedagio' => $this->calcularCategoriaPedagio($eixos),
+                'rota_id' => $validated['rota_id'] ?? null,
+                'rota_nome' => $validated['rota_nome'] ?? null,
+                'rota_municipios' => $validated['rota_municipios'] ?? null,
+                'rota_municipios_count' => count($validated['rota_municipios'] ?? []),
+                'pracas_pedagio' => $validated['pracas_pedagio'] ?? [],
+                'pracas_count' => count($validated['pracas_pedagio'] ?? []),
+                'valor_total_pedagios' => $validated['valor_total'] ?? 0,
+                'distancia_km' => $validated['km_total'] ?? null,
+                'data_inicio' => $validated['data_inicio'] ?? null,
+                'data_fim' => $validated['data_fim'] ?? null,
+                // NDD Cargo data
+                'roteirizador_guid' => $validated['roteirizador_guid'] ?? null,
+                'roteirizador_request' => $validated['roteirizador_request'] ?? null,
+                'roteirizador_response' => $validated['roteirizador_response'] ?? null,
+                'emissao_guid' => $validated['emissao_guid'] ?? null,
+                'emissao_request' => $validated['emissao_request'] ?? null,
+                'emissao_response' => $validated['emissao_response'] ?? null,
+                'ndd_codigo_retorno' => $validated['ndd_codigo_retorno'] ?? null,
+                'ndd_mensagem_retorno' => $validated['ndd_mensagem_retorno'] ?? null,
+                'ndd_protocolo' => $validated['ndd_protocolo'] ?? null,
+            ];
+
+            // Criar log
+            $log = $this->logService->iniciarLog($logData, $request);
+
+            // Aqui seria chamada a emissão real via NDD Cargo
+            // Por enquanto, apenas retornamos o log criado
+            // TODO: Implementar chamada real de emissão
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Emissão VPO iniciada',
+                'data' => [
+                    'log_id' => $log->id,
+                    'uuid' => $log->uuid,
+                    'status' => $log->status,
+                ]
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Dados inválidos',
+                'validation_errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Erro ao iniciar emissão VPO', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao iniciar emissão: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Calcula categoria de pedágio baseada no número de eixos
+     */
+    private function calcularCategoriaPedagio(int $eixos): int
+    {
+        // 5=Caminhão leve (2 eixos), 6=Caminhão médio (3-5 eixos), 7=Caminhão pesado (6+ eixos)
+        if ($eixos <= 2) return 5;
+        if ($eixos <= 5) return 6;
+        return 7;
     }
 }
