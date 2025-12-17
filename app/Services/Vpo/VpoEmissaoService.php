@@ -103,26 +103,59 @@ class VpoEmissaoService
 
             $rota = $rotaData['data'];
 
-            // 4. Criar emissao
+            // 4. Extrair dados enviados pelo frontend (calculados no Step 4)
+            $pracasPedagio = $params['pracas_pedagio'] ?? [];
+            $valorTotal = $params['valor_total'] ?? 0;
+            $kmTotal = $params['km_total'] ?? 0;
+
+            Log::info("VPO Emissao: Dados recebidos do frontend", [
+                'pracas_count' => count($pracasPedagio),
+                'pracas_sample' => array_slice($pracasPedagio, 0, 3), // Primeiras 3 praças para debug
+                'valor_total' => $valorTotal,
+                'km_total' => $kmTotal,
+                'params_keys' => array_keys($params)
+            ]);
+
+            // 5. Criar emissao com praças, custo e distância
+            // Mesclar dados do cache com dados atualizados do frontend (eixos, placa)
+            $vpoData = $vpoCache->toVpoArray();
+            if (isset($params['eixos'])) {
+                $vpoData['eixos'] = (int) $params['eixos'];
+                $vpoData['veiculo_eixos'] = (int) $params['eixos'];
+            }
+            if (isset($params['placa'])) {
+                $vpoData['placa'] = $params['placa'];
+            }
+
+            Log::info("VPO Emissao: vpoData com eixos", [
+                'eixos' => $vpoData['eixos'] ?? 'nao_definido',
+                'placa' => $vpoData['placa'] ?? 'nao_definido',
+            ]);
+
             $emissao = VpoEmissao::create([
                 'uuid' => Str::uuid()->toString(), // Temporario, sera substituido
                 'codpac' => $codpac,
                 'codtrn' => $codtrn,
-                'codmot' => $pacote['codmot'] ?? null,
+                'codmot' => $params['codmot'] ?? $pacote['codmot'] ?? null,
                 'rota_id' => $rotaId,
                 'rota_nome' => $rota['nome'],
                 'waypoints' => $rota['waypoints'],
                 'total_waypoints' => count($rota['waypoints']),
-                'vpo_data' => $vpoCache->toVpoArray(),
+                'vpo_data' => $vpoData,
                 'fontes_dados' => $vpoCache->fontes_dados,
                 'score_qualidade' => $vpoCache->score_qualidade,
                 'status' => 'pending',
                 'usuario_id' => $params['usuario_id'] ?? null,
                 'ip_address' => $params['ip_address'] ?? null,
                 'user_agent' => $params['user_agent'] ?? null,
+                // Dados calculados no frontend (Step 4) - salvar IMEDIATAMENTE
+                'pracas_pedagio' => $pracasPedagio,
+                'total_pracas' => count($pracasPedagio),
+                'custo_total' => $valorTotal,
+                'distancia_km' => $kmTotal,
             ]);
 
-            // 5. Enviar para NDD Cargo
+            // 6. Enviar para NDD Cargo
             $envioResult = $this->enviarParaNddCargo($emissao);
 
             if (!$envioResult['success']) {
@@ -130,13 +163,13 @@ class VpoEmissaoService
                 return ['success' => false, 'data' => $emissao, 'error' => $envioResult['error']];
             }
 
-            // 6. Atualizar com UUID real e salvar request XML
+            // 7. Atualizar com UUID real e salvar request XML
             $emissao->update([
                 'uuid' => $envioResult['uuid'],
                 'ndd_request_xml' => $envioResult['xml_enviado'],
             ]);
 
-            // 7. Verificar se a resposta síncrona já indica conclusão
+            // 8. Verificar se a resposta síncrona já indica conclusão
             $rawResponse = $envioResult['raw_response'] ?? null;
 
             if (!empty($rawResponse)) {
@@ -161,7 +194,7 @@ class VpoEmissaoService
                 }
             }
 
-            // 8. Resposta ainda não pronta (202) - marcar como processing para polling
+            // 9. Resposta ainda não pronta (202) - marcar como processing para polling
             $emissao->markAsProcessing();
 
             Log::info("VPO Emissao: Iniciada com sucesso (aguardando polling)", ['emissao_id' => $emissao->id, 'uuid' => $emissao->uuid]);
@@ -423,17 +456,26 @@ class VpoEmissaoService
                 'codigo_tag' => $codigoTag ?? 'NAO_ENCONTRADA'
             ]);
 
-            // 2. Consultar Roteirizador NDD para obter praças de pedágio
-            $pracas = [];
-            if (!empty($codigoTag) && !empty($waypoints)) {
+            // 2. Usar praças já salvas na emissão (vieram do frontend, calculadas no Step 4)
+            $pracas = $emissao->pracas_pedagio ?? [];
+
+            Log::info("VPO Emissao: Usando praças salvas na emissão", [
+                'total_pracas' => count($pracas),
+                'custo_total' => $emissao->custo_total,
+                'distancia_km' => $emissao->distancia_km
+            ]);
+
+            // Se não tem praças salvas e tem waypoints, tentar buscar do roteirizador (fallback)
+            if (empty($pracas) && !empty($codigoTag) && !empty($waypoints)) {
+                Log::info("VPO Emissao: Sem praças salvas, consultando roteirizador (fallback)");
                 $pracasResult = $this->consultarRoteirizadorParaPracas($waypoints, $vpoData);
                 if ($pracasResult['success'] && !empty($pracasResult['pracas'])) {
                     $pracas = $pracasResult['pracas'];
-                    Log::info("VPO Emissao: Praças obtidas do roteirizador", [
+                    Log::info("VPO Emissao: Praças obtidas do roteirizador (fallback)", [
                         'total_pracas' => count($pracas)
                     ]);
                 } else {
-                    Log::warning("VPO Emissao: Roteirizador nao retornou pracas", [
+                    Log::warning("VPO Emissao: Roteirizador nao retornou pracas (fallback)", [
                         'error' => $pracasResult['error'] ?? 'desconhecido'
                     ]);
                 }
@@ -451,6 +493,28 @@ class VpoEmissaoService
                 'total_pracas' => count($pracas),
                 'xml_preview' => substr($xml, 0, 1500)
             ]);
+
+            // Só atualizar praças se vieram do fallback (roteirizador) e não do frontend
+            // Os dados do frontend já foram salvos na criação da emissão
+            if (empty($emissao->pracas_pedagio) && !empty($pracas)) {
+                $custoCalculado = array_sum(array_column($pracas, 'valor'));
+                $emissao->update([
+                    'pracas_pedagio' => $pracas,
+                    'total_pracas' => count($pracas),
+                    'custo_total' => $custoCalculado,
+                ]);
+
+                Log::info("VPO Emissao: Praças do fallback salvos", [
+                    'total_pracas' => count($pracas),
+                    'custo_total' => $custoCalculado
+                ]);
+            } else {
+                Log::info("VPO Emissao: Usando praças já salvas do frontend", [
+                    'total_pracas' => $emissao->total_pracas,
+                    'custo_total' => $emissao->custo_total,
+                    'distancia_km' => $emissao->distancia_km
+                ]);
+            }
 
             // 4. Assinar XML digitalmente (CRÍTICO para NDD Cargo!)
             $xmlAssinado = $this->digitalSignature->signXml($xml, $uuid);
@@ -1233,26 +1297,33 @@ class VpoEmissaoService
     /**
      * Processar resultado concluido (extrair dados do XML de resposta)
      *
+     * IMPORTANTE: Preserva os dados do frontend (praças, custo, distância) se já existirem.
+     * A resposta da NDD Cargo é usada apenas para extrair o protocolo.
+     *
      * @param VpoEmissao $emissao
      * @param string|array $response
      */
     protected function processarResultadoConcluido(VpoEmissao $emissao, $response): void
     {
-        $pracas = [];
-        $custo = 0;
-        $distancia = 0;
-        $tempo = 0;
         $protocolo = null;
 
-        // Se for array antigo, manter compatibilidade
-        if (is_array($response)) {
-            $pracas = $response['pracas'] ?? $response['pracas_pedagio'] ?? [];
-            $custo = $response['valor_total'] ?? $response['custo_total'] ?? 0;
-            $distancia = $response['distancia_km'] ?? 0;
-            $tempo = $response['tempo_minutos'] ?? 0;
-        } elseif (is_string($response) && !empty($response)) {
-            // Resposta vem como STRING XML - extrair dados
-            Log::info("VPO Emissao: Processando resposta XML", [
+        // PRIORIDADE 1: Usar dados já salvos do frontend (calculados no Step 4)
+        // Estes dados foram salvos em iniciarEmissao() e são os corretos
+        $pracas = $emissao->pracas_pedagio ?? [];
+        $custo = $emissao->custo_total ?? 0;
+        $distancia = $emissao->distancia_km ?? 0;
+        $tempo = $emissao->tempo_minutos ?? 0;
+
+        Log::info("VPO Emissao: Dados existentes da emissão (frontend)", [
+            'emissao_id' => $emissao->id,
+            'pracas_count' => count($pracas),
+            'custo' => $custo,
+            'distancia' => $distancia
+        ]);
+
+        // Extrair protocolo da resposta (único dado que vem da NDD Cargo)
+        if (is_string($response) && !empty($response)) {
+            Log::info("VPO Emissao: Processando resposta XML para protocolo", [
                 'size_bytes' => strlen($response),
                 'preview' => substr($response, 0, 500)
             ]);
@@ -1263,61 +1334,81 @@ class VpoEmissaoService
                 $protocolo = trim($m[1]);
             }
 
-            // Extrair valor total
-            if (preg_match('/<valorTotal>([0-9.,]+)<\/valorTotal>/i', $response, $m) ||
-                preg_match('/&lt;valorTotal&gt;([0-9.,]+)&lt;\/valorTotal&gt;/i', $response, $m)) {
-                $custo = (float) str_replace(',', '.', $m[1]);
+            // FALLBACK: Se não temos dados do frontend, extrair da resposta
+            if (empty($pracas) && $custo == 0) {
+                Log::info("VPO Emissao: Dados do frontend vazios, extraindo da resposta XML");
+
+                // Extrair valor total
+                if (preg_match('/<valorTotal>([0-9.,]+)<\/valorTotal>/i', $response, $m) ||
+                    preg_match('/&lt;valorTotal&gt;([0-9.,]+)&lt;\/valorTotal&gt;/i', $response, $m)) {
+                    $custo = (float) str_replace(',', '.', $m[1]);
+                }
+
+                // Extrair distância
+                if (preg_match('/<distancia>([0-9.,]+)<\/distancia>/i', $response, $m) ||
+                    preg_match('/&lt;distancia&gt;([0-9.,]+)&lt;\/distancia&gt;/i', $response, $m)) {
+                    $distancia = (float) str_replace(',', '.', $m[1]);
+                }
+
+                // Extrair tempo
+                if (preg_match('/<tempo>([0-9]+)<\/tempo>/i', $response, $m) ||
+                    preg_match('/&lt;tempo&gt;([0-9]+)&lt;\/tempo&gt;/i', $response, $m)) {
+                    $tempo = (int) $m[1];
+                }
+
+                // Extrair praças da resposta
+                $pracas = $this->extrairPracasDoRoteirizador($response);
+
+                // Se não encontrou na resposta, tentar do request
+                if (empty($pracas) && !empty($emissao->ndd_request_xml)) {
+                    Log::info("VPO Emissao: Praças não encontradas na resposta, extraindo do request XML");
+                    $pracas = $this->extrairPracasDoRoteirizador($emissao->ndd_request_xml);
+                }
             }
+        } elseif (is_array($response)) {
+            // Se for array antigo, extrair protocolo se disponível
+            $protocolo = $response['protocolo'] ?? null;
 
-            // Extrair distância
-            if (preg_match('/<distancia>([0-9.,]+)<\/distancia>/i', $response, $m) ||
-                preg_match('/&lt;distancia&gt;([0-9.,]+)&lt;\/distancia&gt;/i', $response, $m)) {
-                $distancia = (float) str_replace(',', '.', $m[1]);
-            }
-
-            // Extrair tempo
-            if (preg_match('/<tempo>([0-9]+)<\/tempo>/i', $response, $m) ||
-                preg_match('/&lt;tempo&gt;([0-9]+)&lt;\/tempo&gt;/i', $response, $m)) {
-                $tempo = (int) $m[1];
-            }
-
-            // Extrair praças da resposta (mesmo método usado no roteirizador)
-            $pracas = $this->extrairPracasDoRoteirizador($response);
-
-            // Se não encontrou praças na resposta, usar as do request (já calculadas pelo roteirizador)
-            if (empty($pracas) && !empty($emissao->ndd_request_xml)) {
-                Log::info("VPO Emissao: Praças não encontradas na resposta, extraindo do request XML");
-                $pracas = $this->extrairPracasDoRoteirizador($emissao->ndd_request_xml);
+            // FALLBACK: Se não temos dados do frontend, usar do array
+            if (empty($pracas) && $custo == 0) {
+                $pracas = $response['pracas'] ?? $response['pracas_pedagio'] ?? [];
+                $custo = $response['valor_total'] ?? $response['custo_total'] ?? 0;
+                $distancia = $response['distancia_km'] ?? 0;
+                $tempo = $response['tempo_minutos'] ?? 0;
             }
         }
 
-        // Se ainda não tem praças, verificar se o custo já foi calculado no envio
-        if (empty($pracas) && $custo == 0) {
-            // Tentar extrair do ndd_request_xml as praças que foram enviadas
-            $pracasDoRequest = $this->extrairPracasDoRequestXml($emissao->ndd_request_xml);
-            if (!empty($pracasDoRequest)) {
-                $pracas = $pracasDoRequest;
-                $custo = array_sum(array_column($pracas, 'valor'));
-            }
+        // Atualizar apenas ndd_response (NÃO sobrescrever praças/custo/distância se já existem)
+        $updateData = [
+            'ndd_response' => is_string($response) ? ['raw' => substr($response, 0, 10000), 'protocolo' => $protocolo] : $response,
+        ];
+
+        // Só atualizar se os dados do frontend estavam vazios
+        if (empty($emissao->pracas_pedagio)) {
+            $updateData['pracas_pedagio'] = $pracas;
+            $updateData['total_pracas'] = count($pracas);
+        }
+        if (empty($emissao->custo_total) || $emissao->custo_total == 0) {
+            $updateData['custo_total'] = $custo;
+        }
+        if (empty($emissao->distancia_km) || $emissao->distancia_km == 0) {
+            $updateData['distancia_km'] = $distancia;
+        }
+        if (empty($emissao->tempo_minutos) || $emissao->tempo_minutos == 0) {
+            $updateData['tempo_minutos'] = $tempo;
         }
 
-        $emissao->update([
-            'pracas_pedagio' => $pracas,
-            'total_pracas' => count($pracas),
-            'custo_total' => $custo,
-            'distancia_km' => $distancia,
-            'tempo_minutos' => $tempo,
-            'ndd_response' => is_string($response) ? ['raw' => substr($response, 0, 10000)] : $response,
-        ]);
-
+        $emissao->update($updateData);
         $emissao->markAsCompleted(is_string($response) ? ['raw' => $response, 'protocolo' => $protocolo] : $response);
 
         Log::info("VPO Emissao: Processamento concluido", [
             'emissao_id' => $emissao->id,
             'uuid' => $emissao->uuid,
-            'total_pracas' => count($pracas),
-            'custo_total' => $custo,
-            'protocolo' => $protocolo
+            'total_pracas' => $emissao->total_pracas,
+            'custo_total' => $emissao->custo_total,
+            'distancia_km' => $emissao->distancia_km,
+            'protocolo' => $protocolo,
+            'dados_fonte' => empty($emissao->pracas_pedagio) ? 'resposta_xml' : 'frontend'
         ]);
     }
 

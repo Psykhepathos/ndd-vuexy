@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\TransporteController;
 use App\Http\Controllers\Api\NddCargoController;
 use App\Http\Controllers\Api\VpoController;
 use App\Http\Controllers\Api\MotoristaEmpresaController;
+use App\Http\Controllers\Api\VeiculoCacheController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -458,5 +459,41 @@ Route::middleware('api')->group(function () {
 
         // TODO: Adicionar rotas das próximas fases aqui
         // Route::post('gerar-recibo', [CompraViagemController::class, 'gerarRecibo']);
+    });
+
+    // Rotas para cache de veículos SemParar
+    // Permite reutilização de dados de veículos validados e edição pelo usuário
+    Route::prefix('veiculos-cache')->group(function () {
+        // Listar veículos com filtros
+        Route::get('/', [VeiculoCacheController::class, 'index'])
+            ->middleware('throttle:60,1');
+
+        // Buscar veículos de um transportador
+        Route::get('transportador/{codtrn}', [VeiculoCacheController::class, 'byTransportador'])
+            ->middleware('throttle:60,1');
+
+        // Buscar veículo por placa (usa parâmetro, então deve vir depois de transportador)
+        Route::get('{placa}', [VeiculoCacheController::class, 'show'])
+            ->middleware('throttle:60,1');
+
+        // Criar/Atualizar veículo manualmente
+        Route::post('/', [VeiculoCacheController::class, 'store'])
+            ->middleware('throttle:30,1');
+
+        // Atualizar veículo existente
+        Route::put('{id}', [VeiculoCacheController::class, 'update'])
+            ->middleware('throttle:30,1');
+
+        // Remover do cache
+        Route::delete('{id}', [VeiculoCacheController::class, 'destroy'])
+            ->middleware('throttle:30,1');
+
+        // Revalidar veículo no SemParar
+        Route::post('{id}/revalidar', [VeiculoCacheController::class, 'revalidar'])
+            ->middleware('throttle:30,1');
+
+        // Vincular veículo a transportador
+        Route::post('{id}/vincular', [VeiculoCacheController::class, 'vincular'])
+            ->middleware('throttle:30,1');
     });
 });

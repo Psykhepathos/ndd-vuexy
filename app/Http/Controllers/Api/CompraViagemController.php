@@ -373,12 +373,25 @@ class CompraViagemController extends Controller
                 'eixos' => $result['data']['eixos']
             ]));
 
+            // Salvar no cache para uso posterior
+            $veiculoCache = \App\Models\VeiculoSemPararCache::updateFromSemParar(
+                $result['data'],
+                $this->ALLOW_SOAP_QUERIES, // Se foi chamada real
+                auth()->id()
+            );
+
+            // Incluir dados do cache na resposta
+            $responseData = $result['data'];
+            $responseData['cache_id'] = $veiculoCache->id;
+            $responseData['tipo_veiculo'] = $veiculoCache->tipo_veiculo;
+
             return response()->json([
                 'success' => true,
                 'message' => 'Placa validada com sucesso',
-                'data' => $result['data'],
+                'data' => $responseData,
                 'test_mode' => !$this->ALLOW_SOAP_PURCHASE,
                 'soap_real' => $this->ALLOW_SOAP_QUERIES,
+                'cached' => true,
                 'warning' => $this->ALLOW_SOAP_QUERIES ?
                     '✅ Validação REAL via API SemParar - Compras ainda bloqueadas' :
                     '⚠️ Dados simulados - API SemParar não foi chamada'

@@ -155,8 +155,14 @@ class VpoXmlBuilder
         $infRota = $xml->createElement('infRota');
         $inf->appendChild($infRota);
 
-        // categoriaPedagio (1-7, baseado no tipo de veiculo)
-        $categoria = $this->getCategoriaPedagio($vpoData['veiculo_tipo'] ?? '');
+        // categoriaPedagio (1-7, baseado no número de eixos)
+        // Usar eixos diretamente se fornecido, senão tentar inferir do tipo de veículo
+        $eixos = $vpoData['eixos'] ?? $vpoData['veiculo_eixos'] ?? null;
+        if ($eixos !== null) {
+            $categoria = $this->getCategoriaPedagioByEixos((int) $eixos);
+        } else {
+            $categoria = $this->getCategoriaPedagio($vpoData['veiculo_tipo'] ?? '');
+        }
         $this->addElement($xml, $infRota, 'categoriaPedagio', (string) $categoria);
 
         // rota com pontosParada (igual fazemos com SemParar)
@@ -313,8 +319,29 @@ class VpoXmlBuilder
             return 6;
         }
 
-        // Default: 3 (2 eixos - caminhao leve)
-        return 3;
+        // Default: 5 (caminhão leve 2 eixos)
+        return 5;
+    }
+
+    /**
+     * Retorna categoria de pedágio baseado no número de eixos
+     * Mapeamento oficial NDD Cargo:
+     * - 5 = Caminhão leve (2 eixos)
+     * - 6 = Caminhão médio (3-5 eixos)
+     * - 7 = Caminhão pesado (6+ eixos)
+     *
+     * @param int $eixos Número de eixos do veículo
+     * @return int Categoria de pedágio (5-7 para caminhões)
+     */
+    private function getCategoriaPedagioByEixos(int $eixos): int
+    {
+        if ($eixos <= 2) {
+            return 5; // Caminhão leve (2 eixos)
+        }
+        if ($eixos <= 5) {
+            return 6; // Caminhão médio (3-5 eixos)
+        }
+        return 7; // Caminhão pesado (6+ eixos)
     }
 
     /**

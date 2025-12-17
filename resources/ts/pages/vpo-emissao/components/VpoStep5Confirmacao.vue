@@ -58,10 +58,12 @@ const custoCalculado = computed(() => props.formData.custo.calculado)
 const eixos = computed(() => veiculo.value?.eixos || props.formData.periodo.eixos || 2)
 
 // Categoria de pedágio baseada no número de eixos (NDD Cargo)
+// Mapeamento correto: 5=Caminhão leve (2 eixos), 6=Caminhão médio (3-5 eixos), 7=Caminhão pesado (6+ eixos)
 const categoriaPedagio = computed(() => {
   const numEixos = eixos.value
-  // Mapeamento: 2 eixos = categoria 1, 3 = 2, 4 = 3, etc. até 7
-  return Math.min(numEixos - 1, 7)
+  if (numEixos <= 2) return 5 // Caminhão leve (2 eixos)
+  if (numEixos <= 5) return 6 // Caminhão médio (3-5 eixos)
+  return 7 // Caminhão pesado (6+ eixos)
 })
 
 const isStepValid = computed(() => {
@@ -158,9 +160,10 @@ const calcularCusto = async () => {
     if (pracasPedagio.value.length === 0) {
       const pracasExistentes = props.formData.custo.custo.pedagios || props.formData.rota.pracas || []
       pracasPedagio.value = pracasExistentes.map((p: any) => ({
-        codigo: p.codigo || p.codigoPraca,
+        codigo: p.cnp || p.codigo || p.codigoPraca,
+        cnp: p.cnp || p.codigo || p.codigoPraca,
         nome: p.nome || p.nomePraca,
-        rodovia: p.rodovia,
+        rodovia: p.rodovia || p.localizacao,
         km: p.km,
         valor: p.valor || p.valorPedagio || 0,
         sentido: p.sentido,
@@ -265,10 +268,12 @@ const processarResultadoRoteirizador = (resultado: any) => {
   roteirizadorStatus.value = 'completed'
 
   // Extrair praças de pedágio
+  // IMPORTANTE: O CNP vem do NDD Cargo no campo 'cnp', é obrigatório para emissão VPO
   const pracas: PracaPedagio[] = (resultado.pracas_pedagio || resultado.pracasPedagio || []).map((p: any) => ({
-    codigo: p.codigo || p.codigoPraca,
+    codigo: p.cnp || p.codigo || p.codigoPraca,
+    cnp: p.cnp || p.codigo || p.codigoPraca,
     nome: p.nome || p.nomePraca,
-    rodovia: p.rodovia,
+    rodovia: p.rodovia || p.localizacao,
     km: p.km,
     valor: p.valor || p.valorPedagio || 0,
     sentido: p.sentido,
@@ -313,6 +318,9 @@ const processarResultadoRoteirizador = (resultado: any) => {
 const emitirVpo = async () => {
   if (!canEmit.value) return
 
+  // Scroll para o topo para ver o processamento
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+
   emitindo.value = true
   emissaoStatus.value = 'enviando'
   errorMessage.value = null
@@ -320,33 +328,59 @@ const emitirVpo = async () => {
 
   try {
     console.log('=== INICIANDO EMISSÃO VPO ===')
-    console.log('Praças a enviar:', pracasPedagio.value)
+    console.log('pracasPedagio.value:', pracasPedagio.value)
+    console.log('pracasPedagio.value.length:', pracasPedagio.value.length)
+    console.log('custo.value:', custo.value)
+    console.log('formData.custo:', props.formData.custo)
+    console.log('formData.rota.pracas:', props.formData.rota.pracas)
+
+    // Construir dados a enviar - usar praças do custo ou da rota se pracasPedagio estiver vazio
+    const pracasParaEnviar = pracasPedagio.value.length > 0
+      ? pracasPedagio.value
+      : (props.formData.custo.custo?.pedagios || props.formData.rota.pracas || [])
+
+    const dadosEmissao = {
+      codpac: pacote.value!.codpac,
+      codtrn: transportador.value!.codtrn,  // Obrigatório para o backend
+      rota_id: rota.value!.sPararRotID,
+      // Dados calculados pelo roteirizador - mapear campos corretamente
+      // IMPORTANTE: O CNP vem do NDD Cargo no campo 'cnp', é obrigatório para emissão VPO
+      pracas_pedagio: pracasParaEnviar.map((p: any) => ({
+        codigo: p.cnp || p.codigo || p.codigoPraca || '',
+        cnp: p.cnp || p.codigo || p.codigoPraca || '',
+        nome: p.nome || p.nomePraca || '',
+        rodovia: p.rodovia || p.localizacao || '',
+        valor: p.valor || p.valorPedagio || 0,
+      })),
+      valor_total: custo.value?.valor_total || 0,
+      km_total: custo.value?.km_total || 0,
+      // Período
+      data_inicio: dataInicio.value,
+      data_fim: dataFim.value,
+      // Dados do motorista (se empresa)
+      codmot: motorista.value?.codmot || null,
+      // Dados do veículo
+      placa: veiculo.value!.placa,
+      eixos: eixos.value,
+    }
+
+    // Debug: log dos eixos para verificar o valor
+    console.log('=== DEBUG EIXOS ===')
+    console.log('eixos.value:', eixos.value)
+    console.log('veiculo.value?.eixos:', veiculo.value?.eixos)
+    console.log('formData.periodo.eixos:', props.formData.periodo.eixos)
+    console.log('categoriaPedagio:', categoriaPedagio.value)
+
+    console.log('=== DADOS A ENVIAR ===')
+    console.log('pracas_pedagio:', dadosEmissao.pracas_pedagio)
+    console.log('valor_total:', dadosEmissao.valor_total)
+    console.log('km_total:', dadosEmissao.km_total)
 
     // Chamar API de emissão VPO (NDD Cargo) com as praças de pedágio
     const response = await fetch('http://localhost:8002/api/vpo/emissao/iniciar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        codpac: pacote.value!.codpac,
-        rota_id: rota.value!.sPararRotID,
-        // Dados calculados pelo roteirizador
-        pracas_pedagio: pracasPedagio.value.map(p => ({
-          codigo: p.codigo,
-          nome: p.nome,
-          rodovia: p.rodovia,
-          valor: p.valor,
-        })),
-        valor_total: custo.value!.valor_total,
-        km_total: custo.value!.km_total,
-        // Período
-        data_inicio: dataInicio.value,
-        data_fim: dataFim.value,
-        // Dados do motorista (se empresa)
-        codmot: motorista.value?.codmot || null,
-        // Dados do veículo
-        placa: veiculo.value!.placa,
-        eixos: eixos.value,
-      }),
+      body: JSON.stringify(dadosEmissao),
     })
 
     const data = await response.json()
@@ -567,39 +601,41 @@ const inicializarDadosExistentes = () => {
   console.log('=== VpoStep5Confirmacao: Inicializando ===')
   console.log('formData.custo.calculado:', props.formData.custo.calculado)
   console.log('formData.custo.custo:', props.formData.custo.custo)
+  console.log('formData.custo.custo?.pedagios:', props.formData.custo.custo?.pedagios)
+  console.log('formData.custo.custo?.pedagios?.length:', props.formData.custo.custo?.pedagios?.length)
   console.log('formData.rota.pracas:', props.formData.rota.pracas)
+  console.log('formData.rota.pracas?.length:', props.formData.rota.pracas?.length)
 
-  // Se já foi calculado no Step 4, usar os dados existentes
-  if (props.formData.custo.calculado && props.formData.custo.custo) {
-    console.log('Dados de custo já calculados no Step 4, usando dados existentes')
+  // Obter praças de todas as fontes possíveis
+  const pracasExistentes = props.formData.custo.custo?.pedagios
+    || props.formData.rota.pracas
+    || []
 
-    // Inicializar praças do custo ou da rota
-    const pracasExistentes = props.formData.custo.custo.pedagios || props.formData.rota.pracas || []
+  console.log('pracasExistentes:', pracasExistentes)
+  console.log('pracasExistentes.length:', pracasExistentes.length)
+
+  if (pracasExistentes.length > 0) {
+    console.log('Inicializando praças existentes...')
+
+    // Mapear praças para o formato esperado
+    // IMPORTANTE: O CNP vem do NDD Cargo no campo 'cnp', é obrigatório para emissão VPO
     pracasPedagio.value = pracasExistentes.map((p: any) => ({
-      codigo: p.codigo || p.codigoPraca,
-      nome: p.nome || p.nomePraca,
-      rodovia: p.rodovia,
-      km: p.km,
+      codigo: p.cnp || p.codigo || p.codigoPraca || '',
+      cnp: p.cnp || p.codigo || p.codigoPraca || '',
+      nome: p.nome || p.nomePraca || '',
+      rodovia: p.rodovia || p.localizacao || '',
+      km: p.km || 0,
       valor: p.valor || p.valorPedagio || 0,
-      sentido: p.sentido,
-      concessionaria: p.concessionaria,
+      sentido: p.sentido || '',
+      concessionaria: p.concessionaria || '',
     }))
 
     roteirizadorStatus.value = 'completed'
-    console.log('Praças inicializadas:', pracasPedagio.value.length)
-  } else if (props.formData.rota.pracas && props.formData.rota.pracas.length > 0) {
-    // Fallback: se há praças na rota mas custo não foi marcado como calculado
-    console.log('Praças encontradas em formData.rota.pracas, inicializando')
-    pracasPedagio.value = props.formData.rota.pracas.map((p: any) => ({
-      codigo: p.codigo || p.codigoPraca,
-      nome: p.nome || p.nomePraca,
-      rodovia: p.rodovia,
-      km: p.km,
-      valor: p.valor || p.valorPedagio || 0,
-      sentido: p.sentido,
-      concessionaria: p.concessionaria,
-    }))
-    roteirizadorStatus.value = 'completed'
+    console.log('Praças inicializadas com sucesso:', pracasPedagio.value.length)
+    console.log('Primeiras 2 praças:', pracasPedagio.value.slice(0, 2))
+  } else {
+    console.log('AVISO: Nenhuma praça encontrada no formData!')
+    console.log('Será necessário calcular ao emitir')
   }
 }
 
@@ -1063,32 +1099,27 @@ const formatCurrency = (value: number): string => {
 
         <!-- Lista de Praças de Pedágio -->
         <VCardText v-if="pracasPedagio.length > 0">
-          <div class="text-caption text-medium-emphasis mb-2">
+          <div class="text-caption text-medium-emphasis mb-3">
             Praças de pedágio retornadas pelo NDD Cargo:
           </div>
 
-          <VTable density="compact" class="mb-4">
-            <thead>
-              <tr>
-                <th>Código</th>
-                <th>Nome</th>
-                <th>Rodovia</th>
-                <th class="text-end">Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="praca in pracasPedagio" :key="praca.codigo">
-                <td>{{ praca.codigo }}</td>
-                <td>{{ praca.nome }}</td>
-                <td>{{ praca.rodovia }}</td>
-                <td class="text-end">
-                  <VChip size="x-small" color="success">
-                    {{ formatCurrency(praca.valor) }}
-                  </VChip>
-                </td>
-              </tr>
-            </tbody>
-          </VTable>
+          <div class="pracas-list">
+            <div
+              v-for="(praca, index) in pracasPedagio"
+              :key="praca.codigo || index"
+              class="praca-item d-flex justify-space-between align-center pa-3 rounded"
+            >
+              <div class="d-flex align-center gap-3">
+                <VAvatar size="32" color="primary" variant="tonal">
+                  <span class="text-caption font-weight-bold">{{ index + 1 }}</span>
+                </VAvatar>
+                <span class="font-weight-medium">{{ praca.nome }}</span>
+              </div>
+              <VChip size="small" color="success" variant="flat">
+                {{ formatCurrency(praca.valor) }}
+              </VChip>
+            </div>
+          </div>
         </VCardText>
 
         <!-- Mensagem quando não há praças de pedágio -->
@@ -1101,10 +1132,12 @@ const formatCurrency = (value: number): string => {
       </VCard>
 
       <!-- Botões de Ação -->
-      <div v-if="custoCalculado" class="d-flex gap-4 mt-6">
+      <div v-if="custoCalculado" class="d-flex flex-wrap gap-3 mt-6 action-buttons">
         <VBtn
           color="secondary"
-          variant="tonal"
+          variant="outlined"
+          size="large"
+          class="action-btn"
           @click="recalcularCusto"
         >
           <VIcon icon="tabler-refresh" start />
@@ -1114,7 +1147,7 @@ const formatCurrency = (value: number): string => {
         <VBtn
           color="success"
           size="large"
-          class="flex-grow-1"
+          class="action-btn action-btn-primary"
           :loading="emitindo"
           :disabled="!canEmit"
           @click="emitirVpo"
@@ -1268,6 +1301,51 @@ const formatCurrency = (value: number): string => {
   .timeline-step::before {
     left: 13px;
     top: 28px;
+  }
+}
+
+/* Lista de Praças de Pedágio */
+.pracas-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.praca-item {
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  transition: background 0.2s ease;
+}
+
+.praca-item:hover {
+  background: rgba(var(--v-theme-on-surface), 0.08);
+}
+
+/* Botões de Ação */
+.action-buttons {
+  justify-content: flex-start;
+}
+
+.action-btn {
+  min-width: 160px;
+  height: 48px !important;
+  font-weight: 500;
+}
+
+.action-btn-primary {
+  min-width: 220px;
+}
+
+@media (max-width: 600px) {
+  .action-buttons {
+    flex-direction: column;
+  }
+
+  .action-btn,
+  .action-btn-primary {
+    width: 100%;
+    min-width: unset;
   }
 }
 </style>
