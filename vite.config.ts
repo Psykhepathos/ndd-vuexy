@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url'
+import { loadEnv } from 'vite'
 import laravel from 'laravel-vite-plugin'
 import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
 import vue from '@vitejs/plugin-vue'
@@ -13,7 +14,15 @@ import vuetify from 'vite-plugin-vuetify'
 import svgLoader from 'vite-svg-loader'
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+
+  // Base URL para deploy em subdiretório (ex: /valepedagio/)
+  // Definir VITE_BASE_URL=/valepedagio/ no .env para produção
+  const base = env.VITE_BASE_URL || '/'
+
+  return {
+  base,
   plugins: [// Docs: https://github.com/posva/unplugin-vue-router
   // ℹ️ This plugin should be placed before vue plugin
     VueRouter({
@@ -123,4 +132,5 @@ export default defineConfig({
       host: 'localhost', // HMR via localhost
     },
   },
+}
 })
