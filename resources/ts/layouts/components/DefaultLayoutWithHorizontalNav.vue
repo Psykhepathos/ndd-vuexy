@@ -20,7 +20,7 @@ import { VNodeRenderer } from '@layouts/components/VNodeRenderer'
     <!-- 👉 navbar -->
     <template #navbar>
       <RouterLink
-        :to="{ name: 'index' }"
+        :to="{ name: 'ndd-dashboard' }"
         class="app-logo d-flex align-center gap-x-3"
       >
         <VNodeRenderer :nodes="themeConfig.app.logo" />

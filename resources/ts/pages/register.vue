@@ -77,7 +77,7 @@ const register = async () => {
 </script>
 
 <template>
-  <RouterLink :to="{ name: 'index' }">
+  <RouterLink :to="{ name: 'ndd-dashboard' }">
     <div class="auth-logo d-flex align-center gap-x-3">
       <VNodeRenderer :nodes="themeConfig.app.logo" />
       <h1 class="auth-title">

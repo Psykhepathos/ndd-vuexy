@@ -75,7 +75,7 @@ const hideTitleAndIcon = configStore.isVerticalNavMini(isHovered)
     <div class="nav-header">
       <slot name="nav-header">
         <RouterLink
-          :to="{ name: 'index' }"
+          :to="{ name: 'ndd-dashboard' }"
           class="app-logo app-title-wrapper"
         >
           <VNodeRenderer :nodes="layoutConfig.app.logo" />

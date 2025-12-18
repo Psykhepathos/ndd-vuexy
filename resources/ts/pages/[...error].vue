@@ -24,7 +24,7 @@ definePage({
     />
 
     <VBtn
-      :to="{ name: 'index' }"
+      :to="{ name: 'ndd-dashboard' }"
       class="mb-11"
     >
       Voltar ao Início

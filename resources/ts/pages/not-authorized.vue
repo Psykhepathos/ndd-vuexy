@@ -26,7 +26,7 @@ const authThemeMask = useGenerateImageVariant(miscMaskLight, miscMaskDark)
 
     <VBtn
       class="mb-11"
-      :to="{ name: 'index' }"
+      :to="{ name: 'ndd-dashboard' }"
     >
       Voltar ao Início
     </VBtn>

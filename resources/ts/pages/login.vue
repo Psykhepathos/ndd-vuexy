@@ -65,13 +65,14 @@ const login = async () => {
     useCookie('userData').value = userData
     useCookie('accessToken').value = accessToken
 
-    // Redirect to `to` query if exist or redirect to index route
+    // Redirect to `to` query if exist or redirect to dashboard
     // ❗ nextTick is required to wait for DOM updates and later redirect
     await nextTick(() => {
       if (route.query.to) {
         router.replace(String(route.query.to))
       } else {
-        router.replace({ name: 'index' })
+        // Redirecionar diretamente para o dashboard NDD para evitar loop de redirects
+        router.replace({ name: 'ndd-dashboard' })
       }
     })
   }
@@ -90,7 +91,7 @@ const onSubmit = () => {
 </script>
 
 <template>
-  <RouterLink :to="{ name: 'index' }">
+  <RouterLink :to="{ name: 'ndd-dashboard' }">
     <div class="auth-logo d-flex align-center gap-x-3">
       <VNodeRenderer :nodes="themeConfig.app.logo" />
       <h1 class="auth-title">

@@ -25,7 +25,7 @@ export const setupGuards = (router: _RouterTyped<RouteNamedMap & { [key: string]
      */
     if (to.meta.unauthenticatedOnly) {
       if (isLoggedIn)
-        return { name: 'index' }
+        return { name: 'ndd-dashboard' }
       else
         return undefined
     }
