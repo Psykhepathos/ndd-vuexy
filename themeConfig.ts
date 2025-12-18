@@ -7,12 +7,15 @@ import { Skins } from '@core/enums'
 
 import { AppContentLayoutNav, ContentWidth, FooterType, NavbarType } from '@layouts/enums'
 
+// Detectar base URL para subdiretório (ex: /valepedagio)
+const baseUrl = import.meta.env.BASE_URL?.replace(/\/build\/?$/, '') || '/'
+
 export const { themeConfig, layoutConfig } = defineThemeConfig({
   app: {
     title: 'Vale Pedágio' as Lowercase<string>,
-    logo: h('img', { 
-      src: '/iconetambasa.png', 
-      style: 'line-height:0; width: 26px; height: 26px;' 
+    logo: h('img', {
+      src: `${baseUrl}iconetambasa.png`,
+      style: 'line-height:0; width: 26px; height: 26px;'
     }),
     contentWidth: ContentWidth.Boxed,
     contentLayoutNav: AppContentLayoutNav.Vertical,
