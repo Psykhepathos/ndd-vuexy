@@ -7,8 +7,9 @@ import { Skins } from '@core/enums'
 
 import { AppContentLayoutNav, ContentWidth, FooterType, NavbarType } from '@layouts/enums'
 
-// Detectar base URL para subdiretório (ex: /valepedagio)
-const baseUrl = import.meta.env.BASE_URL?.replace(/\/build\/?$/, '') || '/'
+// Detectar base URL para subdiretório (ex: /valepedagio/)
+const rawBaseUrl = import.meta.env.BASE_URL?.replace(/\/build\/?$/, '') || '/'
+const baseUrl = rawBaseUrl.endsWith('/') ? rawBaseUrl : `${rawBaseUrl}/`
 
 export const { themeConfig, layoutConfig } = defineThemeConfig({
   app: {
