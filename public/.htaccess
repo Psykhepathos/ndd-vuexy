@@ -5,6 +5,19 @@
 
     RewriteEngine On
 
+    # ============================================================================
+    # SUBDIRECTORY DEPLOYMENT (Apache Alias)
+    # ============================================================================
+    # Quando deployado em subdiretorio via Apache Alias (ex: /valepedagio),
+    # o RewriteBase deve ser configurado para o subdiretorio.
+    #
+    # Para desenvolvimento local (sem subdiretorio): Deixar comentado
+    # Para producao com Alias /valepedagio: Descomentar a linha abaixo
+    #
+    # IMPORTANTE: No servidor, descomentar esta linha!
+    # RewriteBase /valepedagio
+    # ============================================================================
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

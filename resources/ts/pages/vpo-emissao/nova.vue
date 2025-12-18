@@ -4,6 +4,8 @@ import { ref, computed, watch } from 'vue'
 import type { VpoEmissaoFormData, WizardStep } from './types'
 import { isEmpresa } from './types'
 
+const router = useRouter()
+
 // Importar componentes dos steps
 import VpoStep1Pacote from './components/VpoStep1Pacote.vue'
 import VpoStep2Motorista from './components/VpoStep2Motorista.vue'
@@ -217,7 +219,7 @@ const handleEmissaoRealizada = (result: any) => {
 }
 
 const voltarParaListagem = () => {
-  window.location.href = '/vpo-emissao'
+  router.push({ name: 'vpo-emissao' })
 }
 
 // Debug watcher para step atual

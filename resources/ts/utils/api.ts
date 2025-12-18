@@ -1,4 +1,5 @@
 import { ofetch } from 'ofetch'
+import { router } from '@/plugins/1.router'
 
 let isRedirecting = false
 
@@ -28,7 +29,7 @@ export const $api = ofetch.create({
         isRedirecting = true
 
         if (!window.location.pathname.includes('/login')) {
-          window.location.href = '/login'
+          router.push({ name: 'login' })
         }
 
         setTimeout(() => {

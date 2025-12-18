@@ -3,6 +3,8 @@ import { ref, computed } from 'vue'
 import { apiPost } from '@/config/api'
 import type { CompraViagemFormData } from '../types'
 
+const router = useRouter()
+
 // Props & Emits
 const props = defineProps<{
   formData: CompraViagemFormData
@@ -135,7 +137,7 @@ const voltarParaInicio = () => {
 }
 
 const irParaListagem = () => {
-  window.location.href = '/compra-viagem'
+  router.push({ name: 'compra-viagem' })
 }
 </script>
 

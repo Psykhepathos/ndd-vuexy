@@ -3,6 +3,8 @@
 import { ref, computed } from 'vue'
 import type { CompraViagemFormData, WizardStep } from './types'
 
+const router = useRouter()
+
 // Importar componentes dos steps
 import CompraViagemStep1Pacote from './components/CompraViagemStep1Pacote.vue'
 import CompraViagemStep2Placa from './components/CompraViagemStep2Placa.vue'
@@ -155,7 +157,7 @@ const handleCompraRealizada = () => {
 }
 
 const voltarParaListagem = () => {
-  window.location.href = '/compra-viagem'
+  router.push({ name: 'compra-viagem' })
 }
 </script>
 

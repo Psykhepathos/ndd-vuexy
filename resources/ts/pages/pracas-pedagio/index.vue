@@ -3,6 +3,8 @@ import { ref, onMounted, computed } from 'vue'
 import { watchDebounced } from '@vueuse/core'
 import { apiFetch, apiPost } from '@/config/api'
 
+const router = useRouter()
+
 // ============================================================================
 // INTERFACES & TYPES
 // ============================================================================
@@ -204,7 +206,7 @@ const importCSV = async () => {
 
 const viewOnMap = (praca: PracaPedagio) => {
   // Navegar para página interna de visualização com OSM
-  window.location.href = `/pracas-pedagio/mapa/${praca.id}`
+  router.push({ name: 'pracas-pedagio-mapa-id', params: { id: praca.id } })
 }
 
 const formatKm = (km: string) => {
