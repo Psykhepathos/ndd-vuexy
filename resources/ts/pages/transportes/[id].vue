@@ -434,7 +434,7 @@ onMounted(() => {
                     variant="outlined"
                     size="small"
                     color="success"
-                    @click="router.push(`/motoristas/${currentMotorista.codtrn}`)"
+                    @click="router.push({ name: 'motoristas-id', params: { id: currentMotorista.codtrn } })"
                   >
                     <VTooltip text="Ver detalhes do motorista" activator="parent" />
                     <VIcon icon="tabler-eye" size="18" />

@@ -68,7 +68,11 @@ const login = async () => {
     // Redirect to `to` query if exist or redirect to index route
     // ❗ nextTick is required to wait for DOM updates and later redirect
     await nextTick(() => {
-      router.replace(route.query.to ? String(route.query.to) : '/')
+      if (route.query.to) {
+        router.replace(String(route.query.to))
+      } else {
+        router.replace({ name: 'index' })
+      }
     })
   }
   catch (err) {
@@ -86,7 +90,7 @@ const onSubmit = () => {
 </script>
 
 <template>
-  <RouterLink to="/">
+  <RouterLink :to="{ name: 'index' }">
     <div class="auth-logo d-flex align-center gap-x-3">
       <VNodeRenderer :nodes="themeConfig.app.logo" />
       <h1 class="auth-title">

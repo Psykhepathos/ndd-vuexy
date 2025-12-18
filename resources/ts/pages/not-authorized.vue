@@ -26,9 +26,9 @@ const authThemeMask = useGenerateImageVariant(miscMaskLight, miscMaskDark)
 
     <VBtn
       class="mb-11"
-      to="/"
+      :to="{ name: 'index' }"
     >
-      Back To Home
+      Voltar ao Início
     </VBtn>
 
     <!-- 👉 Image -->

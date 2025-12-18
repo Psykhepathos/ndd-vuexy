@@ -254,7 +254,7 @@ const formatPlaca = (placa: string) => {
 
 // Navegação para detalhes
 const viewDetails = (item: Pacote) => {
-  router.push(`/pacotes/${item.codpac}`)
+  router.push({ name: 'pacotes-id', params: { id: item.codpac } })
 }
 
 // Limpar filtros

@@ -295,7 +295,7 @@ watchDebounced(
 
 // Funções de interação
 const viewDetails = (item: Transporte) => {
-  router.push(`/transportes/${item.codtrn}`)
+  router.push({ name: 'transportes-id', params: { id: item.codtrn } })
 }
 
 const handleItemsPerPageChange = (value: string | number) => {

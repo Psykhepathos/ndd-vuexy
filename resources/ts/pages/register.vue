@@ -66,7 +66,7 @@ const register = async () => {
 
     if (res.success) {
       await nextTick(() => {
-        router.replace('/login')
+        router.replace({ name: 'login' })
       })
     }
   }
@@ -77,7 +77,7 @@ const register = async () => {
 </script>
 
 <template>
-  <RouterLink to="/">
+  <RouterLink :to="{ name: 'index' }">
     <div class="auth-logo d-flex align-center gap-x-3">
       <VNodeRenderer :nodes="themeConfig.app.logo" />
       <h1 class="auth-title">

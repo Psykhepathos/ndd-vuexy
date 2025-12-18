@@ -254,7 +254,7 @@ onBeforeUnmount(() => {
 
 // Funções
 const viewMap = (item: RotaSemParar) => {
-  router.push(`/rotas-padrao/mapa/${item.spararrotid}`)
+  router.push({ name: 'rotas-padrao-mapa-id', params: { id: item.spararrotid } })
 }
 
 // Estado do dialog de confirmação

@@ -24,10 +24,10 @@ definePage({
     />
 
     <VBtn
-      to="/"
+      :to="{ name: 'index' }"
       class="mb-11"
     >
-      Back to Home
+      Voltar ao Início
     </VBtn>
 
     <!-- 👉 Image -->
