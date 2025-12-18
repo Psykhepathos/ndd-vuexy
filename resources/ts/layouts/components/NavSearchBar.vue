@@ -30,39 +30,20 @@ const isLoading = ref(false)
 
 const suggestionGroups: SuggestionGroup[] = [
   {
-    title: 'Pesquisas Populares',
+    title: 'Módulos Principais',
     content: [
-      { icon: 'tabler-chart-bar', title: 'Análises', url: { name: 'dashboards-analytics' } },
-      { icon: 'tabler-chart-donut-3', title: 'CRM', url: { name: 'dashboards-crm' } },
-      { icon: 'tabler-shopping-cart', title: 'E-commerce', url: { name: 'dashboards-ecommerce' } },
-      { icon: 'tabler-truck', title: 'Logística', url: { name: 'dashboards-logistics' } },
+      { icon: 'tabler-dashboard', title: 'Dashboard NDD', url: { name: 'ndd-dashboard' } },
+      { icon: 'tabler-shopping-cart', title: 'Emissão VPO NDD', url: { name: 'vpo-emissao' } },
+      { icon: 'tabler-shopping-cart', title: 'Emissão VPO SemParar', url: { name: 'compra-viagem' } },
+      { icon: 'tabler-map-route', title: 'Rotas Padrão', url: { name: 'rotas-padrao' } },
     ],
   },
   {
-    title: 'Apps e Páginas',
+    title: 'Cadastros',
     content: [
-      { icon: 'tabler-calendar', title: 'Calendário', url: { name: 'apps-calendar' } },
-      { icon: 'tabler-lock', title: 'Funções e Permissões', url: { name: 'apps-roles' } },
-      { icon: 'tabler-settings', title: 'Configurações da Conta', url: { name: 'pages-account-settings-tab', params: { tab: 'account' } } },
-      { icon: 'tabler-copy', title: 'Exemplos de Diálogo', url: { name: 'pages-dialog-examples' } },
-    ],
-  },
-  {
-    title: 'Interface do Usuário',
-    content: [
-      { icon: 'tabler-typography', title: 'Tipografia', url: { name: 'pages-typography' } },
-      { icon: 'tabler-menu-2', title: 'Acordeão', url: { name: 'components-expansion-panel' } },
-      { icon: 'tabler-info-triangle', title: 'Alerta', url: { name: 'components-alert' } },
-      { icon: 'tabler-checkbox', title: 'Cards', url: { name: 'pages-cards-card-basic' } },
-    ],
-  },
-  {
-    title: 'Formulários e Tabelas',
-    content: [
-      { icon: 'tabler-circle-dot', title: 'Radio', url: { name: 'forms-radio' } },
-      { icon: 'tabler-file-invoice', title: 'Layouts de Formulário', url: { name: 'forms-form-layouts' } },
-      { icon: 'tabler-table', title: 'Tabela', url: { name: 'tables-data-table' } },
-      { icon: 'tabler-edit', title: 'Editor', url: { name: 'forms-editors' } },
+      { icon: 'tabler-coin', title: 'Praças de Pedágio', url: { name: 'pracas-pedagio' } },
+      { icon: 'tabler-truck-delivery', title: 'Transportadores', url: { name: 'transportes' } },
+      { icon: 'tabler-package', title: 'Pacotes', url: { name: 'pacotes' } },
     ],
   },
 ]
@@ -70,19 +51,19 @@ const suggestionGroups: SuggestionGroup[] = [
 // 👉 No Data suggestion
 const noDataSuggestions: Suggestion[] = [
   {
-    title: 'Análises',
-    icon: 'tabler-chart-bar',
-    url: { name: 'dashboards-analytics' },
+    title: 'Dashboard NDD',
+    icon: 'tabler-dashboard',
+    url: { name: 'ndd-dashboard' },
   },
   {
-    title: 'CRM',
-    icon: 'tabler-chart-donut-3',
-    url: { name: 'dashboards-crm' },
+    title: 'Transportadores',
+    icon: 'tabler-truck-delivery',
+    url: { name: 'transportes' },
   },
   {
-    title: 'E-commerce',
-    icon: 'tabler-shopping-cart',
-    url: { name: 'dashboards-ecommerce' },
+    title: 'Pacotes',
+    icon: 'tabler-package',
+    url: { name: 'pacotes' },
   },
 ]
 

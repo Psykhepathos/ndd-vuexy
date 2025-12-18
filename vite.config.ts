@@ -120,7 +120,7 @@ export default defineConfig({
     port: 5173,
     cors: true,
     hmr: {
-      host: 'auto', // Detecta automaticamente o IP do cliente
+      host: 'localhost', // HMR via localhost
     },
   },
 })
