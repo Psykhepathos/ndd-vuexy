@@ -15,8 +15,20 @@ export interface CookieOptions<T = any> extends _CookieOptions {
 
 export type CookieRef<T> = Ref<T>
 
+/**
+ * Detecta o path base da aplicação para cookies
+ * Suporta deploy em subdiretório (ex: /valepedagio)
+ */
+const getBasePath = (): string => {
+  // Em produção, usa o BASE_URL do Vite (configurado via ASSET_URL)
+  // Remove '/build' se presente no final
+  const baseUrl = import.meta.env.BASE_URL || '/'
+
+  return baseUrl.replace(/\/build\/?$/, '') || '/'
+}
+
 const CookieDefaults: CookieOptions<any> = {
-  path: '/',
+  path: getBasePath(),
   watch: true,
   decode: val => destr(decodeURIComponent(val)),
   encode: val => encodeURIComponent(typeof val === 'string' ? val : JSON.stringify(val)),

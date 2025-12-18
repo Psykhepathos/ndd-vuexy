@@ -998,7 +998,7 @@ const formatDate = (date: string | null) => {
 
 // Voltar para listagem
 const goBack = () => {
-  router.push('/rotas-padrao')
+  router.push({ name: 'rotas-padrao' })
 }
 
 // Nota: Não usamos watch aqui pois updateMapMarkers já é chamado

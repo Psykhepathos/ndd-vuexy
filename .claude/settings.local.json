@@ -28,7 +28,8 @@
       "Bash(xargs:*)",
       "Bash(git add:*)",
       "Bash(set VITE_BASE_URL=/valepedagio/)",
-      "Bash(pnpm run build:*)"
+      "Bash(pnpm run build:*)",
+      "Bash(ls -la \"c:\\Users\\15857\\Desktop\\NDD\\ndd-vuexy\\resources\\ts\\pages\\compra-viagem\"\" 2>/dev/null || dir \"c:Users15857DesktopNDDndd-vuexyresourcestspagescompra-viagem\"\")"
     ],
     "deny": [],
     "ask": []

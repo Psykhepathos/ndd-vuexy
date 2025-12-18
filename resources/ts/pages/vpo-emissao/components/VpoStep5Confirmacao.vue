@@ -863,7 +863,7 @@ const formatCurrency = (value: number): string => {
               Nova Emissão
             </VBtn>
 
-            <VBtn variant="outlined" href="/vpo-emissao">
+            <VBtn variant="outlined" :to="{ name: 'vpo-emissao' }">
               <VIcon icon="tabler-list" start />
               Ver Emissões
             </VBtn>

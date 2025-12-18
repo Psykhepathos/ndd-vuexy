@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import type { VpoEmissaoFormData, RotaVpo, MunicipioRota } from '../types'
-import { API_BASE_URL, apiFetch } from '@/config/api'
+import { getApiUrl, apiFetch } from '@/config/api'
 
 // Props & Emits
 const props = defineProps<{
@@ -89,7 +89,7 @@ const carregarRotas = async () => {
   errorMessage.value = null
 
   try {
-    const url = `${API_BASE_URL}/api/semparar-rotas?per_page=100`
+    const url = getApiUrl('/semparar-rotas?per_page=100')
     console.log('Buscando rotas:', url)
     const response = await fetch(url)
     console.log('Response status:', response.status)
@@ -141,7 +141,7 @@ const selecionarRota = async (rota: RotaVpo) => {
 
   try {
     // Buscar municípios da rota
-    const url = `${API_BASE_URL}/api/semparar-rotas/${rota.sPararRotID}/municipios`
+    const url = getApiUrl(`/semparar-rotas/${rota.sPararRotID}/municipios`)
     console.log('Buscando municípios:', url)
     const response = await fetch(url)
     const data = await response.json()
@@ -258,7 +258,7 @@ const calcularPracas = async () => {
       categoriaPedagio = 7 // Caminhão pesado (6+ eixos)
 
     // Chamar endpoint de cálculo de praças (IBGE → CEP → NDD Cargo)
-    const response = await apiFetch(`${API_BASE_URL}/api/vpo/calcular-pracas`, {
+    const response = await apiFetch(getApiUrl('/vpo/calcular-pracas'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -307,7 +307,7 @@ const calcularPracas = async () => {
         await new Promise(resolve => setTimeout(resolve, 3000))
 
         try {
-          const resultResponse = await apiFetch(`${API_BASE_URL}/api/ndd-cargo/resultado/${data.guid}`, {
+          const resultResponse = await apiFetch(getApiUrl(`/ndd-cargo/resultado/${data.guid}`), {
             headers: { 'Accept': 'application/json' }
           })
           const resultData = await resultResponse.json()

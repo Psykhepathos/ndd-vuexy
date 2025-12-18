@@ -167,6 +167,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { $api } from '@/utils/api'
+import { getApiUrl } from '@/config/api'
 import L from 'leaflet'
 import 'leaflet.markercluster'
 import 'leaflet/dist/leaflet.css'
@@ -492,7 +493,7 @@ async function calculateSingleRoute(waypoints: Array<[number, number]>): Promise
       }
     }
 
-    const response = await fetch(`${window.location.origin}/api/map/route`, {
+    const response = await fetch(getApiUrl('/map/route'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -770,7 +771,7 @@ async function fetchItinerario() {
 
     console.log('📦 Buscando itinerário do pacote', pacoteId)
 
-    const response = await $api('/api/pacotes/itinerario', {
+    const response = await $api('/pacotes/itinerario', {
       method: 'POST',
       body: {
         codPac: parseInt(pacoteId)

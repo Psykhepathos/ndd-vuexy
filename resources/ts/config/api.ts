@@ -1,26 +1,60 @@
 /**
  * API Configuration
  * Centralized API base URL configuration for deployment flexibility
+ *
+ * IMPORTANTE: Para deploy em subdiretório:
+ * 1. Configure ASSET_URL=/valepedagio no .env do servidor
+ * 2. Configure VITE_API_BASE_URL=/valepedagio/api no .env do servidor
+ * 3. O Vite vai configurar automaticamente import.meta.env.BASE_URL
  */
 
-// Detecta ambiente baseado em import.meta.env (Vite)
-const isDevelopment = import.meta.env.DEV
-const isProduction = import.meta.env.PROD
+/**
+ * Obtém o path base da aplicação (sem /build)
+ * Usado para cookies, redirects, e outras URLs que precisam do path base
+ *
+ * Em desenvolvimento: '/'
+ * Em produção com ASSET_URL=/valepedagio: '/valepedagio'
+ */
+export const getAppBasePath = (): string => {
+  const baseUrl = import.meta.env.BASE_URL || '/'
 
-// Base URL da API Laravel
-// Usa window.location.origin + pathname base para suportar subdiretórios
-// Ex: http://192.168.19.34/valepedagio -> API_BASE_URL = http://192.168.19.34/valepedagio
-const getBasePath = () => {
-  // Em produção com subdiretório, pega o primeiro segmento do path
-  // Ex: /valepedagio/transportes -> /valepedagio
-  const pathSegments = window.location.pathname.split('/').filter(Boolean)
-  if (pathSegments.length > 0 && pathSegments[0] !== 'api') {
-    return `${window.location.origin}/${pathSegments[0]}`
-  }
-  return window.location.origin
+  // Remove '/build' se presente (Vite adiciona em alguns casos)
+  return baseUrl.replace(/\/build\/?$/, '') || '/'
 }
 
-export const API_BASE_URL = getBasePath()
+/**
+ * Obtém a URL completa para chamadas API
+ * Sempre usa origin + path configurado no VITE_API_BASE_URL
+ *
+ * @param endpoint - O endpoint da API (ex: '/pacotes', '/auth/login')
+ * @returns URL completa para a API
+ *
+ * @example
+ * getApiUrl('/pacotes') // 'http://192.168.19.34/valepedagio/api/pacotes'
+ * getApiUrl('/auth/login') // 'http://192.168.19.34/valepedagio/api/auth/login'
+ */
+export const getApiUrl = (endpoint: string): string => {
+  // VITE_API_BASE_URL já contém o path completo (ex: /valepedagio/api)
+  const apiBase = import.meta.env.VITE_API_BASE_URL || '/api'
+
+  // Remove barra inicial do endpoint se apiBase terminar com barra
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+
+  return `${window.location.origin}${apiBase}${cleanEndpoint}`
+}
+
+/**
+ * @deprecated Use getApiUrl() em vez disso
+ * Mantido para compatibilidade - será removido em versão futura
+ */
+export const API_BASE_URL = (() => {
+  const apiBase = import.meta.env.VITE_API_BASE_URL || '/api'
+
+  // Remove '/api' do final se presente para manter compatibilidade
+  const basePath = apiBase.replace(/\/api\/?$/, '')
+
+  return `${window.location.origin}${basePath}`
+})()
 
 // Endpoints principais
 export const API_ENDPOINTS = {

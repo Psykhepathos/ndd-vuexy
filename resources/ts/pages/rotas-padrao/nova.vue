@@ -131,7 +131,7 @@ const isDescricaoValid = computed(() => {
 
 // Actions
 const goBack = () => {
-  router.push('/rotas-padrao')
+  router.push({ name: 'rotas-padrao' })
 }
 
 const createRoute = async () => {
@@ -175,9 +175,9 @@ const createRoute = async () => {
 
       // Redirecionar para a página de edição/mapa da nova rota
       if (data.data && data.data.id) {
-        router.push(`/rotas-padrao/mapa/${data.data.id}`)
+        router.push({ name: 'rotas-padrao-mapa-id', params: { id: data.data.id } })
       } else {
-        router.push('/rotas-padrao')
+        router.push({ name: 'rotas-padrao' })
       }
     } else {
       showError('Erro ao criar rota: ' + (data.message || 'Erro desconhecido'))

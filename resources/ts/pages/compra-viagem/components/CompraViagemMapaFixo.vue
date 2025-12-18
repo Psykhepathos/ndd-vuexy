@@ -4,6 +4,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { usePracasPedagio } from '@/composables/usePracasPedagio'
+import { getApiUrl } from '@/config/api'
 import type { CompraViagemFormData, MapMarker } from '../types'
 
 // Props
@@ -243,7 +244,7 @@ const calcularRota = async (waypoints: L.LatLng[]) => {
     const mapServiceWaypoints = waypoints.map(w => [w.lat, w.lng] as [number, number])
 
     // Chamar MapService
-    const response = await fetch(`${window.location.origin}/api/map/route`, {
+    const response = await fetch(getApiUrl('/map/route'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

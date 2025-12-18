@@ -142,7 +142,7 @@ const idade = computed(() => {
 })
 
 const voltar = () => {
-  router.push('/transportes')
+  router.push({ name: 'transportes' })
 }
 
 onMounted(() => {

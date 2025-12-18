@@ -163,7 +163,7 @@ const formatSituacao = (situacao: string) => {
 }
 
 const goBack = () => {
-  router.push('/pacotes')
+  router.push({ name: 'pacotes' })
 }
 
 // Processar coordenadas GPS como no Progress itinerario.p

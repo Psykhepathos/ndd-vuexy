@@ -4,6 +4,7 @@ import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount, nextTick 
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { usePracasPedagio } from '@/composables/usePracasPedagio'
+import { getApiUrl } from '@/config/api'
 import type { VpoEmissaoFormData, MunicipioRota, PracaPedagioVpo, EntregaVpo } from '../types'
 
 // ============================================================================
@@ -492,7 +493,7 @@ const calcularRota = async (waypoints: L.LatLng[]) => {
     const mapServiceWaypoints = waypoints.map(w => [w.lat, w.lng] as [number, number])
 
     // Chamar MapService - SEM FALLBACK!
-    const response = await fetch(`${window.location.origin}/api/map/route`, {
+    const response = await fetch(getApiUrl('/map/route'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

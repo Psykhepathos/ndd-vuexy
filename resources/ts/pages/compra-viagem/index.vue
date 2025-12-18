@@ -341,14 +341,14 @@ watchDebounced(
  * Navega para página de nova compra
  */
 const irParaNovaCompra = () => {
-  router.push('/compra-viagem/nova')
+  router.push({ name: 'compra-viagem-nova' })
 }
 
 /**
  * Navega para detalhes da viagem
  */
 const verDetalhes = (codViagem: string) => {
-  router.push(`/compra-viagem/${codViagem}`)
+  router.push({ name: 'compra-viagem-id', params: { id: codViagem } })
 }
 
 /**

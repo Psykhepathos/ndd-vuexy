@@ -28,7 +28,10 @@ export const $api = ofetch.create({
       if (typeof window !== 'undefined' && !isRedirecting) {
         isRedirecting = true
 
-        if (!window.location.pathname.includes('/login')) {
+        // Verifica se já está na página de login (suporta subdiretório)
+        const isLoginPage = window.location.pathname.endsWith('/login') ||
+                            window.location.pathname.includes('/login/')
+        if (!isLoginPage) {
           router.push({ name: 'login' })
         }
 

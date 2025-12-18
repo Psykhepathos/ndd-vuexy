@@ -2,7 +2,7 @@
 // Redireciona para o dashboard NDD
 definePageMeta({
   middleware: () => {
-    return navigateTo('/ndd-dashboard', { replace: true })
+    return navigateTo({ name: 'ndd-dashboard' }, { replace: true })
   },
 })
 </script>

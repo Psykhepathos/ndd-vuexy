@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { apiPost } from '@/config/api'
+import { apiPost, getApiUrl } from '@/config/api'
 import type { CompraViagemFormData } from '../types'
 
 const router = useRouter()
@@ -109,7 +109,7 @@ const confirmarCompra = async () => {
 
     console.log('🛒 Enviando compra:', payload)
 
-    const response = await apiPost(`${window.location.origin}/api/compra-viagem/comprar`, payload)
+    const response = await apiPost(getApiUrl('/compra-viagem/comprar'), payload)
     const data = await response.json()
 
     if (!data.success) {

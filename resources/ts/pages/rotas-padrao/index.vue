@@ -295,7 +295,7 @@ const deleteRoute = async () => {
 }
 
 const createNewRoute = () => {
-  router.push('/rotas-padrao/nova')
+  router.push({ name: 'rotas-padrao-nova' })
 }
 
 // Formatar data

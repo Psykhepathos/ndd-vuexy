@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { apiFetch, apiPost } from '@/config/api'
+import { apiFetch, apiPost, getApiUrl } from '@/config/api'
 import type { CompraViagemFormData, PacoteCompraViagem, EntregaPacote } from '../types'
 
 // Props & Emits
@@ -57,7 +57,7 @@ const buscarPacotes = async (search: string | null) => {
   loadingPacotes.value = true
   try {
     const response = await apiFetch(
-      `${window.location.origin}/api/pacotes/autocomplete?search=${encodeURIComponent(search)}`
+      getApiUrl(`/pacotes/autocomplete?search=${encodeURIComponent(search)}`)
     )
     const data = await response.json()
 
@@ -84,7 +84,7 @@ const selecionarPacote = async (pacoteItem: any) => {
 
   try {
     // Buscar itinerário do pacote
-    const response = await apiPost(`${window.location.origin}/api/pacotes/itinerario`, {
+    const response = await apiPost(getApiUrl('/pacotes/itinerario'), {
       codPac: pacote.codpac
     })
     const data = await response.json()

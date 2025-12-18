@@ -90,7 +90,7 @@ const fetchViagem = async () => {
 
     if (!viagemEncontrada) {
       showToast('Viagem não encontrada', 'warning')
-      setTimeout(() => router.push('/compra-viagem'), 2000)
+      setTimeout(() => router.push({ name: 'compra-viagem' }), 2000)
       return
     }
 
@@ -227,7 +227,7 @@ const formatarData = (data?: string) => {
  * Voltar para listagem
  */
 const voltar = () => {
-  router.push('/compra-viagem')
+  router.push({ name: 'compra-viagem' })
 }
 
 // ============================================================================

@@ -401,7 +401,7 @@ onMounted(() => {
           <VBtn
             color="primary"
             prepend-icon="ri-add-line"
-            :to="{ path: '/vpo-emissao/nova' }"
+            :to="{ name: 'vpo-emissao-nova' }"
           >
             Nova Emissão
           </VBtn>

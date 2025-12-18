@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { getApiUrl } from '@/config/api'
 
 // ============================================================================
 // INTERFACES
@@ -47,7 +48,7 @@ const marker = ref<L.Marker | null>(null)
 const loadPraca = async () => {
   loading.value = true
   try {
-    const response = await fetch(`${window.location.origin}/api/pracas-pedagio/${pracaId.value}`)
+    const response = await fetch(getApiUrl(`/pracas-pedagio/${pracaId.value}`))
     const data = await response.json()
 
     if (data.success) {
@@ -69,12 +70,12 @@ const loadPraca = async () => {
     } else {
       console.error('Erro ao carregar praça:', data.error)
       loading.value = false
-      router.push('/pracas-pedagio')
+      router.push({ name: 'pracas-pedagio' })
     }
   } catch (error) {
     console.error('Erro ao carregar praça:', error)
     loading.value = false
-    router.push('/pracas-pedagio')
+    router.push({ name: 'pracas-pedagio' })
   }
 }
 
@@ -199,7 +200,7 @@ const initializeMap = () => {
 }
 
 const voltarParaLista = () => {
-  router.push('/pracas-pedagio')
+  router.push({ name: 'pracas-pedagio' })
 }
 
 const formatKm = (km: string) => {

@@ -211,7 +211,7 @@ const formatAddress = (motorista: Motorista) => {
 }
 
 const voltar = () => {
-  router.push('/transportes')
+  router.push({ name: 'transportes' })
 }
 
 onMounted(() => {
