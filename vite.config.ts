@@ -1,5 +1,4 @@
 import { fileURLToPath } from 'node:url'
-import { loadEnv } from 'vite'
 import laravel from 'laravel-vite-plugin'
 import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
 import vue from '@vitejs/plugin-vue'
@@ -14,19 +13,11 @@ import vuetify from 'vite-plugin-vuetify'
 import svgLoader from 'vite-svg-loader'
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
-
-  // Base URL para deploy em subdiretório (ex: /valepedagio/)
-  // Definir VITE_BASE_URL=/valepedagio/ no .env para produção
-  // Também aceita via variável de ambiente do sistema
-  const base = process.env.VITE_BASE_URL || env.VITE_BASE_URL || '/'
-
-  // Debug: mostra o base URL durante o build
-  console.log(`[vite.config] Building with base: "${base}"`)
-
+// IMPORTANTE: O laravel-vite-plugin automaticamente configura o 'base' usando ASSET_URL do .env
+// Para deploy em subdiretório, configure apenas ASSET_URL=/valepedagio no .env do servidor
+// NÃO defina 'base' manualmente aqui - isso quebra o comportamento automático do plugin
+export default defineConfig(() => {
   return {
-  base,
   plugins: [// Docs: https://github.com/posva/unplugin-vue-router
   // ℹ️ This plugin should be placed before vue plugin
     VueRouter({
