@@ -8,9 +8,19 @@ const isDevelopment = import.meta.env.DEV
 const isProduction = import.meta.env.PROD
 
 // Base URL da API Laravel
-// SEMPRE usa window.location.origin para evitar problemas de CORS
-// quando acessado via IP da rede (ex: 10.0.3.9:8002)
-export const API_BASE_URL = window.location.origin
+// Usa window.location.origin + pathname base para suportar subdiretórios
+// Ex: http://192.168.19.34/valepedagio -> API_BASE_URL = http://192.168.19.34/valepedagio
+const getBasePath = () => {
+  // Em produção com subdiretório, pega o primeiro segmento do path
+  // Ex: /valepedagio/transportes -> /valepedagio
+  const pathSegments = window.location.pathname.split('/').filter(Boolean)
+  if (pathSegments.length > 0 && pathSegments[0] !== 'api') {
+    return `${window.location.origin}/${pathSegments[0]}`
+  }
+  return window.location.origin
+}
+
+export const API_BASE_URL = getBasePath()
 
 // Endpoints principais
 export const API_ENDPOINTS = {
