@@ -19,8 +19,12 @@ function recursiveLayouts(route: RouteRecordRaw): RouteRecordRaw {
   return setupLayouts([route])[0]
 }
 
+// BASE_URL do Vite inclui /build/ (para assets), mas as rotas usam só o subdiretório
+// Ex: BASE_URL=/valepedagio/build/ -> Router base=/valepedagio/
+const routerBase = import.meta.env.BASE_URL.replace(/build\/?$/, '')
+
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHistory(routerBase),
   scrollBehavior(to) {
     if (to.hash)
       return { el: to.hash, behavior: 'smooth', top: 60 }
