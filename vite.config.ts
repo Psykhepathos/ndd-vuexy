@@ -19,7 +19,11 @@ export default defineConfig(({ mode }) => {
 
   // Base URL para deploy em subdiretório (ex: /valepedagio/)
   // Definir VITE_BASE_URL=/valepedagio/ no .env para produção
-  const base = env.VITE_BASE_URL || '/'
+  // Também aceita via variável de ambiente do sistema
+  const base = process.env.VITE_BASE_URL || env.VITE_BASE_URL || '/'
+
+  // Debug: mostra o base URL durante o build
+  console.log(`[vite.config] Building with base: "${base}"`)
 
   return {
   base,
