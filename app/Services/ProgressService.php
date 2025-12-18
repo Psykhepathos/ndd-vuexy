@@ -857,8 +857,11 @@ class ProgressService
                 $this->compileJavaConnector();
             }
 
-            // Construir comando Java com classpath correto para Windows
-            $classpath = ".;gson-2.8.9.jar;{$driverPath}";
+            // Construir comando Java com classpath correto para o sistema operacional
+            $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+            $separator = $isWindows ? ';' : ':';
+            $gsonPath = dirname($driverPath) . '/lib/gson-2.10.1.jar';
+            $classpath = ".{$separator}{$gsonPath}{$separator}{$driverPath}";
             $cmdParts = [
                 'java',
                 '-cp',
@@ -890,7 +893,9 @@ class ProgressService
             Log::debug('Executando comando Java JDBC', ['command' => $cmd]);
 
             // Executar comando e capturar saída - garantir diretório correto
-            $fullCmd = "cd /d \"{$javaPath}\" && {$cmd} 2>&1";
+            // Usar 'cd /d' no Windows e 'cd' no Linux
+            $cdCmd = $isWindows ? "cd /d \"{$javaPath}\"" : "cd \"{$javaPath}\"";
+            $fullCmd = "{$cdCmd} && {$cmd} 2>&1";
             Log::debug('Comando completo a ser executado', ['command' => $fullCmd]);
             $output = shell_exec($fullCmd);
             
@@ -940,16 +945,20 @@ class ProgressService
     private function compileJavaConnector(): void
     {
         $javaPath = storage_path('app/java');
-        $driverPath = 'c:/Progress/OpenEdge/java/openedge.jar';
-        
+        $driverPath = config('progress.driver_path');
+
         // Verificar se o arquivo Java existe
         if (!file_exists($javaPath . '/ProgressJDBCConnector.java')) {
             throw new Exception('Arquivo ProgressJDBCConnector.java não encontrado');
         }
 
-        // Construir comando de compilação
-        $classpath = "{$driverPath};gson-2.10.1.jar";
-        $compileCmd = "cd /d \"{$javaPath}\" && javac -cp \"{$classpath}\" ProgressJDBCConnector.java 2>&1";
+        // Construir comando de compilação - compatível com Windows e Linux
+        $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+        $separator = $isWindows ? ';' : ':';
+        $gsonPath = dirname($driverPath) . '/lib/gson-2.10.1.jar';
+        $classpath = "{$gsonPath}{$separator}{$driverPath}";
+        $cdCmd = $isWindows ? "cd /d \"{$javaPath}\"" : "cd \"{$javaPath}\"";
+        $compileCmd = "{$cdCmd} && javac -cp \"{$classpath}\" ProgressJDBCConnector.java 2>&1";
         
         Log::info('Compilando ProgressJDBCConnector.java', ['command' => $compileCmd]);
         
