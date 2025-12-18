@@ -137,8 +137,21 @@ export interface MunicipioRota {
   lon?: number
 }
 
+export interface PracaMatchAlternativo {
+  id: number
+  praca: string
+  rodovia: string
+  km: string
+  municipio: string
+  uf: string
+  lat: number
+  lon: number
+  concessionaria: string
+}
+
 export interface PracaPedagioVpo {
   codigo: string
+  cnp?: string  // CNP (Código Nacional da Praça) - OBRIGATÓRIO para emissão VPO
   nome: string
   rodovia: string
   km: number
@@ -147,12 +160,19 @@ export interface PracaPedagioVpo {
   uf?: string
   sentido?: string
   concessionaria?: string
+  localizacao?: string  // Campo retornado pelo NDD Cargo (descrição da localização)
   lat?: number
   lon?: number
   // Aliases para compatibilidade com diferentes formatos de resposta
   codigoPraca?: string
   nomePraca?: string
   valorPedagio?: number
+  // Campos para matches alternativos (quando há múltiplos possíveis matches)
+  match_incerto?: boolean
+  total_matches?: number
+  matches_alternativos?: PracaMatchAlternativo[]
+  antt_match?: PracaMatchAlternativo
+  coordenadas_fonte?: 'ndd_cargo' | 'antt_cache' | null
 }
 
 // Alias para uso simplificado

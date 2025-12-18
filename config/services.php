@@ -42,4 +42,29 @@ return [
         'protection_enabled' => env('GOOGLE_MAPS_PROTECTION_ENABLED', true),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Python Flask Service (PDF Generation + WhatsApp)
+    |--------------------------------------------------------------------------
+    */
+    'python_flask' => [
+        'url' => env('PYTHON_FLASK_URL'),  // Obrigatório se usar geração de PDF
+        'timeout' => env('PYTHON_FLASK_TIMEOUT', 30),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | OSRM Routing Servers (public, free)
+    |--------------------------------------------------------------------------
+    | Ordem de fallback para servidores OSRM gratuitos
+    */
+    'osrm' => [
+        'servers' => [
+            env('OSRM_SERVER_PRIMARY', 'https://router.project-osrm.org'),
+            env('OSRM_SERVER_SECONDARY', 'https://routing.openstreetmap.de/routed-car'),
+            env('OSRM_SERVER_FALLBACK', 'http://router.project-osrm.org'),
+        ],
+        'timeout' => env('OSRM_TIMEOUT', 15),
+    ],
+
 ];

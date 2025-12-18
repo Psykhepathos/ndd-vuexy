@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { API_BASE_URL, apiFetch } from '@/config/api'
 
 interface PacoteDetalhe {
   codpac: number
@@ -61,7 +62,7 @@ const fetchPacoteDetails = async () => {
   loading.value = true
   
   try {
-    const response = await fetch(`http://localhost:8002/api/pacotes/${pacoteId.value}`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/pacotes/${pacoteId.value}`, {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -94,7 +95,7 @@ const fetchItinerario = async () => {
       codPac: parseInt(pacoteId.value)
     }
 
-    const response = await fetch('http://localhost:8002/api/pacotes/itinerario', {
+    const response = await apiFetch(`${API_BASE_URL}/api/pacotes/itinerario`, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',

@@ -36,7 +36,7 @@ const router = useRouter()
       >
         <VCardItem class="py-3">
           <h6 class="text-base font-weight-medium">
-            Shortcuts
+            Atalhos
           </h6>
 
           <template #append>

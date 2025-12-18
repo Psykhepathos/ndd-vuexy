@@ -31,8 +31,8 @@ class ProgressController extends Controller
      *             @OA\Property(property="success", type="boolean", example=true),
      *             @OA\Property(property="message", type="string", example="Conexão Progress estabelecida com sucesso"),
      *             @OA\Property(property="data", type="object",
-     *                 @OA\Property(property="host", type="string", example="192.168.80.113"),
-     *                 @OA\Property(property="database", type="string", example="tambasa"),
+     *                 @OA\Property(property="host", type="string", example="progress.example.com"),
+     *                 @OA\Property(property="database", type="string", example="database"),
      *                 @OA\Property(property="timestamp", type="string", example="2024-12-01 15:30:00")
      *             )
      *         )

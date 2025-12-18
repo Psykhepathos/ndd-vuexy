@@ -65,15 +65,15 @@ return [
     | CNPJ da empresa e token de autenticação fornecidos pela NDD Cargo
     |
     | ⚠️ IMPORTANTE: Nunca commitar credenciais reais no repositório!
-    | Use variáveis de ambiente (.env)
+    | Use variáveis de ambiente (.env) - sem defaults por segurança
     |
     */
-    'cnpj_empresa' => env('NDD_CARGO_CNPJ', '17359233000188'), // Homologação
-    'token' => env('NDD_CARGO_TOKEN', '2342bbkjkh23423bn2j3n42a'), // Homologação
+    'cnpj_empresa' => env('NDD_CARGO_CNPJ'),
+    'token' => env('NDD_CARGO_TOKEN'),
 
     // Ponto Emissor (ptEmissor) - pode ser diferente do CNPJ empresa
     // No NDD Cargo, este é o "NomeERP" do ponto emissor cadastrado
-    'pt_emissor' => env('NDD_CARGO_PT_EMISSOR', '17359233000188'),
+    'pt_emissor' => env('NDD_CARGO_PT_EMISSOR'),
 
     /*
     |--------------------------------------------------------------------------

@@ -68,8 +68,9 @@ class OSRMController extends Controller
                 ], 400);
             }
 
-            // Construir URL do OSRM
-            $url = "https://router.project-osrm.org/route/v1/driving/{$coordinates}";
+            // Construir URL do OSRM (usa servidor configurado ou default)
+            $osrmServer = config('services.osrm.servers.0', 'https://router.project-osrm.org');
+            $url = "{$osrmServer}/route/v1/driving/{$coordinates}";
             $url .= "?overview=full&geometries=geojson";
 
             // NOTA: Coordinates são dados públicos (lat/lon) e não precisam sanitização para logging.

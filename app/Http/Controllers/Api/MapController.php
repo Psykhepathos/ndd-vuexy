@@ -59,7 +59,7 @@ class MapController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'error' => 'Validation failed',
+                'error' => 'Validação falhou',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -86,7 +86,7 @@ class MapController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'error' => 'Route calculation failed: ' . $e->getMessage()
+                'error' => 'Falha ao calcular rota: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -124,7 +124,7 @@ class MapController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'error' => 'Validation failed',
+                'error' => 'Validação falhou',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -159,7 +159,7 @@ class MapController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'error' => 'Geocoding failed: ' . $e->getMessage()
+                'error' => 'Falha no geocoding: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -203,7 +203,7 @@ class MapController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'error' => 'Validation failed',
+                'error' => 'Validação falhou',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -222,7 +222,7 @@ class MapController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'error' => 'Clustering failed: ' . $e->getMessage()
+                'error' => 'Falha no agrupamento: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -248,7 +248,7 @@ class MapController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'error' => 'Failed to get cache stats: ' . $e->getMessage()
+                'error' => 'Falha ao obter estatísticas do cache: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -265,14 +265,14 @@ class MapController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => "Cleared {$deleted} expired cache entries",
+                'message' => "{$deleted} entradas expiradas do cache foram limpas",
                 'deleted_count' => $deleted
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'error' => 'Failed to clear cache: ' . $e->getMessage()
+                'error' => 'Falha ao limpar cache: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -295,7 +295,7 @@ class MapController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'error' => 'Failed to get providers: ' . $e->getMessage()
+                'error' => 'Falha ao obter provedores: ' . $e->getMessage()
             ], 500);
         }
     }

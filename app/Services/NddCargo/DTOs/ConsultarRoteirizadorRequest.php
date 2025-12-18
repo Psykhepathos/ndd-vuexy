@@ -66,15 +66,27 @@ class ConsultarRoteirizadorRequest
             throw new \InvalidArgumentException('Pontos de parada não podem estar vazios');
         }
 
-        if (!isset($this->pontosParada['origem']) || !isset($this->pontosParada['destino'])) {
-            throw new \InvalidArgumentException('Pontos de parada devem conter origem e destino');
-        }
-
-        // Validar CEPs (8 dígitos)
-        foreach ($this->pontosParada as $cep) {
-            if (!preg_match('/^\d{8}$/', $cep)) {
-                throw new \InvalidArgumentException('CEP deve conter 8 dígitos');
+        // Aceita dois formatos:
+        // 1. ['origem' => 'CEP1', 'destino' => 'CEP2'] (simples)
+        // 2. ['origem' => 'CEP1', 'intermediarios' => ['CEP2', 'CEP3'], 'destino' => 'CEP4'] (completo)
+        if (isset($this->pontosParada['origem']) && isset($this->pontosParada['destino'])) {
+            // Formato estruturado - validar CEPs
+            if (!preg_match('/^\d{8}$/', $this->pontosParada['origem'])) {
+                throw new \InvalidArgumentException('CEP de origem deve conter 8 dígitos');
             }
+            if (!preg_match('/^\d{8}$/', $this->pontosParada['destino'])) {
+                throw new \InvalidArgumentException('CEP de destino deve conter 8 dígitos');
+            }
+            // Validar intermediários se existirem
+            if (isset($this->pontosParada['intermediarios']) && is_array($this->pontosParada['intermediarios'])) {
+                foreach ($this->pontosParada['intermediarios'] as $cep) {
+                    if (!preg_match('/^\d{8}$/', $cep)) {
+                        throw new \InvalidArgumentException('CEP intermediário deve conter 8 dígitos');
+                    }
+                }
+            }
+        } else {
+            throw new \InvalidArgumentException('Pontos de parada devem conter origem e destino');
         }
 
         // Validar tipo de rota padrão (1-3)
@@ -91,6 +103,24 @@ class ConsultarRoteirizadorRequest
         if ($this->tipoVeiculo < 1 || $this->tipoVeiculo > 4) {
             throw new \InvalidArgumentException('Tipo de veículo deve estar entre 1 e 4 (1=passeio, 2=caminhão, 3=ônibus, 4=caminhão trator)');
         }
+    }
+
+    /**
+     * Retorna os pontos de parada em formato de lista sequencial para o XML
+     *
+     * @return array Lista de CEPs na ordem: [origem, ...intermediarios, destino]
+     */
+    public function getPontosParadaSequencial(): array
+    {
+        $pontos = [$this->pontosParada['origem']];
+
+        if (isset($this->pontosParada['intermediarios']) && is_array($this->pontosParada['intermediarios'])) {
+            $pontos = array_merge($pontos, $this->pontosParada['intermediarios']);
+        }
+
+        $pontos[] = $this->pontosParada['destino'];
+
+        return $pontos;
     }
 
     /**

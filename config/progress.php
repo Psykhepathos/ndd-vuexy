@@ -11,13 +11,15 @@ return [
     |
     */
 
-    'host' => env('PROGRESS_HOST', '192.168.80.113'),
+    // Credenciais obrigatórias - definir no .env
+    'host' => env('PROGRESS_HOST'),
     'port' => env('PROGRESS_PORT', '13361'),
-    'database' => env('PROGRESS_DATABASE', 'tambasa'),
-    'username' => env('PROGRESS_USERNAME', 'sysprogress'),
-    'password' => env('PROGRESS_PASSWORD', 'sysprogress'),
+    'database' => env('PROGRESS_DATABASE'),
+    'username' => env('PROGRESS_USERNAME'),
+    'password' => env('PROGRESS_PASSWORD'),
 
-    'jdbc_url' => env('PROGRESS_JDBC_URL', 'jdbc:datadirect:openedge://192.168.80.113:13361;databaseName=tambasa;trustStore='),
-    'driver_path' => env('PROGRESS_DRIVER_PATH', 'c:/Progress/OpenEdge/java/openedge.jar'),
+    // JDBC URL - definir no .env
+    'jdbc_url' => env('PROGRESS_JDBC_URL'),
+    'driver_path' => env('PROGRESS_DRIVER_PATH'),
 
 ];

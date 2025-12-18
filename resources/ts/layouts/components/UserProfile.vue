@@ -27,12 +27,12 @@ const logout = async () => {
 
 const userProfileList = [
   { type: 'divider' },
-  { type: 'navItem', icon: 'tabler-user', title: 'Profile', to: { name: 'apps-user-view-id', params: { id: 21 } } },
-  { type: 'navItem', icon: 'tabler-settings', title: 'Settings', to: { name: 'pages-account-settings-tab', params: { tab: 'account' } } },
-  { type: 'navItem', icon: 'tabler-file-dollar', title: 'Billing Plan', to: { name: 'pages-account-settings-tab', params: { tab: 'billing-plans' } }, badgeProps: { color: 'error', content: '4' } },
+  { type: 'navItem', icon: 'tabler-user', title: 'Perfil', to: { name: 'apps-user-view-id', params: { id: 21 } } },
+  { type: 'navItem', icon: 'tabler-settings', title: 'Configurações', to: { name: 'pages-account-settings-tab', params: { tab: 'account' } } },
+  { type: 'navItem', icon: 'tabler-file-dollar', title: 'Plano de Cobrança', to: { name: 'pages-account-settings-tab', params: { tab: 'billing-plans' } }, badgeProps: { color: 'error', content: '4' } },
   { type: 'divider' },
-  { type: 'navItem', icon: 'tabler-currency-dollar', title: 'Pricing', to: { name: 'pages-pricing' } },
-  { type: 'navItem', icon: 'tabler-question-mark', title: 'FAQ', to: { name: 'pages-faq' } },
+  { type: 'navItem', icon: 'tabler-currency-dollar', title: 'Preços', to: { name: 'pages-pricing' } },
+  { type: 'navItem', icon: 'tabler-question-mark', title: 'Perguntas Frequentes', to: { name: 'pages-faq' } },
 ]
 </script>
 
@@ -151,7 +151,7 @@ const userProfileList = [
                 append-icon="tabler-logout"
                 @click="logout"
               >
-                Logout
+                Sair
               </VBtn>
             </div>
           </PerfectScrollbar>

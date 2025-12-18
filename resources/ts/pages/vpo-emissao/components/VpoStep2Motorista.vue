@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import type { VpoEmissaoFormData, MotoristaEmpresa } from '../types'
 import { CAMPOS_LABELS } from '../types'
+import { API_BASE_URL, apiFetch } from '@/config/api'
 
 // Props & Emits
 const props = defineProps<{
@@ -81,7 +82,7 @@ const carregarMotoristas = async () => {
   errorMessage.value = null
 
   try {
-    const response = await fetch(`http://localhost:8002/api/vpo/motoristas/${codtrn.value}`)
+    const response = await apiFetch(`${API_BASE_URL}/api/vpo/motoristas/${codtrn.value}`)
     const data = await response.json()
     console.log('API motoristas response:', data)
 
@@ -159,14 +160,13 @@ const salvarMotorista = async () => {
   }
 
   console.log('Payload a enviar:', payload)
-  console.log('URL:', `http://localhost:8002/api/vpo/motoristas/${codtrn.value}/${editingMotorista.value.codmot}`)
+  console.log('URL:', `${API_BASE_URL}/api/vpo/motoristas/${codtrn.value}/${editingMotorista.value.codmot}`)
 
   try {
-    const response = await fetch(
-      `http://localhost:8002/api/vpo/motoristas/${codtrn.value}/${editingMotorista.value.codmot}`,
+    const response = await apiFetch(
+      `${API_BASE_URL}/api/vpo/motoristas/${codtrn.value}/${editingMotorista.value.codmot}`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       }
     )

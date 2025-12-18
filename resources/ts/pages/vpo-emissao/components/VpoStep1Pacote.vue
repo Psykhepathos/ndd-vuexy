@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import type { VpoEmissaoFormData, PacoteVpo, TransportadorVpo } from '../types'
 import { isEmpresa } from '../types'
+import { API_BASE_URL, apiFetch } from '@/config/api'
 
 // Props & Emits
 const props = defineProps<{
@@ -52,8 +53,8 @@ const buscarPacote = async () => {
 
   try {
     // Buscar pacote pelo código
-    const response = await fetch(
-      `http://localhost:8002/api/pacotes/${codpacNumerico}`
+    const response = await apiFetch(
+      `${API_BASE_URL}/api/pacotes/${codpacNumerico}`
     )
     const data = await response.json()
 
@@ -71,9 +72,8 @@ const buscarPacote = async () => {
     }
 
     // Sincronizar transportador
-    const syncResponse = await fetch('http://localhost:8002/api/vpo/sync/transportador', {
+    const syncResponse = await apiFetch(`${API_BASE_URL}/api/vpo/sync/transportador`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         codtrn: pacote.codtrn,
         placa: pacote.placa || null,
@@ -99,12 +99,8 @@ const buscarPacote = async () => {
     }> = []
 
     try {
-      const itinerarioResponse = await fetch('http://localhost:8002/api/pacotes/itinerario', {
+      const itinerarioResponse = await apiFetch(`${API_BASE_URL}/api/pacotes/itinerario`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
         body: JSON.stringify({ codPac: pacote.codpac }),
       })
       const itinerarioData = await itinerarioResponse.json()

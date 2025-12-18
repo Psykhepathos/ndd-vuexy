@@ -39,7 +39,8 @@ class RoutingController extends Controller
      *
      * @example Frontend (Vue/TypeScript)
      * ```typescript
-     * const response = await fetch('http://localhost:8002/api/routing/route', {
+     * import { apiFetch, API_BASE_URL } from '@/config/api'
+     * const response = await apiFetch(`${API_BASE_URL}/api/routing/route`, {
      *   method: 'POST',
      *   body: JSON.stringify({
      *     start: [-46.63, -23.55], // [lng, lat] São Paulo
@@ -134,12 +135,12 @@ class RoutingController extends Controller
      */
     private function tryOSRM(array $start, array $end): ?array
     {
-        // Tentar diferentes instâncias do OSRM
-        $servers = [
+        // Tentar diferentes instâncias do OSRM (configuráveis via .env)
+        $servers = config('services.osrm.servers', [
             'https://router.project-osrm.org',
             'https://routing.openstreetmap.de/routed-car',
-            'http://router.project-osrm.org' // HTTP como fallback
-        ];
+            'http://router.project-osrm.org'
+        ]);
         
         foreach ($servers as $server) {
             try {

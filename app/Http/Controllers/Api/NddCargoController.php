@@ -44,8 +44,8 @@ class NddCargoController extends Controller
      *
      * Body:
      * {
-     *   "cnpj_empresa": "17359233000188",
-     *   "cnpj_contratante": "17359233000188",
+     *   "cnpj_empresa": "{NDD_CARGO_CNPJ}",
+     *   "cnpj_contratante": "{NDD_CARGO_CNPJ}",
      *   "categoria_pedagio": 7,
      *   "pontos_parada": {
      *     "origem": "01310100",
@@ -131,7 +131,7 @@ class NddCargoController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Erro interno ao processar requisição',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+                'error' => config('app.debug') ? $e->getMessage() : 'Erro interno do servidor'
             ], 500);
         }
     }
@@ -213,7 +213,7 @@ class NddCargoController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Erro interno ao processar requisição',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+                'error' => config('app.debug') ? $e->getMessage() : 'Erro interno do servidor'
             ], 500);
         }
     }
@@ -277,7 +277,7 @@ class NddCargoController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Erro interno ao processar requisição',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+                'error' => config('app.debug') ? $e->getMessage() : 'Erro interno do servidor'
             ], 500);
         }
     }
@@ -285,8 +285,11 @@ class NddCargoController extends Controller
     /**
      * Enriquece praças de pedágio com coordenadas da tabela ANTT
      *
+     * Retorna TODAS as praças similares encontradas no campo matches_alternativos
+     * para que o frontend possa exibir todas no mapa.
+     *
      * @param array $pracasNdd Array de praças vindas do NDD Cargo
-     * @return array Praças enriquecidas com lat/lon
+     * @return array Praças enriquecidas com lat/lon + matches_alternativos
      */
     private function enriquecerPracasComCoordenadas(array $pracasNdd): array
     {
@@ -304,37 +307,61 @@ class NddCargoController extends Controller
                 $pracaEnriquecida['lat'] = (float) $praca['latitude'];
                 $pracaEnriquecida['lon'] = (float) $praca['longitude'];
                 $pracaEnriquecida['coordenadas_fonte'] = 'ndd_cargo';
+                $pracaEnriquecida['matches_alternativos'] = [];
                 $pracasEnriquecidas[] = $pracaEnriquecida;
                 continue;
             }
 
-            // Buscar coordenadas na tabela pracas_pedagio
-            $pracaAntt = $this->buscarPracaAntt($praca);
+            // Buscar TODAS as praças similares na tabela pracas_pedagio
+            $pracasSimilares = $this->buscarPracasSimilares($praca);
 
-            if ($pracaAntt) {
-                $pracaEnriquecida['lat'] = (float) $pracaAntt->latitude;
-                $pracaEnriquecida['lon'] = (float) $pracaAntt->longitude;
+            if (!empty($pracasSimilares)) {
+                // Usar a primeira como coordenada principal
+                $pracaPrincipal = $pracasSimilares[0];
+                $pracaEnriquecida['lat'] = (float) $pracaPrincipal->latitude;
+                $pracaEnriquecida['lon'] = (float) $pracaPrincipal->longitude;
                 $pracaEnriquecida['coordenadas_fonte'] = 'antt_cache';
                 $pracaEnriquecida['antt_match'] = [
-                    'id' => $pracaAntt->id,
-                    'praca' => $pracaAntt->praca,
-                    'rodovia' => $pracaAntt->rodovia,
-                    'km' => $pracaAntt->km,
-                    'municipio' => $pracaAntt->municipio,
+                    'id' => $pracaPrincipal->id,
+                    'praca' => $pracaPrincipal->praca,
+                    'rodovia' => $pracaPrincipal->rodovia,
+                    'km' => $pracaPrincipal->km,
+                    'municipio' => $pracaPrincipal->municipio,
                 ];
+
+                // Adicionar TODAS as praças similares para exibição no mapa
+                $pracaEnriquecida['matches_alternativos'] = array_map(function ($p) {
+                    return [
+                        'id' => $p->id,
+                        'praca' => $p->praca,
+                        'rodovia' => $p->rodovia,
+                        'km' => $p->km,
+                        'municipio' => $p->municipio,
+                        'uf' => $p->uf,
+                        'lat' => (float) $p->latitude,
+                        'lon' => (float) $p->longitude,
+                        'concessionaria' => $p->concessionaria,
+                    ];
+                }, $pracasSimilares);
+
+                // Flag para indicar se o match é incerto (múltiplas opções)
+                // Usar cor diferente no mapa quando há mais de 1 match
+                $pracaEnriquecida['match_incerto'] = count($pracasSimilares) > 1;
+                $pracaEnriquecida['total_matches'] = count($pracasSimilares);
 
                 Log::info('Praça enriquecida com coordenadas', [
                     'ndd_nome' => $praca['nome'] ?? 'N/A',
                     'ndd_rodovia' => $praca['rodovia'] ?? 'N/A',
-                    'antt_praca' => $pracaAntt->praca,
-                    'lat' => $pracaAntt->latitude,
-                    'lon' => $pracaAntt->longitude,
+                    'antt_praca' => $pracaPrincipal->praca,
+                    'total_matches' => count($pracasSimilares),
+                    'match_incerto' => count($pracasSimilares) > 1,
                 ]);
             } else {
                 // Não encontrou match - deixa sem coordenadas
                 $pracaEnriquecida['lat'] = null;
                 $pracaEnriquecida['lon'] = null;
                 $pracaEnriquecida['coordenadas_fonte'] = null;
+                $pracaEnriquecida['matches_alternativos'] = [];
 
                 Log::warning('Praça sem coordenadas - match não encontrado', [
                     'ndd_nome' => $praca['nome'] ?? 'N/A',
@@ -347,6 +374,74 @@ class NddCargoController extends Controller
         }
 
         return $pracasEnriquecidas;
+    }
+
+    /**
+     * Busca TODAS as praças similares na tabela ANTT para exibição no mapa.
+     *
+     * Estratégia: Extrair a palavra PRINCIPAL (maior) do nome da praça NDD
+     * e buscar todas as praças que contenham essa palavra.
+     *
+     * Exemplo: "São Gonçalo de Abaeté" → palavra principal "Goncalo" ou "Abaete"
+     *          → retorna todas praças com "Goncalo" ou "Abaete" no nome/município
+     *
+     * @param array $pracaNdd Praça do NDD Cargo
+     * @return array Array de PracaPedagio models
+     */
+    private function buscarPracasSimilares(array $pracaNdd): array
+    {
+        $nome = $pracaNdd['nome'] ?? '';
+        $localizacao = $pracaNdd['localizacao'] ?? '';
+
+        // Extrair palavras-chave significativas do nome
+        $palavrasChave = $this->extrairPalavrasChave($nome);
+        $rodoviaNormalizada = $this->normalizarRodovia($localizacao);
+
+        if (empty($palavrasChave)) {
+            return [];
+        }
+
+        Log::debug('buscarPracasSimilares: Palavras-chave extraídas', [
+            'nome_original' => $nome,
+            'palavras_chave' => $palavrasChave,
+            'rodovia' => $rodoviaNormalizada,
+        ]);
+
+        // Buscar todas as praças que contenham QUALQUER uma das palavras-chave
+        // NOTA: As palavras já vêm sem acentos da função extrairPalavrasChave
+        $query = PracaPedagio::where(function ($q) use ($palavrasChave) {
+            foreach ($palavrasChave as $palavra) {
+                $palavraLower = strtolower($palavra);
+                // Match por nome da praça ou município
+                // Usamos LIKE direto pois os dados no banco podem ter ou não acentos
+                $q->orWhereRaw('LOWER(praca) LIKE ?', ['%' . $palavraLower . '%'])
+                  ->orWhereRaw('LOWER(municipio) LIKE ?', ['%' . $palavraLower . '%']);
+            }
+        })
+        ->whereNotNull('latitude')
+        ->whereNotNull('longitude')
+        ->where('latitude', '!=', 0)
+        ->where('longitude', '!=', 0);
+
+        // Ordenar: praças da mesma rodovia primeiro
+        if ($rodoviaNormalizada) {
+            $query->orderByRaw(
+                "CASE WHEN REPLACE(REPLACE(LOWER(rodovia), '-', ''), ' ', '') LIKE ? THEN 0 ELSE 1 END",
+                ['%' . strtolower($rodoviaNormalizada) . '%']
+            );
+        }
+
+        // Limitar a 15 resultados para mostrar várias opções no mapa
+        $pracas = $query->limit(15)->get()->all();
+
+        Log::debug('buscarPracasSimilares: Encontradas praças', [
+            'nome_buscado' => $nome,
+            'palavras_chave' => $palavrasChave,
+            'rodovia' => $rodoviaNormalizada,
+            'total_encontradas' => count($pracas),
+        ]);
+
+        return $pracas;
     }
 
     /**
@@ -365,6 +460,13 @@ class NddCargoController extends Controller
         $nomeNormalizado = $this->normalizarNomePraca($nome);
         $rodoviaNormalizada = $this->normalizarRodovia($rodovia);
 
+        Log::debug('Buscando praça ANTT', [
+            'nome_original' => $nome,
+            'nome_normalizado' => $nomeNormalizado,
+            'rodovia' => $rodoviaNormalizada,
+            'km' => $km
+        ]);
+
         // 1. Busca por nome exato
         $praca = PracaPedagio::where(function ($q) use ($nome, $nomeNormalizado) {
             $q->whereRaw('LOWER(praca) = ?', [strtolower($nome)])
@@ -375,39 +477,66 @@ class NddCargoController extends Controller
         ->first();
 
         if ($praca) {
+            Log::debug('Praça encontrada por nome exato', ['praca_id' => $praca->id]);
             return $praca;
         }
 
-        // 2. Busca por rodovia + km aproximado (±5km)
+        // 2. Busca por nome normalizado com LIKE (mais flexível)
+        if (strlen($nomeNormalizado) >= 3) {
+            $praca = PracaPedagio::where(function ($q) use ($nomeNormalizado) {
+                // Busca nome normalizado em qualquer parte
+                $q->whereRaw('LOWER(praca) LIKE ?', ['%' . strtolower($nomeNormalizado) . '%'])
+                  // Ou busca pelo município
+                  ->orWhereRaw('LOWER(municipio) LIKE ?', ['%' . strtolower($nomeNormalizado) . '%']);
+            })
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->first();
+
+            if ($praca) {
+                Log::debug('Praça encontrada por nome normalizado LIKE', ['praca_id' => $praca->id, 'nome_normalizado' => $nomeNormalizado]);
+                return $praca;
+            }
+        }
+
+        // 3. Busca por rodovia + km aproximado (±10km)
         if ($rodoviaNormalizada && $km !== null) {
             $praca = PracaPedagio::where(function ($q) use ($rodoviaNormalizada) {
                 $q->whereRaw('LOWER(rodovia) = ?', [strtolower($rodoviaNormalizada)])
                   ->orWhereRaw('LOWER(rodovia) LIKE ?', ['%' . strtolower($rodoviaNormalizada) . '%']);
             })
-            ->whereBetween('km', [$km - 5, $km + 5])
+            ->whereBetween('km', [$km - 10, $km + 10])
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->orderByRaw('ABS(km - ?)', [$km])
             ->first();
 
             if ($praca) {
+                Log::debug('Praça encontrada por rodovia + km', ['praca_id' => $praca->id]);
                 return $praca;
             }
         }
 
-        // 3. Busca por nome parcial (LIKE)
-        if (strlen($nomeNormalizado) >= 4) {
-            $praca = PracaPedagio::whereRaw('LOWER(praca) LIKE ?', ['%' . strtolower($nomeNormalizado) . '%'])
+        // 4. Busca por palavras-chave extraídas do nome
+        $palavrasChave = $this->extrairPalavrasChave($nome);
+        foreach ($palavrasChave as $palavra) {
+            if (strlen($palavra) >= 4) {
+                $praca = PracaPedagio::where(function ($q) use ($palavra) {
+                    $q->whereRaw('LOWER(praca) LIKE ?', ['%' . strtolower($palavra) . '%'])
+                      ->orWhereRaw('LOWER(municipio) LIKE ?', ['%' . strtolower($palavra) . '%']);
+                })
                 ->whereNotNull('latitude')
                 ->whereNotNull('longitude')
                 ->first();
 
-            if ($praca) {
-                return $praca;
+                if ($praca) {
+                    Log::debug('Praça encontrada por palavra-chave', ['praca_id' => $praca->id, 'palavra' => $palavra]);
+                    return $praca;
+                }
             }
         }
 
-        // 4. Busca por rodovia + nome parcial
+        // 5. Busca por rodovia + nome parcial
         if ($rodoviaNormalizada && strlen($nomeNormalizado) >= 3) {
             $praca = PracaPedagio::where(function ($q) use ($rodoviaNormalizada) {
                 $q->whereRaw('LOWER(rodovia) LIKE ?', ['%' . strtolower($rodoviaNormalizada) . '%']);
@@ -420,11 +549,12 @@ class NddCargoController extends Controller
             ->first();
 
             if ($praca) {
+                Log::debug('Praça encontrada por rodovia + nome parcial', ['praca_id' => $praca->id]);
                 return $praca;
             }
         }
 
-        // 5. Busca por concessionária + rodovia (última tentativa)
+        // 6. Busca por concessionária + rodovia (última tentativa)
         if ($concessionaria && $rodoviaNormalizada) {
             $praca = PracaPedagio::whereRaw('LOWER(concessionaria) LIKE ?', ['%' . strtolower($concessionaria) . '%'])
                 ->where(function ($q) use ($rodoviaNormalizada) {
@@ -435,11 +565,57 @@ class NddCargoController extends Controller
                 ->first();
 
             if ($praca) {
+                Log::debug('Praça encontrada por concessionária + rodovia', ['praca_id' => $praca->id]);
                 return $praca;
             }
         }
 
+        Log::warning('Praça não encontrada após todas as estratégias', [
+            'nome_original' => $nome,
+            'nome_normalizado' => $nomeNormalizado,
+            'palavras_chave' => $palavrasChave ?? []
+        ]);
+
         return null;
+    }
+
+    /**
+     * Extrai palavras-chave significativas do nome da praça
+     *
+     * IMPORTANTE: MANTÉM ACENTOS para busca no banco de dados,
+     * pois a tabela pracas_pedagio tem dados COM acentos e
+     * SQLite LOWER() não normaliza acentos.
+     *
+     * Exemplos:
+     * - "PP01 - Uberaba" → ["Uberaba"]
+     * - "P2 - Monte Alegre de Minas" → ["Monte", "Alegre", "Minas"]
+     * - "03 - Piracanjuba/Prof. Jamil" → ["Piracanjuba", "Prof", "Jamil"]
+     * - "São Gonçalo de Abaeté" → ["Gonçalo", "Abaeté"]
+     */
+    private function extrairPalavrasChave(string $nome): array
+    {
+        // Remove prefixos como PP01, P1, 01, etc.
+        $nome = preg_replace('/^(PP?\d+|P\d+|\d+)\s*[-–]\s*/i', '', $nome);
+
+        // NÃO remove acentos - os dados no banco têm acentos!
+        // E SQLite LOWER() não normaliza acentos
+
+        // Divide por separadores
+        $partes = preg_split('/[\s\/\-–]+/', $nome);
+
+        // Filtra palavras muito curtas ou preposições
+        // NOTA: Usando 4+ caracteres para evitar matches muito genéricos
+        $stopWords = ['de', 'da', 'do', 'das', 'dos', 'em', 'no', 'na', 'nos', 'nas', 'e', 'a', 'o', 'são', 'santa', 'santo', 'free', 'flow'];
+        $palavras = [];
+
+        foreach ($partes as $parte) {
+            $parte = trim($parte, ' .-–');
+            if (strlen($parte) >= 4 && !in_array(strtolower($parte), $stopWords)) {
+                $palavras[] = $parte;
+            }
+        }
+
+        return $palavras;
     }
 
     /**
@@ -447,9 +623,18 @@ class NddCargoController extends Controller
      */
     private function normalizarNomePraca(string $nome): string
     {
+        // Remove prefixos comuns do NDD Cargo: PP01 -, P1 -, 01 -, etc.
+        $nome = preg_replace('/^(PP?\d+|P\d+|\d+)\s*[-–]\s*/i', '', $nome);
+
+        // Remove prefixos de praça
         $nome = preg_replace('/^(praca|praça|prç|pc|pça)\s*/i', '', $nome);
+
+        // Remove numeração romana/arábica no final
         $nome = preg_replace('/\s+(I{1,3}|IV|V|VI{0,3}|\d+)\s*$/i', '', $nome);
+
+        // Normaliza espaços
         $nome = preg_replace('/\s+/', ' ', trim($nome));
+
         return $nome;
     }
 
@@ -486,7 +671,7 @@ class NddCargoController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Erro ao testar conexão',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+                'error' => config('app.debug') ? $e->getMessage() : 'Erro interno do servidor'
             ], 500);
         }
     }

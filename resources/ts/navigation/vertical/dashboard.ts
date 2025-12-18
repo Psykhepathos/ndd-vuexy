@@ -1,10 +1,10 @@
 export default [
   {
-    title: 'Dashboards',
+    title: 'Painéis',
     icon: { icon: 'tabler-smart-home' },
     children: [
       {
-        title: 'Analytics',
+        title: 'Análises',
         to: 'dashboards-analytics',
       },
       {
@@ -12,15 +12,15 @@ export default [
         to: 'dashboards-crm',
       },
       {
-        title: 'Ecommerce',
+        title: 'E-commerce',
         to: 'dashboards-ecommerce',
       },
       {
-        title: 'Academy',
+        title: 'Academia',
         to: 'dashboards-academy',
       },
       {
-        title: 'Logistics',
+        title: 'Logística',
         to: 'dashboards-logistics',
       },
     ],
@@ -28,21 +28,21 @@ export default [
     badgeClass: 'bg-error',
   },
   {
-    title: 'Front Pages',
+    title: 'Páginas',
     icon: { icon: 'tabler-files' },
     children: [
       {
-        title: 'Landing',
+        title: 'Página Inicial',
         to: 'front-pages-landing-page',
         target: '_blank',
       },
       {
-        title: 'Pricing',
+        title: 'Preços',
         to: 'front-pages-pricing',
         target: '_blank',
       },
       {
-        title: 'Payment',
+        title: 'Pagamento',
         to: 'front-pages-payment',
         target: '_blank',
       },
@@ -52,7 +52,7 @@ export default [
         target: '_blank',
       },
       {
-        title: 'Help Center',
+        title: 'Central de Ajuda',
         to: 'front-pages-help-center',
         target: '_blank',
       },

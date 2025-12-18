@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import type { VpoEmissaoFormData, CustoVpo, PracaPedagio } from '../types'
+import { API_BASE_URL, apiFetch } from '@/config/api'
 
 // Props & Emits
 const props = defineProps<{
@@ -185,7 +186,7 @@ const calcularCusto = async () => {
     const pontosParada = montarPontosParada()
 
     // Chamar API NDD Cargo - Roteirizador
-    const response = await fetch('http://localhost:8002/api/ndd-cargo/roteirizador', {
+    const response = await apiFetch(`${API_BASE_URL}/api/ndd-cargo/roteirizador`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -240,7 +241,7 @@ const aguardarResultadoRoteirizador = async (guid: string, tentativas = 0) => {
     // Aguardar 2 segundos entre consultas
     await new Promise(resolve => setTimeout(resolve, 2000))
 
-    const response = await fetch(`http://localhost:8002/api/ndd-cargo/resultado/${guid}`)
+    const response = await apiFetch(`${API_BASE_URL}/api/ndd-cargo/resultado/${guid}`)
     const data = await response.json()
 
     if (data.success && data.data) {
@@ -377,7 +378,7 @@ const emitirVpo = async () => {
     console.log('km_total:', dadosEmissao.km_total)
 
     // Chamar API de emissão VPO (NDD Cargo) com as praças de pedágio
-    const response = await fetch('http://localhost:8002/api/vpo/emissao/iniciar', {
+    const response = await apiFetch(`${API_BASE_URL}/api/vpo/emissao/iniciar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dadosEmissao),
@@ -435,7 +436,7 @@ const consultarResultadoEmissao = async () => {
   console.log(`Polling tentativa ${emissaoTentativas.value} para UUID: ${emissaoUuid.value}`)
 
   try {
-    const response = await fetch(`http://localhost:8002/api/vpo/emissao/${emissaoUuid.value}`)
+    const response = await apiFetch(`${API_BASE_URL}/api/vpo/emissao/${emissaoUuid.value}`)
     const data = await response.json()
 
     console.log('Resposta polling:', data)
@@ -537,7 +538,7 @@ const salvarCamposFaltantes = async () => {
     console.log('Salvando campos faltantes:', payload)
 
     const response = await fetch(
-      `http://localhost:8002/api/vpo/transportadores/${transportador.value.codtrn}`,
+      `${API_BASE_URL}/api/vpo/transportadores/${transportador.value.codtrn}`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

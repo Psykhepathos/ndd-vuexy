@@ -87,10 +87,10 @@ const authThemeMask = useGenerateImageVariant(authV2MaskLight, authV2MaskDark)
       >
         <VCardText>
           <h4 class="text-h4 mb-1">
-            Welcome to <span class="text-capitalize">{{ themeConfig.app.title }}</span>! 👋🏻
+            Bem-vindo ao <span class="text-capitalize">{{ themeConfig.app.title }}</span>! 👋🏻
           </h4>
           <p class="mb-0">
-            Please sign-in to your account and start the adventure
+            Entre na sua conta e comece a usar o sistema
           </p>
         </VCardText>
         <VCardText>
@@ -101,9 +101,9 @@ const authThemeMask = useGenerateImageVariant(authV2MaskLight, authV2MaskDark)
                 <AppTextField
                   v-model="form.email"
                   autofocus
-                  label="Email or Username"
+                  label="E-mail ou Usuário"
                   type="email"
-                  placeholder="johndoe@email.com"
+                  placeholder="usuario@email.com"
                 />
               </VCol>
 
@@ -111,7 +111,7 @@ const authThemeMask = useGenerateImageVariant(authV2MaskLight, authV2MaskDark)
               <VCol cols="12">
                 <AppTextField
                   v-model="form.password"
-                  label="Password"
+                  label="Senha"
                   placeholder="············"
                   :type="isPasswordVisible ? 'text' : 'password'"
                   autocomplete="password"
@@ -122,13 +122,13 @@ const authThemeMask = useGenerateImageVariant(authV2MaskLight, authV2MaskDark)
                 <div class="d-flex align-center flex-wrap justify-space-between my-6">
                   <VCheckbox
                     v-model="form.remember"
-                    label="Remember me"
+                    label="Lembrar de mim"
                   />
                   <RouterLink
                     class="text-primary"
                     :to="{ name: 'pages-authentication-forgot-password-v2' }"
                   >
-                    Forgot Password?
+                    Esqueceu a senha?
                   </RouterLink>
                 </div>
 
@@ -136,7 +136,7 @@ const authThemeMask = useGenerateImageVariant(authV2MaskLight, authV2MaskDark)
                   block
                   type="submit"
                 >
-                  Login
+                  Entrar
                 </VBtn>
               </VCol>
 
@@ -146,13 +146,13 @@ const authThemeMask = useGenerateImageVariant(authV2MaskLight, authV2MaskDark)
                 class="text-body-1 text-center"
               >
                 <span class="d-inline-block">
-                  New on our platform?
+                  Novo na plataforma?
                 </span>
                 <RouterLink
                   class="text-primary ms-1 d-inline-block text-body-1"
                   :to="{ name: 'pages-authentication-register-v2' }"
                 >
-                  Create an account
+                  Criar conta
                 </RouterLink>
               </VCol>
 
@@ -161,7 +161,7 @@ const authThemeMask = useGenerateImageVariant(authV2MaskLight, authV2MaskDark)
                 class="d-flex align-center"
               >
                 <VDivider />
-                <span class="mx-4">or</span>
+                <span class="mx-4">ou</span>
                 <VDivider />
               </VCol>
 

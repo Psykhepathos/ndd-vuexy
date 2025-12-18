@@ -12,23 +12,22 @@ use SoapFault;
  *
  * Baseado em SemParar/Connect.cls e Rota.cls do Progress
  *
- * Credenciais:
- * - CNPJ: 2024209702
- * - Usuário: CORPORATIVO
- * - Senha: Tambasa20
- *
- * WSDL: https://app.viafacil.com.br/wsvp/ValePedagio?wsdl
+ * Credenciais configuradas via .env:
+ * - SEMPARAR_WSDL_URL
+ * - SEMPARAR_CNPJ
+ * - SEMPARAR_USER
+ * - SEMPARAR_PASSWORD
  */
 class SemPararSoapService
 {
     private ?SoapClient $client = null;
     private ?string $sessionToken = null;
 
-    // Configurações do ambiente
-    private string $wsdl = 'https://app.viafacil.com.br/wsvp/ValePedagio?wsdl';
-    private string $cnpj = '2024209702';
-    private string $usuario = 'CORPORATIVO';
-    private string $senha = 'Tambasa20';
+    // Configurações do ambiente (carregadas do config)
+    private string $wsdl;
+    private string $cnpj;
+    private string $usuario;
+    private string $senha;
 
     // DEBUG MODE - Salva XMLs e loga tudo
     private bool $debugMode = true;
@@ -55,11 +54,14 @@ class SemPararSoapService
     }
 
     /**
-     * Construtor
+     * Construtor - carrega configurações do config/semparar.php
      */
     public function __construct()
     {
-        // Configurações do SoapClient
+        $this->wsdl = config('semparar.wsdl_url');
+        $this->cnpj = config('semparar.cnpj');
+        $this->usuario = config('semparar.user');
+        $this->senha = config('semparar.password');
     }
 
     /**

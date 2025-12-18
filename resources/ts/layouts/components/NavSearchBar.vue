@@ -30,38 +30,38 @@ const isLoading = ref(false)
 
 const suggestionGroups: SuggestionGroup[] = [
   {
-    title: 'Popular Searches',
+    title: 'Pesquisas Populares',
     content: [
-      { icon: 'tabler-chart-bar', title: 'Analytics', url: { name: 'dashboards-analytics' } },
+      { icon: 'tabler-chart-bar', title: 'Análises', url: { name: 'dashboards-analytics' } },
       { icon: 'tabler-chart-donut-3', title: 'CRM', url: { name: 'dashboards-crm' } },
-      { icon: 'tabler-shopping-cart', title: 'eCommerce', url: { name: 'dashboards-ecommerce' } },
-      { icon: 'tabler-truck', title: 'Logistics', url: { name: 'dashboards-logistics' } },
+      { icon: 'tabler-shopping-cart', title: 'E-commerce', url: { name: 'dashboards-ecommerce' } },
+      { icon: 'tabler-truck', title: 'Logística', url: { name: 'dashboards-logistics' } },
     ],
   },
   {
-    title: 'Apps & Pages',
+    title: 'Apps e Páginas',
     content: [
-      { icon: 'tabler-calendar', title: 'Calendar', url: { name: 'apps-calendar' } },
-      { icon: 'tabler-lock', title: 'Roles & Permissions', url: { name: 'apps-roles' } },
-      { icon: 'tabler-settings', title: 'Account Settings', url: { name: 'pages-account-settings-tab', params: { tab: 'account' } } },
-      { icon: 'tabler-copy', title: 'Dialog Examples', url: { name: 'pages-dialog-examples' } },
+      { icon: 'tabler-calendar', title: 'Calendário', url: { name: 'apps-calendar' } },
+      { icon: 'tabler-lock', title: 'Funções e Permissões', url: { name: 'apps-roles' } },
+      { icon: 'tabler-settings', title: 'Configurações da Conta', url: { name: 'pages-account-settings-tab', params: { tab: 'account' } } },
+      { icon: 'tabler-copy', title: 'Exemplos de Diálogo', url: { name: 'pages-dialog-examples' } },
     ],
   },
   {
-    title: 'User Interface',
+    title: 'Interface do Usuário',
     content: [
-      { icon: 'tabler-typography', title: 'Typography', url: { name: 'pages-typography' } },
-      { icon: 'tabler-menu-2', title: 'Accordion', url: { name: 'components-expansion-panel' } },
-      { icon: 'tabler-info-triangle', title: 'Alert', url: { name: 'components-alert' } },
+      { icon: 'tabler-typography', title: 'Tipografia', url: { name: 'pages-typography' } },
+      { icon: 'tabler-menu-2', title: 'Acordeão', url: { name: 'components-expansion-panel' } },
+      { icon: 'tabler-info-triangle', title: 'Alerta', url: { name: 'components-alert' } },
       { icon: 'tabler-checkbox', title: 'Cards', url: { name: 'pages-cards-card-basic' } },
     ],
   },
   {
-    title: 'Forms & Tables',
+    title: 'Formulários e Tabelas',
     content: [
       { icon: 'tabler-circle-dot', title: 'Radio', url: { name: 'forms-radio' } },
-      { icon: 'tabler-file-invoice', title: 'Form Layouts', url: { name: 'forms-form-layouts' } },
-      { icon: 'tabler-table', title: 'Table', url: { name: 'tables-data-table' } },
+      { icon: 'tabler-file-invoice', title: 'Layouts de Formulário', url: { name: 'forms-form-layouts' } },
+      { icon: 'tabler-table', title: 'Tabela', url: { name: 'tables-data-table' } },
       { icon: 'tabler-edit', title: 'Editor', url: { name: 'forms-editors' } },
     ],
   },
@@ -70,7 +70,7 @@ const suggestionGroups: SuggestionGroup[] = [
 // 👉 No Data suggestion
 const noDataSuggestions: Suggestion[] = [
   {
-    title: 'Analytics',
+    title: 'Análises',
     icon: 'tabler-chart-bar',
     url: { name: 'dashboards-analytics' },
   },
@@ -80,7 +80,7 @@ const noDataSuggestions: Suggestion[] = [
     url: { name: 'dashboards-crm' },
   },
   {
-    title: 'eCommerce',
+    title: 'E-commerce',
     icon: 'tabler-shopping-cart',
     url: { name: 'dashboards-ecommerce' },
   },
@@ -138,7 +138,7 @@ const LazyAppBarSearch = defineAsyncComponent(() => import('@core/components/App
       class="d-none d-md-flex align-center text-disabled ms-2"
       @click="Shepherd.activeTour?.cancel()"
     >
-      <span class="me-2">Search</span>
+      <span class="me-2">Pesquisar</span>
       <span class="meta-key">&#8984;K</span>
     </span>
   </div>
@@ -191,7 +191,7 @@ const LazyAppBarSearch = defineAsyncComponent(() => import('@core/components/App
     <!-- no data suggestion -->
     <template #noDataSuggestion>
       <div class="mt-9">
-        <span class="d-flex justify-center text-disabled mb-2">Try searching for</span>
+        <span class="d-flex justify-center text-disabled mb-2">Tente pesquisar por</span>
         <h6
           v-for="suggestion in noDataSuggestions"
           :key="suggestion.title"

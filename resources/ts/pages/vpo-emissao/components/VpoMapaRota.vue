@@ -14,10 +14,12 @@ interface VpoMapMarker {
   id: string
   lat: number
   lon: number
-  tipo: 'municipio' | 'pedagio' | 'origem' | 'destino' | 'entrega_inicio' | 'entrega_fim'
+  tipo: 'municipio' | 'pedagio' | 'pedagio_incerto' | 'pedagio_alternativo' | 'origem' | 'destino' | 'entrega_inicio' | 'entrega_fim'
   label: string
   sequencia?: number
   popup?: string
+  matchIncerto?: boolean
+  totalMatches?: number
 }
 
 // Debounce helper
@@ -73,9 +75,13 @@ const VPO_COLORS = {
   municipio: '#7C3AED',
   municipioSecondary: '#A78BFA',
 
-  // Praças de pedágio - Verde
+  // Praças de pedágio - Verde (match único/certo)
   pedagio: '#10B981',
   pedagioSecondary: '#34D399',
+
+  // Praças de pedágio - Laranja (match incerto/múltiplos)
+  pedagioIncerto: '#F97316',
+  pedagioIncertoSecondary: '#FB923C',
 
   // Rota desenhada - Roxo
   route: '#7C3AED',
@@ -226,9 +232,61 @@ const atualizarMapa = async () => {
     })
 
     // === 3. PRAÇAS DE PEDÁGIO ===
+    // Agora exibe TODOS os matches alternativos para visualização
     const pracas = props.formData.rota.pracas || []
-    pracas.forEach((praca, index) => {
-      if (praca.lat && praca.lon) {
+    console.log('🗺️ VpoMapaRota: Processando praças', {
+      totalPracas: pracas.length,
+      pracasComMatchIncerto: pracas.filter((p: any) => p.match_incerto).length,
+      pracasComAlternativos: pracas.filter((p: any) => (p.matches_alternativos?.length || 0) > 1).length,
+    })
+
+    pracas.forEach((praca: any, index) => {
+      const matchIncerto = praca.match_incerto === true
+      const totalMatches = praca.total_matches || 1
+      const matchesAlternativos = praca.matches_alternativos || []
+
+      // Debug: log cada praça para ver os dados
+      console.log(`🗺️ Praça ${index + 1}:`, {
+        nome: praca.nome,
+        matchIncerto,
+        totalMatches,
+        matchesAlternativosCount: matchesAlternativos.length,
+        lat: praca.lat,
+        lon: praca.lon,
+      })
+
+      // Se tem matches alternativos, exibir TODOS no mapa
+      if (matchesAlternativos.length > 0) {
+        matchesAlternativos.forEach((match: any, matchIndex: number) => {
+          if (match.lat && match.lon) {
+            const isPrimeiro = matchIndex === 0
+            const corPraca = matchIncerto ? VPO_COLORS.pedagioIncerto : VPO_COLORS.pedagio
+
+            markers.push({
+              id: `pedagio-${index}-match-${matchIndex}`,
+              lat: match.lat,
+              lon: match.lon,
+              tipo: matchIncerto ? 'pedagio_incerto' : 'pedagio',
+              label: match.praca || praca.nome || 'Pedágio',
+              matchIncerto: matchIncerto,
+              totalMatches: totalMatches,
+              popup: `<div style="min-width: 180px;">` +
+                     `<strong style="color: ${corPraca};">` +
+                     `${matchIncerto ? '⚠️' : '🚧'} ${isPrimeiro ? 'Pedágio' : 'Match Alternativo'}</strong>` +
+                     `${matchIncerto ? `<br><span style="color: ${VPO_COLORS.warning}; font-size: 11px;">` +
+                     `(${totalMatches} possíveis matches)</span>` : ''}<br>` +
+                     `<strong>NDD: ${praca.nome || 'N/A'}</strong><br>` +
+                     `<strong>ANTT: ${match.praca || 'N/A'}</strong><br>` +
+                     `${match.rodovia || ''} ${match.km ? `km ${match.km}` : ''}<br>` +
+                     `${match.municipio || ''} ${match.uf ? `- ${match.uf}` : ''}<br>` +
+                     `<span style="color: ${corPraca}; font-weight: bold;">` +
+                     `R$ ${(praca.valor || praca.valorPedagio || 0).toFixed(2)}</span>` +
+                     `</div>`
+            })
+          }
+        })
+      } else if (praca.lat && praca.lon) {
+        // Fallback: se não tem matches_alternativos, usar coordenadas diretas
         markers.push({
           id: `pedagio-${praca.codigo || praca.codigoPraca || index}`,
           lat: praca.lat,
@@ -248,6 +306,17 @@ const atualizarMapa = async () => {
     })
 
     // === 4. RENDERIZAR MARCADORES ===
+    const markersPorTipo = {
+      municipio: markers.filter(m => m.tipo === 'municipio' || m.tipo === 'origem' || m.tipo === 'destino').length,
+      pedagio: markers.filter(m => m.tipo === 'pedagio').length,
+      pedagioIncerto: markers.filter(m => m.tipo === 'pedagio_incerto').length,
+      entrega: markers.filter(m => m.tipo.startsWith('entrega')).length,
+    }
+    console.log('🗺️ VpoMapaRota: Markers a renderizar', {
+      total: markers.length,
+      porTipo: markersPorTipo,
+    })
+
     markers.forEach((marker) => {
       const icon = criarIconeCustomizado(marker)
       const leafletMarker = L.marker([marker.lat, marker.lon], { icon })
@@ -332,6 +401,19 @@ const criarIconeCustomizado = (marker: VpoMapMarker): L.DivIcon => {
       size = 28
       break
 
+    case 'pedagio_incerto':
+      bgColor = VPO_COLORS.pedagioIncerto
+      textColor = 'white'
+      size = 28
+      borderColor = '#FFF'
+      break
+
+    case 'pedagio_alternativo':
+      bgColor = VPO_COLORS.pedagioIncertoSecondary
+      textColor = 'white'
+      size = 24
+      break
+
     case 'entrega_inicio':
       bgColor = '#22C55E' // Green for first delivery
       size = 34
@@ -349,6 +431,12 @@ const criarIconeCustomizado = (marker: VpoMapMarker): L.DivIcon => {
   switch (marker.tipo) {
     case 'pedagio':
       displayText = '₱'
+      break
+    case 'pedagio_incerto':
+      displayText = '?'
+      break
+    case 'pedagio_alternativo':
+      displayText = '•'
       break
     case 'entrega_inicio':
       displayText = '📦'
@@ -717,6 +805,15 @@ defineExpose({
             >₱</div>
             <span class="text-caption">Pedágios</span>
           </div>
+
+          <!-- Pedágio Incerto -->
+          <div class="d-flex align-center gap-1">
+            <div
+              class="legend-marker"
+              :style="{ background: VPO_COLORS.pedagioIncerto }"
+            >?</div>
+            <span class="text-caption">Incerto</span>
+          </div>
         </div>
       </VCardText>
     </VCard>
@@ -843,6 +940,12 @@ defineExpose({
   .legend-card {
     bottom: 8px;
   }
+}
+
+/* Custom marker - remover estilo padrão do Leaflet DivIcon */
+:deep(.vpo-custom-marker) {
+  background: transparent !important;
+  border: none !important;
 }
 
 /* Custom marker hover effect */

@@ -104,9 +104,9 @@ class SemPararSoapClient
      * Based on Connect.cls::GET() (line 84-97)
      * Progress code:
      *   RUN VALUE("autenticarUsuario") IN hPorta(
-     *     INPUT "2024209702",
-     *     INPUT "CORPORATIVO",
-     *     INPUT "Tambasa20",
+     *     INPUT {SEMPARAR_CNPJ},
+     *     INPUT {SEMPARAR_USER},
+     *     INPUT {SEMPARAR_PASSWORD},
      *     OUTPUT xml
      *   )
      *

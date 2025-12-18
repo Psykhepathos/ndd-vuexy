@@ -836,10 +836,16 @@ class ProgressService
         try {
             $javaPath = storage_path('app/java');
             // CORREÇÃO BUG #74: Usar config() em vez de env() no runtime
-            $driverPath = config('progress.driver_path', 'c:/Progress/OpenEdge/java/openedge.jar');
-            $jdbcUrl = config('progress.jdbc_url', 'jdbc:datadirect:openedge://192.168.80.113:13361;databaseName=tambasa;trustStore=');
-            $username = config('progress.username', 'sysprogress');
-            $password = config('progress.password', 'sysprogress');
+            // Valores obrigatórios - devem estar definidos no .env
+            $driverPath = config('progress.driver_path');
+            $jdbcUrl = config('progress.jdbc_url');
+            $username = config('progress.username');
+            $password = config('progress.password');
+
+            // Validar configurações obrigatórias
+            if (empty($driverPath) || empty($jdbcUrl) || empty($username) || empty($password)) {
+                throw new Exception("Configurações Progress incompletas. Verifique PROGRESS_* no .env");
+            }
 
             // Verificar se os arquivos necessários existem
             if (!file_exists($driverPath)) {
@@ -1481,13 +1487,16 @@ class ProgressService
 
             // Inserir rota principal
             // IMPORTANTE: SQL single-line (Progress JDBC não gosta de quebras de linha)
-            $userName = auth()->user()?->name ?? 'system';
+            // NOTA: Coluna resAtu tem limite de 8 caracteres no Progress
+            $userName = substr(auth()->user()?->name ?? 'system', 0, 8);
             $insertRotaSql = "INSERT INTO PUB.semPararRot (sPararRotID, desSPararRot, tempoViagem, flgCD, flgRetorno, datAtu, resAtu) VALUES (" . $nextId . ", " . $this->escapeSqlString($data['nome']) . ", " . intval($data['tempo_viagem'] ?? 5) . ", " . ($data['flg_cd'] ? '1' : '0') . ", " . ($data['flg_retorno'] ? '1' : '0') . ", '" . date('Y-m-d') . "', " . $this->escapeSqlString($userName) . ")";
 
             $insertResult = $this->executeUpdate($insertRotaSql);
 
             if (!$insertResult['success']) {
-                throw new Exception('Erro ao inserir rota principal');
+                $errorMsg = $insertResult['error'] ?? 'Erro desconhecido';
+                Log::error('Falha no INSERT da rota SemParar', ['error' => $errorMsg, 'sql' => $insertRotaSql]);
+                throw new Exception('Erro ao inserir rota principal: ' . $errorMsg);
             }
 
             // Inserir municípios se fornecidos
@@ -1534,13 +1543,16 @@ class ProgressService
             Log::info('Atualizando rota SemParar', ['rota_id' => $rotaId, 'data' => $data]);
 
             // Atualizar rota principal (single line for Progress DB)
-            $userName = auth()->user()?->name ?? 'system';
+            // NOTA: Coluna resAtu tem limite de 8 caracteres no Progress
+            $userName = substr(auth()->user()?->name ?? 'system', 0, 8);
             $updateRotaSql = "UPDATE PUB.semPararRot SET desSPararRot = " . $this->escapeSqlString($data['nome']) . ", tempoViagem = " . intval($data['tempo_viagem'] ?? 5) . ", flgCD = " . ($data['flg_cd'] ? '1' : '0') . ", flgRetorno = " . ($data['flg_retorno'] ? '1' : '0') . ", datAtu = '" . date('Y-m-d') . "', resAtu = " . $this->escapeSqlString($userName) . " WHERE sPararRotID = " . intval($rotaId);
 
             $updateResult = $this->executeUpdate($updateRotaSql);
 
             if (!$updateResult['success']) {
-                throw new Exception('Erro ao atualizar rota principal');
+                $errorMsg = $updateResult['error'] ?? 'Erro desconhecido';
+                Log::error('Falha no UPDATE da rota SemParar', ['error' => $errorMsg, 'sql' => $updateRotaSql]);
+                throw new Exception('Erro ao atualizar rota principal: ' . $errorMsg);
             }
 
             // Remover municípios existentes

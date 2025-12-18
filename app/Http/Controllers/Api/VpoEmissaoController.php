@@ -9,6 +9,7 @@ use App\Models\VpoEmissao;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Controller para emissão de Vale Pedágio Obrigatório (VPO) via NDD Cargo
@@ -51,6 +52,16 @@ class VpoEmissaoController extends Controller
             ], 422);
         }
 
+        // Log dos dados recebidos do frontend para debug
+        Log::info('VpoEmissaoController: Dados recebidos do frontend', [
+            'codpac' => $request->codpac,
+            'rota_id' => $request->rota_id,
+            'pracas_pedagio_count' => is_array($request->input('pracas_pedagio')) ? count($request->input('pracas_pedagio')) : 0,
+            'pracas_pedagio_sample' => array_slice($request->input('pracas_pedagio', []), 0, 2),
+            'valor_total' => $request->input('valor_total'),
+            'km_total' => $request->input('km_total'),
+        ]);
+
         $result = $this->emissaoService->iniciarEmissao([
             'codpac' => $request->codpac,
             'rota_id' => $request->rota_id,
@@ -58,6 +69,16 @@ class VpoEmissaoController extends Controller
             'usuario_id' => auth()->id() ?? null,
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
+            // Dados calculados no frontend (Step 4) - praças de pedágio, custo e distância
+            'pracas_pedagio' => $request->input('pracas_pedagio', []),
+            'valor_total' => $request->input('valor_total', 0),
+            'km_total' => $request->input('km_total', 0),
+            // Dados adicionais
+            'codmot' => $request->input('codmot'),
+            'placa' => $request->input('placa'),
+            'eixos' => $request->input('eixos'),
+            'data_inicio' => $request->input('data_inicio'),
+            'data_fim' => $request->input('data_fim'),
         ]);
 
         if (!$result['success']) {

@@ -49,7 +49,7 @@ class SemPararController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Connection test failed',
+                'message' => 'Falha no teste de conexão',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -76,13 +76,13 @@ class SemPararController extends Controller
 
             return response()->json([
                 'success' => $result['success'],
-                'message' => $result['mensagem'] ?? 'Status retrieved',
+                'message' => $result['mensagem'] ?? 'Status obtido',
                 'data' => $result
             ], $result['success'] ? 200 : 400);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Vehicle status verification failed',
+                'message' => 'Falha ao verificar status do veículo',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -100,7 +100,7 @@ class SemPararController extends Controller
         if (!config('app.debug')) {
             return response()->json([
                 'success' => false,
-                'message' => 'Debug endpoints are disabled in production'
+                'message' => 'Endpoints de debug desabilitados em produção'
             ], 403);
         }
 
@@ -126,7 +126,7 @@ class SemPararController extends Controller
         if (!config('app.debug')) {
             return response()->json([
                 'success' => false,
-                'message' => 'Debug endpoints are disabled in production'
+                'message' => 'Endpoints de debug desabilitados em produção'
             ], 403);
         }
 
@@ -134,7 +134,7 @@ class SemPararController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Token cache cleared successfully'
+            'message' => 'Cache do token limpo com sucesso'
         ]);
     }
 

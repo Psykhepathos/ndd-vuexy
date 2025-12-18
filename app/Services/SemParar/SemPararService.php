@@ -687,7 +687,7 @@ class SemPararService
      *
      * Fluxo:
      * 1. Chama SOAP obterReciboViagem() para pegar dados da viagem
-     * 2. Envia para serviço Node.js (192.168.19.35:5001/gerar-vale-pedagio)
+     * 2. Envia para serviço Python Flask (PYTHON_FLASK_URL/gerar-vale-pedagio)
      * 3. Serviço gera PDF e envia por WhatsApp/Email
      *
      * Progress code:
@@ -696,13 +696,13 @@ class SemPararService
      *   paiOjson:Add("telefone", formataCelular(codtrn)).
      *   paiOjson:Add("email", email).
      *   paiOjson:add("flgImprime", flgImprime).
-     *   POST http://192.168.19.35:5001/gerar-vale-pedagio
+     *   POST {PYTHON_FLASK_URL}/gerar-vale-pedagio
      *
      * @param string $codViagem Trip code
      * @param string $telefone Phone number in format 5531988892076 (country+ddd+number)
      * @param string $email Email address
      * @param bool $flgImprime Flag to print/display
-     * @return array Result with success status and message from Node.js service
+     * @return array Result with success status and message from Python Flask service
      * @throws Exception if SOAP or HTTP call fails
      */
     public function gerarRecibo(
@@ -760,7 +760,7 @@ class SemPararService
             // SEMPRE usar email padrão para evitar problemas SMTP
             // WhatsApp é o principal (sempre funciona), email é secundário
             $originalEmail = $email;
-            $email = 'naoresponda@tambasa.com.br';
+            $email = config('mail.noreply_address', 'naoresponda@tambasa.com.br');
 
             if (!empty($originalEmail)) {
                 Log::debug('[SemParar] Using default email (SMTP unreliable)', [
@@ -780,20 +780,26 @@ class SemPararService
                 'flgImprime' => $flgImprime
             ];
 
+            $pythonFlaskUrl = config('services.python_flask.url');
+            if (empty($pythonFlaskUrl)) {
+                throw new \Exception('PYTHON_FLASK_URL não configurado no .env');
+            }
+            $pdfEndpoint = $pythonFlaskUrl . '/gerar-vale-pedagio';
+
             Log::debug('[SemParar] Calling Python Flask PDF service', [
-                'url' => 'http://192.168.19.35:5001/gerar-vale-pedagio',
+                'url' => $pdfEndpoint,
                 'telefone' => $telefone,
                 'has_email' => !empty($email),
                 'pracas_count' => count($pracasArray)
             ]);
 
-            // Step 3: Call Node.js service to generate and send PDF
+            // Step 3: Call Python Flask service to generate and send PDF
             $client = new \GuzzleHttp\Client([
                 'timeout' => 30,
                 'connect_timeout' => 10
             ]);
 
-            $response = $client->post('http://192.168.19.35:5001/gerar-vale-pedagio', [
+            $response = $client->post($pdfEndpoint, [
                 'json' => $payload,
                 'headers' => [
                     'Content-Type' => 'application/json',

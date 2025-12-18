@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { API_BASE_URL, apiFetch } from '@/config/api'
 
 // Types - baseado na estrutura retornada por GET /api/vpo/emissao (VpoEmissao model)
 interface VpoEmissao {
@@ -47,9 +48,14 @@ interface VpoEmissao {
   error_message: string | null
   error_code: string | null
   pracas_pedagio: Array<{
-    cnp: string
-    nomePraca: string
-    valorPraca: number
+    cnp?: string
+    codigo?: string
+    codigoPraca?: string
+    nomePraca?: string
+    nome?: string
+    valorPraca?: number
+    valor?: number
+    rodovia?: string
   }> | null
   total_pracas: number
   custo_total: number | null
@@ -135,7 +141,7 @@ const carregarEmissoes = async () => {
     }
 
     // Usar o endpoint correto do VpoEmissaoController
-    const response = await fetch(`http://localhost:8002/api/vpo/emissao?${params}`)
+    const response = await apiFetch(`${API_BASE_URL}/api/vpo/emissao?${params}`)
     const data = await response.json()
 
     console.log('Emissões carregadas:', data)
@@ -164,7 +170,7 @@ const carregarStats = async () => {
 
   try {
     // Usar o endpoint de estatísticas do VpoEmissaoController
-    const response = await fetch('http://localhost:8002/api/vpo/emissao/statistics')
+    const response = await apiFetch(`${API_BASE_URL}/api/vpo/emissao/statistics`)
     const data = await response.json()
 
     if (data.success) {
@@ -212,7 +218,7 @@ const consultarResultado = async (emissao: VpoEmissao) => {
   try {
     // Se falhou com TIMEOUT ou NDD_CARGO_ERROR, forçar retry para tentar novamente
     const forceRetry = emissao.status === 'failed' && ['TIMEOUT', 'NDD_CARGO_ERROR'].includes(emissao.error_code || '')
-    const url = `http://localhost:8002/api/vpo/emissao/${emissao.uuid}${forceRetry ? '?force_retry=1' : ''}`
+    const url = `${API_BASE_URL}/api/vpo/emissao/${emissao.uuid}${forceRetry ? '?force_retry=1' : ''}`
 
     console.log('Consultando resultado:', { uuid: emissao.uuid, forceRetry, url })
 
@@ -272,7 +278,7 @@ const consultarResultado = async (emissao: VpoEmissao) => {
  */
 const recarregarEmissao = async (uuid: string) => {
   try {
-    const response = await fetch(`http://localhost:8002/api/vpo/emissao/${uuid}`)
+    const response = await apiFetch(`${API_BASE_URL}/api/vpo/emissao/${uuid}`)
     const data = await response.json()
 
     if (data.success) {
@@ -345,9 +351,18 @@ const formatTime = (dateStr: string | null): string => {
   }
 }
 
-const formatCurrency = (value: number | null): string => {
+const formatCurrency = (value: number | string | null): string => {
   if (value === null || value === undefined) return '-'
-  return `R$ ${value.toFixed(2).replace('.', ',')}`
+  const numValue = typeof value === 'string' ? parseFloat(value) : value
+  if (isNaN(numValue)) return '-'
+  return `R$ ${numValue.toFixed(2).replace('.', ',')}`
+}
+
+const formatDistance = (value: number | string | null): string => {
+  if (value === null || value === undefined) return '-'
+  const numValue = typeof value === 'string' ? parseFloat(value) : value
+  if (isNaN(numValue)) return '-'
+  return numValue.toFixed(1)
 }
 
 const getScoreColor = (score: number): string => {
@@ -902,7 +917,7 @@ onMounted(() => {
                 <VCol cols="12" md="4">
                   <VCard variant="outlined">
                     <VCardText class="text-center">
-                      <div class="text-h5">{{ selectedEmissao.distancia_km?.toFixed(1) || '-' }} km</div>
+                      <div class="text-h5">{{ formatDistance(selectedEmissao.distancia_km) }} km</div>
                       <div class="text-caption text-medium-emphasis">Distância</div>
                     </VCardText>
                   </VCard>
@@ -916,14 +931,16 @@ onMounted(() => {
                     <tr>
                       <th>CNP</th>
                       <th>Nome da Praça</th>
+                      <th>Rodovia</th>
                       <th class="text-right">Valor</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr v-for="(praca, index) in selectedEmissao.pracas_pedagio" :key="index">
-                      <td class="text-caption">{{ praca.cnp }}</td>
-                      <td>{{ praca.nomePraca }}</td>
-                      <td class="text-right text-success">{{ formatCurrency(praca.valorPraca) }}</td>
+                      <td class="text-caption">{{ praca.cnp || praca.codigo || praca.codigoPraca || '-' }}</td>
+                      <td>{{ praca.nomePraca || praca.nome || '-' }}</td>
+                      <td class="text-caption">{{ praca.rodovia || '-' }}</td>
+                      <td class="text-right text-success">{{ formatCurrency(praca.valorPraca || praca.valor) }}</td>
                     </tr>
                   </tbody>
                 </VTable>

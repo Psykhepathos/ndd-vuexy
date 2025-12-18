@@ -115,4 +115,16 @@ return [
         'name' => env('MAIL_FROM_NAME', 'Example'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | No-Reply Address
+    |--------------------------------------------------------------------------
+    |
+    | Endereço usado para emails automáticos que não esperam resposta
+    | (ex: PDFs de vale pedágio)
+    |
+    */
+
+    'noreply_address' => env('MAIL_NOREPLY_ADDRESS', 'naoresponda@example.com'),
+
 ];

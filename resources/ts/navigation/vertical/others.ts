@@ -1,29 +1,29 @@
 export default [
-  { heading: 'Others' },
+  { heading: 'Outros' },
   {
-    title: 'Access Control',
+    title: 'Controle de Acesso',
     icon: { icon: 'tabler-command' },
     to: 'access-control',
     action: 'read',
     subject: 'AclDemo',
   },
   {
-    title: 'Nav Levels',
+    title: 'Níveis de Menu',
     icon: { icon: 'tabler-menu-2' },
     children: [
       {
-        title: 'Level 2.1',
+        title: 'Nível 2.1',
         to: null,
       },
       {
-        title: 'Level 2.2',
+        title: 'Nível 2.2',
         children: [
           {
-            title: 'Level 3.1',
+            title: 'Nível 3.1',
             to: null,
           },
           {
-            title: 'Level 3.2',
+            title: 'Nível 3.2',
             to: null,
           },
         ],
@@ -31,19 +31,19 @@ export default [
     ],
   },
   {
-    title: 'Disabled Menu',
+    title: 'Menu Desabilitado',
     to: null,
     icon: { icon: 'tabler-eye-off' },
     disable: true,
   },
   {
-    title: 'Raise Support',
+    title: 'Suporte',
     href: 'https://pixinvent.ticksy.com/',
     icon: { icon: 'tabler-headphones' },
     target: '_blank',
   },
   {
-    title: 'Documentation',
+    title: 'Documentação',
     href: 'https://demos.pixinvent.com/vuexy-vuejs-admin-template/documentation/guide/laravel-integration/folder-structure.html',
     icon: { icon: 'tabler-file-text' },
     target: '_blank',

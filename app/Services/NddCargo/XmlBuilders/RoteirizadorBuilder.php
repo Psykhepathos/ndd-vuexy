@@ -80,11 +80,14 @@ class RoteirizadorBuilder
         $tipoRotaPadrao = $xml->createElement('tipoRotaPadrao', (string) $request->tipoRotaPadrao);
         $informacoes->appendChild($tipoRotaPadrao);
 
-        // pontosParada
+        // pontosParada - usa método getPontosParadaSequencial para obter lista ordenada
         $pontosParada = $xml->createElement('pontosParada');
         $informacoes->appendChild($pontosParada);
 
-        foreach ($request->pontosParada as $tipo => $cep) {
+        // Obter pontos em ordem sequencial (origem -> intermediários -> destino)
+        $pontosSequenciais = $request->getPontosParadaSequencial();
+
+        foreach ($pontosSequenciais as $cep) {
             $pontoParada = $xml->createElement('pontoParada');
             $pontosParada->appendChild($pontoParada);
 

@@ -5,7 +5,8 @@ import { useRoute, useRouter } from 'vue-router'
 import draggable from 'vuedraggable'
 import { usePackageSimulation } from '@/composables/usePackageSimulation'
 import { usePracasPedagio } from '@/composables/usePracasPedagio'
-import { API_ENDPOINTS, apiFetch } from '@/config/api'
+import { useToast } from '@/composables/useToast'
+import { API_BASE_URL, API_ENDPOINTS, apiFetch } from '@/config/api'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -95,6 +96,7 @@ const clearDebugLogs = () => {
 // Composables
 const route = useRoute()
 const router = useRouter()
+const { showError, showSuccess } = useToast()
 
 // Estados reativos
 const rota = ref<SemPararRota | null>(null)
@@ -185,11 +187,34 @@ const fetchRota = async () => {
     const data = await response.json()
 
     if (data.success) {
-      rota.value = data.data.rota
-      municipios.value = data.data.municipios || []
+      // Normalizar campos da rota (API retorna camelCase, frontend usa lowercase)
+      const rawRota = data.data.rota || {}
+      rota.value = {
+        spararrotid: rawRota.sPararRotID || rawRota.spararrotid || 0,
+        desspararrot: rawRota.desSPararRot || rawRota.desspararrot || '',
+        tempoviagem: parseInt(String(rawRota.tempoViagem || rawRota.tempoviagem), 10) || 1,
+        flgcd: Boolean(rawRota.flgCD ?? rawRota.flgcd),
+        flgretorno: Boolean(rawRota.flgRetorno ?? rawRota.flgretorno),
+        datatu: rawRota.datAtu || rawRota.datatu || null,
+        resatu: rawRota.resAtu || rawRota.resatu || null
+      }
+
+      // Normalizar tipos dos municípios (API retorna camelCase, frontend usa lowercase)
+      const rawMunicipios = data.data.municipios || []
+      municipios.value = rawMunicipios.map((m: any) => ({
+        spararmuseq: parseInt(String(m.sPararMuSeq || m.spararmuseq), 10) || 0,
+        codmun: parseInt(String(m.codMun || m.codmun), 10) || 0,
+        codest: parseInt(String(m.codEst || m.codest), 10) || 0,
+        cdibge: parseInt(String(m.cdibge), 10) || 0,
+        desmun: String(m.desMun || m.desmun || '').trim(),
+        desest: String(m.desEst || m.desest || '').trim(),
+        lat: m.lat !== null && m.lat !== undefined ? Number(m.lat) : undefined,
+        lon: m.lon !== null && m.lon !== undefined ? Number(m.lon) : undefined,
+        geocodingStatus: m.lat && m.lon ? 'success' : 'pending'
+      }))
 
       console.log('✅ Rota carregada:', rota.value)
-      console.log('✅ Municípios carregados:', municipios.value.length, municipios.value)
+      console.log('✅ Municípios carregados (normalizados):', municipios.value.length, municipios.value)
 
       // Garantir sequência correta
       municipios.value.sort((a, b) => a.spararmuseq - b.spararmuseq)
@@ -276,7 +301,7 @@ async function calculateRouteWithMapService(waypoints: Array<[number, number]>):
 
     addDebugLog('info', 'MAPSERVICE', `Calculando rota com MapService para ${waypoints.length} waypoints`)
 
-    const response = await fetch('http://localhost:8002/api/map/route', {
+    const response = await apiFetch(`${API_BASE_URL}/api/map/route`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -334,14 +359,15 @@ const fetchMunicipios = async (search: string = '') => {
     const data = await response.json()
 
     if (data.success && data.data) {
+      console.log('📍 Municípios da API (raw):', data.data[0]) // Debug primeiro item
       municipiosOptions.value = data.data.map((m: any) => ({
         title: `${m.desmun} - ${m.desest}`,
         value: {
-          codmun: m.codmun,
-          codest: m.codest,
-          desmun: m.desmun,
-          desest: m.desest,
-          cdibge: m.cdibge,
+          codmun: parseInt(String(m.codmun), 10) || 0,
+          codest: parseInt(String(m.codest), 10) || 0,
+          desmun: String(m.desmun || '').trim(),
+          desest: String(m.desest || '').trim(),
+          cdibge: parseInt(String(m.cdibge), 10) || 0,
           lat: m.lat,
           lon: m.lon
         }
@@ -768,19 +794,36 @@ const adicionarMunicipio = async () => {
   const municipioData = selectedMunicipio.value.value || selectedMunicipio.value
 
   console.log('🔍 municipioData:', municipioData)
+  console.log('🔍 municipioData tipos:', {
+    codmun: typeof municipioData.codmun,
+    codest: typeof municipioData.codest,
+    cdibge: typeof municipioData.cdibge
+  })
+
+  // Converter e validar códigos
+  const codmun = parseInt(String(municipioData.codmun), 10)
+  const codest = parseInt(String(municipioData.codest), 10)
+  const cdibge = parseInt(String(municipioData.cdibge), 10)
+
+  if (isNaN(codmun) || isNaN(codest) || isNaN(cdibge)) {
+    console.error('❌ Códigos inválidos do município:', { codmun, codest, cdibge, municipioData })
+    showError(`Município "${municipioData.desmun}" possui códigos inválidos`)
+    return
+  }
 
   addDebugLog('info', 'EDIT', 'Adicionando novo município', {
     municipio: municipioData.desmun,
-    posicao: municipios.value.length + 1
+    posicao: municipios.value.length + 1,
+    codigos: { codmun, codest, cdibge }
   })
 
   const novoMunicipio: RotaMunicipio = {
     spararmuseq: municipios.value.length + 1,
-    codmun: municipioData.codmun,
-    codest: municipioData.codest,
-    desmun: municipioData.desmun,
-    desest: municipioData.desest,
-    cdibge: municipioData.cdibge,
+    codmun: codmun,
+    codest: codest,
+    desmun: String(municipioData.desmun || '').trim(),
+    desest: String(municipioData.desest || '').trim(),
+    cdibge: cdibge,
     lat: sanitizeCoordinate(municipioData.lat),
     lon: sanitizeCoordinate(municipioData.lon),
     geocodingStatus: 'pending'
@@ -859,25 +902,51 @@ const onDragEnd = () => {
 
 // Salvar alterações
 const salvarAlteracoes = async () => {
-  if (!rota.value) return
+  if (!rota.value) {
+    showError('Dados da rota não carregados')
+    return
+  }
+
+  // Validar nome da rota
+  const nomeRota = String(rota.value.desspararrot || '').trim()
+  if (!nomeRota) {
+    showError('Nome da rota é obrigatório')
+    return
+  }
 
   saving.value = true
 
   try {
+    // Converter municipios com validação rigorosa
+    const municipiosPayload = municipios.value.map((m, index) => {
+      const codEst = parseInt(String(m.codest), 10)
+      const codMun = parseInt(String(m.codmun), 10)
+      const cdibge = parseInt(String(m.cdibge), 10)
+
+      // Validar que são números válidos
+      if (isNaN(codEst) || isNaN(codMun) || isNaN(cdibge)) {
+        console.error(`Município ${index + 1} com valores inválidos:`, m)
+        throw new Error(`Município "${m.desmun}" possui códigos inválidos`)
+      }
+
+      return {
+        cod_est: codEst,
+        cod_mun: codMun,
+        des_est: String(m.desest || '').trim(),
+        des_mun: String(m.desmun || '').trim(),
+        cdibge: cdibge
+      }
+    })
+
     const payload = {
-      nome: rota.value.desspararrot,
-      tempo_viagem: rota.value.tempoviagem,
-      flg_cd: rota.value.flgcd,
-      flg_retorno: rota.value.flgretorno,
-      municipios: municipios.value.map(m => ({
-        cod_est: m.codest,
-        cod_mun: m.codmun,
-        des_est: m.desest,
-        des_mun: m.desmun,
-        cdibge: m.cdibge,
-        sequencia: m.spararmuseq
-      }))
+      nome: nomeRota,
+      tempo_viagem: parseInt(String(rota.value.tempoviagem), 10) || 1,
+      flg_cd: Boolean(rota.value.flgcd),
+      flg_retorno: Boolean(rota.value.flgretorno),
+      municipios: municipiosPayload
     }
+
+    console.log('📤 Payload para salvar:', payload)
 
     const response = await apiFetch(API_ENDPOINTS.semPararRota(parseInt(rotaId.value)), {
       method: 'PUT',
@@ -887,14 +956,22 @@ const salvarAlteracoes = async () => {
     const data = await response.json()
 
     if (data.success) {
+      showSuccess('Rota atualizada com sucesso!')
       editMode.value = false
-      await fetchRota() // Recarregar dados
+      await fetchRota()
     } else {
-      alert('Erro ao salvar: ' + data.message)
+      // Mostrar erros de validação
+      if (data.errors) {
+        const firstError = Object.values(data.errors)[0]
+        const errorMsg = Array.isArray(firstError) ? firstError[0] : firstError
+        showError(String(errorMsg))
+      } else {
+        showError(data.message || 'Erro ao salvar rota')
+      }
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro ao salvar alterações:', error)
-    alert('Erro ao salvar alterações')
+    showError(error.message || 'Erro ao salvar alterações')
   } finally {
     saving.value = false
   }

@@ -132,10 +132,11 @@ const createMap = async () => {
     )
 
     // ✅ SOLUÇÃO FUNCIONANDO: OpenStreetMap.de OSRM (100% GRATUITO!)
-    // Testado e funcionando em: 2025-10-21
+    // NOTA: Este é um arquivo de TESTE que usa OSRM direto.
+    // Em produção, use o proxy Laravel /api/routing/route que é configurável.
     // @ts-ignore
     const osrmRouter = L.Routing.osrmv1({
-      serviceUrl: 'https://routing.openstreetmap.de/routed-car/route/v1',
+      serviceUrl: 'https://routing.openstreetmap.de/routed-car/route/v1', // Servidor público gratuito
       profile: 'driving',
       timeout: 30000
     })

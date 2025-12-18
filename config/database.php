@@ -97,14 +97,15 @@ return [
             'sslmode' => 'prefer',
         ],
 
+        // Progress OpenEdge - credenciais obrigatórias no .env (sem defaults)
         'progress' => [
             'driver' => 'odbc',
-            'dsn' => env('PROGRESS_DSN', 'Driver={Progress OpenEdge 10.2B Driver};Host=192.168.80.113;Port=13361;Database=tambasa;'),
-            'host' => env('PROGRESS_HOST', '192.168.80.113'),
+            'dsn' => env('PROGRESS_DSN'),
+            'host' => env('PROGRESS_HOST'),
             'port' => env('PROGRESS_PORT', '13361'),
-            'database' => env('PROGRESS_DATABASE', 'tambasa'),
-            'username' => env('PROGRESS_USERNAME', 'sysprogress'),
-            'password' => env('PROGRESS_PASSWORD', 'sysprogress'),
+            'database' => env('PROGRESS_DATABASE'),
+            'username' => env('PROGRESS_USERNAME'),
+            'password' => env('PROGRESS_PASSWORD'),
             'prefix' => '',
             'options' => [
                 PDO::ATTR_CASE => PDO::CASE_LOWER,

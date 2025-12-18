@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import type { VpoEmissaoFormData, RotaVpo, MunicipioRota } from '../types'
+import { API_BASE_URL, apiFetch } from '@/config/api'
 
 // Props & Emits
 const props = defineProps<{
@@ -29,6 +30,21 @@ const filtroRetorno = ref<boolean | null>(null)
 // Computed
 const rotaSelecionada = computed(() => props.formData.rota.rota)
 const municipios = computed(() => props.formData.rota.municipios)
+
+// Headers da tabela de praças (sem rodovia, mais compacto)
+const pracasHeaders = [
+  { title: '#', key: 'idx', width: '40px', sortable: false },
+  { title: 'Praça', key: 'nome', sortable: false },
+  { title: 'Valor', key: 'valor', align: 'end' as const, width: '100px', sortable: false },
+]
+
+// Praças com índice para exibição na tabela
+const pracasComIndice = computed(() => {
+  return (props.formData.rota.pracas || []).map((praca, index) => ({
+    ...praca,
+    idx: index + 1,
+  }))
+})
 
 const rotasFiltradas = computed(() => {
   let filtered = rotas.value
@@ -73,7 +89,7 @@ const carregarRotas = async () => {
   errorMessage.value = null
 
   try {
-    const url = 'http://localhost:8002/api/semparar-rotas?per_page=100'
+    const url = `${API_BASE_URL}/api/semparar-rotas?per_page=100`
     console.log('Buscando rotas:', url)
     const response = await fetch(url)
     console.log('Response status:', response.status)
@@ -125,7 +141,7 @@ const selecionarRota = async (rota: RotaVpo) => {
 
   try {
     // Buscar municípios da rota
-    const url = `http://localhost:8002/api/semparar-rotas/${rota.sPararRotID}/municipios`
+    const url = `${API_BASE_URL}/api/semparar-rotas/${rota.sPararRotID}/municipios`
     console.log('Buscando municípios:', url)
     const response = await fetch(url)
     const data = await response.json()
@@ -242,7 +258,7 @@ const calcularPracas = async () => {
       categoriaPedagio = 7 // Caminhão pesado (6+ eixos)
 
     // Chamar endpoint de cálculo de praças (IBGE → CEP → NDD Cargo)
-    const response = await fetch('http://localhost:8002/api/vpo/calcular-pracas', {
+    const response = await apiFetch(`${API_BASE_URL}/api/vpo/calcular-pracas`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -291,7 +307,7 @@ const calcularPracas = async () => {
         await new Promise(resolve => setTimeout(resolve, 3000))
 
         try {
-          const resultResponse = await fetch(`http://localhost:8002/api/ndd-cargo/resultado/${data.guid}`, {
+          const resultResponse = await apiFetch(`${API_BASE_URL}/api/ndd-cargo/resultado/${data.guid}`, {
             headers: { 'Accept': 'application/json' }
           })
           const resultData = await resultResponse.json()
@@ -540,29 +556,32 @@ watch([loading, loadingMunicipios, loadingPracas], ([l, lm, lp]) => {
               </VCardItem>
 
               <!-- Lista de Praças (se houver) -->
-              <VCardText v-if="(formData.rota.pracas?.length || 0) > 0">
-                <VTable density="compact" class="text-caption">
-                  <thead>
-                    <tr>
-                      <th class="text-left">#</th>
-                      <th class="text-left">Praça</th>
-                      <th class="text-left">Rodovia</th>
-                      <th class="text-right">Valor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(praca, idx) in formData.rota.pracas" :key="idx">
-                      <td>{{ idx + 1 }}</td>
-                      <td>{{ praca.nome || praca.nomePraca || `Praça ${praca.codigo || praca.codigoPraca}` }}</td>
-                      <td>{{ praca.rodovia || '-' }}</td>
-                      <td class="text-right">
-                        <VChip size="x-small" color="success">
-                          R$ {{ (praca.valor || praca.valorPedagio || 0).toFixed(2) }}
-                        </VChip>
-                      </td>
-                    </tr>
-                  </tbody>
-                </VTable>
+              <VCardText v-if="(formData.rota.pracas?.length || 0) > 0" class="pa-2">
+                <VDataTable
+                  :headers="pracasHeaders"
+                  :items="pracasComIndice"
+                  :items-per-page="5"
+                  density="compact"
+                  class="text-caption pracas-table"
+                >
+                  <template #item.nome="{ item }">
+                    <span class="text-truncate d-inline-block" style="max-width: 180px;">
+                      {{ item.nome || item.nomePraca || `Praça ${item.codigo}` }}
+                    </span>
+                  </template>
+                  <template #item.valor="{ item }">
+                    <VChip size="x-small" color="success" variant="flat">
+                      R$ {{ (item.valor || item.valorPedagio || 0).toFixed(2) }}
+                    </VChip>
+                  </template>
+                  <template #bottom>
+                    <VDataTableFooter
+                      :items-per-page-options="[5, 10]"
+                      items-per-page-text=""
+                      show-current-page
+                    />
+                  </template>
+                </VDataTable>
               </VCardText>
             </VCard>
 
@@ -585,32 +604,32 @@ watch([loading, loadingMunicipios, loadingPracas], ([l, lm, lp]) => {
 
       <!-- Busca e Filtros -->
       <template v-if="!rotaSelecionada">
-        <VRow class="mb-4">
-          <VCol cols="12" md="6">
+        <VRow class="mb-4" align="end">
+          <VCol cols="12" sm="6" md="5">
             <VTextField
               v-model="searchRota"
               label="Buscar Rota"
               placeholder="Digite o nome da rota"
               prepend-inner-icon="tabler-search"
               clearable
-              density="compact"
+              hide-details
             />
           </VCol>
 
-          <VCol cols="6" md="3">
+          <VCol cols="6" sm="3" md="3">
             <VSelect
               v-model="filtroCD"
               :items="[
                 { title: 'Todos', value: null },
-                { title: 'CD', value: true },
-                { title: 'Não CD', value: false },
+                { title: 'Sim (CD)', value: true },
+                { title: 'Não (CD)', value: false },
               ]"
               label="Tipo CD"
-              density="compact"
+              hide-details
             />
           </VCol>
 
-          <VCol cols="6" md="3">
+          <VCol cols="6" sm="3" md="4">
             <VSelect
               v-model="filtroRetorno"
               :items="[
@@ -619,7 +638,7 @@ watch([loading, loadingMunicipios, loadingPracas], ([l, lm, lp]) => {
                 { title: 'Sem Retorno', value: false },
               ]"
               label="Retorno"
-              density="compact"
+              hide-details
             />
           </VCol>
         </VRow>
@@ -728,5 +747,24 @@ watch([loading, loadingMunicipios, loadingPracas], ([l, lm, lp]) => {
 
 .rota-item:hover {
   background-color: rgba(var(--v-theme-primary), 0.08);
+}
+
+/* Tabela de praças compacta */
+.pracas-table {
+  font-size: 12px !important;
+}
+
+.pracas-table :deep(th) {
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+}
+
+.pracas-table :deep(td) {
+  padding: 4px 8px !important;
+}
+
+.pracas-table :deep(.v-data-table-footer) {
+  padding: 4px 8px !important;
+  font-size: 11px !important;
 }
 </style>

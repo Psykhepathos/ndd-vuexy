@@ -254,6 +254,51 @@ class NddCargoService
     }
 
     /**
+     * Consulta rota completa com pontos intermediários
+     *
+     * Força a rota a passar por todos os municípios especificados, não apenas
+     * o caminho mais curto entre origem e destino.
+     *
+     * @param string $cepOrigem CEP de origem (8 dígitos)
+     * @param string $cepDestino CEP de destino (8 dígitos)
+     * @param array $cepsIntermediarios Array de CEPs intermediários (8 dígitos cada)
+     * @param int $categoriaPedagio Categoria do pedágio (1-7)
+     * @return RoteirizadorResponse
+     */
+    public function consultarRotaCompleta(
+        string $cepOrigem,
+        string $cepDestino,
+        array $cepsIntermediarios = [],
+        int $categoriaPedagio = 7
+    ): RoteirizadorResponse {
+        $pontosParada = [
+            'origem' => $cepOrigem,
+            'destino' => $cepDestino,
+        ];
+
+        // Adicionar intermediários se existirem
+        if (!empty($cepsIntermediarios)) {
+            $pontosParada['intermediarios'] = $cepsIntermediarios;
+        }
+
+        Log::info('Consultando rota completa com pontos intermediários', [
+            'origem' => $cepOrigem,
+            'destino' => $cepDestino,
+            'intermediarios' => count($cepsIntermediarios),
+            'total_pontos' => 2 + count($cepsIntermediarios)
+        ]);
+
+        $request = new ConsultarRoteirizadorRequest(
+            cnpjEmpresa: config('nddcargo.cnpj_empresa'),
+            cnpjContratante: config('nddcargo.cnpj_empresa'),
+            categoriaPedagio: $categoriaPedagio,
+            pontosParada: $pontosParada
+        );
+
+        return $this->consultarRoteirizador($request);
+    }
+
+    /**
      * Testa conectividade com API NDD Cargo
      *
      * Faz uma consulta simples para validar:

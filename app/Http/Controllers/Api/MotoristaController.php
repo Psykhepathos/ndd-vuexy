@@ -16,8 +16,8 @@ use OpenApi\Attributes as OA;
     description: 'API do sistema de integração corporativa NDD para vale pedágio e CIOT'
 )]
 #[OA\Server(
-    url: 'http://localhost:8000',
-    description: 'Servidor de desenvolvimento'
+    url: '/',
+    description: 'Servidor atual (relativo)'
 )]
 class MotoristaController extends Controller
 {

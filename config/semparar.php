@@ -11,16 +11,18 @@ return [
     |
     */
 
+    // URLs do WSDL - podem ter default pois são endpoints públicos
     'wsdl_url' => env('SEMPARAR_WSDL_URL', 'https://app.viafacil.com.br/wsvp/ValePedagio?wsdl'),
 
     // Separate WSDL for trip history/consultation (obterExtratoCreditos)
     'wsdl_extrato_url' => env('SEMPARAR_WSDL_EXTRATO_URL', 'https://app.viafacil.com.br/vpextrato/ValePedagio?wsdl'),
 
-    'cnpj' => env('SEMPARAR_CNPJ', '2024209702'),
+    // Credenciais obrigatórias - definir no .env (sem defaults por segurança)
+    'cnpj' => env('SEMPARAR_CNPJ'),
 
-    'user' => env('SEMPARAR_USER', 'CORPORATIVO'),
+    'user' => env('SEMPARAR_USER'),
 
-    'password' => env('SEMPARAR_PASSWORD', 'Tambasa20'),
+    'password' => env('SEMPARAR_PASSWORD'),
 
     'timeout' => env('SEMPARAR_TIMEOUT', 30),
 

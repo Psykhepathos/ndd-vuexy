@@ -14,13 +14,9 @@ use Illuminate\Support\Facades\Log;
 class OsrmProvider implements RouteProviderInterface
 {
     /**
-     * OSRM servers to try (in order)
+     * OSRM servers to try (in order) - carregados do config
      */
-    private array $servers = [
-        'https://routing.openstreetmap.de/routed-car/route/v1',
-        'http://router.project-osrm.org/route/v1',
-        'https://osrm.tambasa.com.br/route/v1' // Future: self-hosted
-    ];
+    private array $servers;
 
     /**
      * Request timeout in seconds
@@ -28,7 +24,27 @@ class OsrmProvider implements RouteProviderInterface
      * 5s era insuficiente para rotas com muitos waypoints ou distâncias grandes
      * 15s é adequado para rotas brasileiras (SP-RJ ~450km, SP-BA ~1900km)
      */
-    private int $timeout = 15;
+    private int $timeout;
+
+    public function __construct()
+    {
+        // Carregar servidores do config (com defaults públicos)
+        $configServers = config('services.osrm.servers', []);
+        $this->servers = array_map(function($server) {
+            // Adicionar /route/v1 se não estiver presente
+            return rtrim($server, '/') . '/route/v1';
+        }, $configServers);
+
+        // Fallback se config vazio
+        if (empty($this->servers)) {
+            $this->servers = [
+                'https://routing.openstreetmap.de/routed-car/route/v1',
+                'http://router.project-osrm.org/route/v1'
+            ];
+        }
+
+        $this->timeout = (int) config('services.osrm.timeout', 15);
+    }
 
     public function getName(): string
     {

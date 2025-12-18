@@ -1,11 +1,11 @@
 export default [
-  { heading: 'Charts' },
+  { heading: 'Gráficos' },
   {
-    title: 'Charts',
+    title: 'Gráficos',
     icon: { icon: 'tabler-chart-donut-2' },
     children: [
       { title: 'Apex Chart', to: 'charts-apex-chart' },
-      { title: 'Chartjs', to: 'charts-chartjs' },
+      { title: 'Chart.js', to: 'charts-chartjs' },
     ],
   },
 ]

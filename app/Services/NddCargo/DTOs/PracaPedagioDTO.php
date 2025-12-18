@@ -17,6 +17,7 @@ class PracaPedagioDTO
      * @param string $rodovia Código da rodovia (ex: BR-116, SP-160)
      * @param string $concessionaria Nome da concessionária responsável
      * @param float $valor Valor do pedágio em reais
+     * @param string|null $cnp CNP (Código Nacional da Praça) - OBRIGATÓRIO para emissão VPO
      * @param string|null $latitude Latitude da praça (opcional)
      * @param string|null $longitude Longitude da praça (opcional)
      * @param int|null $km Quilômetro da rodovia (opcional)
@@ -29,6 +30,7 @@ class PracaPedagioDTO
         public readonly string $rodovia,
         public readonly string $concessionaria,
         public readonly float $valor,
+        public readonly ?string $cnp = null,
         public readonly ?string $latitude = null,
         public readonly ?string $longitude = null,
         public readonly ?int $km = null,
@@ -50,6 +52,8 @@ class PracaPedagioDTO
             'rodovia' => $this->rodovia,
             'concessionaria' => $this->concessionaria,
             'valor' => $this->valor,
+            'cnp' => $this->cnp,
+            'codigo' => $this->cnp, // Alias para compatibilidade com frontend
             'latitude' => $this->latitude,
             'longitude' => $this->longitude,
             'km' => $this->km,
@@ -72,6 +76,7 @@ class PracaPedagioDTO
             rodovia: $data['rodovia'] ?? $data['Rodovia'] ?? '',
             concessionaria: $data['concessionaria'] ?? $data['Concessionaria'] ?? '',
             valor: (float) ($data['valor'] ?? $data['Valor'] ?? 0.0),
+            cnp: $data['cnp'] ?? $data['CNP'] ?? $data['codigo'] ?? $data['codigoPraca'] ?? null,
             latitude: $data['latitude'] ?? $data['Latitude'] ?? null,
             longitude: $data['longitude'] ?? $data['Longitude'] ?? null,
             km: isset($data['km']) || isset($data['KM']) ? (int) ($data['km'] ?? $data['KM']) : null,
@@ -94,6 +99,7 @@ class PracaPedagioDTO
             rodovia: (string) ($xmlNode->rodovia ?? $xmlNode->Rodovia ?? ''),
             concessionaria: (string) ($xmlNode->concessionaria ?? $xmlNode->Concessionaria ?? ''),
             valor: (float) ((string) ($xmlNode->valor ?? $xmlNode->Valor ?? 0.0)),
+            cnp: isset($xmlNode->cnp) || isset($xmlNode->CNP) ? (string) ($xmlNode->cnp ?? $xmlNode->CNP) : null,
             latitude: isset($xmlNode->latitude) || isset($xmlNode->Latitude) ? (string) ($xmlNode->latitude ?? $xmlNode->Latitude) : null,
             longitude: isset($xmlNode->longitude) || isset($xmlNode->Longitude) ? (string) ($xmlNode->longitude ?? $xmlNode->Longitude) : null,
             km: isset($xmlNode->km) || isset($xmlNode->KM) ? (int) ((string) ($xmlNode->km ?? $xmlNode->KM)) : null,
