@@ -1,6 +1,6 @@
 # Indice de Documentacao - NDD Vuexy
 
-**Ultima Atualizacao:** 2025-12-10
+**Ultima Atualizacao:** 2025-12-19
 
 ## Estrutura
 
@@ -19,7 +19,26 @@ docs/
 └── archive/            # Documentacao historica (10 arquivos)
 ```
 
-**Total:** 85 arquivos de documentacao
+**Total:** 85+ arquivos de documentacao
+
+---
+
+## Ambientes de Desenvolvimento
+
+### Desenvolvimento Local
+
+| Ambiente | URL | Comando |
+|----------|-----|---------|
+| **Laravel Herd** (Recomendado) | `http://valepedagio.test` | Configurar no Herd |
+| **Artisan Serve** | `http://localhost:8002` | `php artisan serve --port=8002` |
+
+### Servidor de Producao
+
+| Ambiente | URL | Path |
+|----------|-----|------|
+| **Linux** | `http://192.168.19.34/ndd-vuexy/public` | `/var/www/html/ndd-vuexy` |
+
+**Login Padrao:** admin@ndd.com / Admin@123
 
 ---
 
@@ -100,6 +119,30 @@ docs/
 
 ---
 
+## Sistema de Autenticacao (RBAC)
+
+### Funcionalidades Implementadas
+
+| Funcionalidade | Status | Descricao |
+|---------------|--------|-----------|
+| Login/Logout | OK | Sanctum + CASL |
+| Usuarios CRUD | OK | Criar, editar, excluir |
+| Perfis/Roles | OK | Gerenciar perfis de acesso |
+| Permissoes | OK | Granular por action/subject |
+| Email Boas-vindas | OK | Enviado ao criar usuario |
+| Reset de Senha | OK | Admin pode resetar, envia email |
+| Configurar Senha | OK | Pagina publica via token |
+| Audit Logs | OK | Historico de acoes por usuario |
+
+### Templates de Email
+
+| Template | Arquivo | Descricao |
+|----------|---------|-----------|
+| Boas-vindas | `welcome.blade.php` | Novo usuario criado |
+| Reset Senha | `password-reset.blade.php` | Senha resetada pelo admin |
+
+---
+
 ## Estatisticas
 
 | Categoria | Bugs Corrigidos |
@@ -111,26 +154,42 @@ docs/
 
 ### Controllers Auditados
 - AuthController
+- UserController
+- RoleController
 - TransporteController
 - PacoteController
 - SemPararController
 - SemPararRotaController
 - CompraViagemController
 - VpoController
+- VpoEmissaoController
 - NddCargoController
 - GeocodingController
 - RoutingController
 - MapController
 - PracaPedagioController
 
+### Estatisticas do Projeto
+
+| Metrica | Valor |
+|---------|-------|
+| Controllers | 26 |
+| Services | 29 |
+| API Endpoints | 70+ |
+| Tabelas Progress | 21 |
+| Tabelas Laravel | 15 |
+| Transportadores | 6.913+ |
+| Pacotes | 800.000+ |
+
 ---
 
 ## Links Rapidos
 
-- **Quick Start:** [CLAUDE.md](../CLAUDE.md) > Quick Start
-- **Arquitetura:** [CLAUDE.md](../CLAUDE.md) > Architecture
+- **Quick Start:** [CLAUDE.md](../CLAUDE.md) > Ambientes
+- **Arquitetura:** [CLAUDE.md](../CLAUDE.md) > Arquitetura
 - **VPO/NDD Cargo:** [integracoes/ndd-cargo/INDEX.md](integracoes/ndd-cargo/INDEX.md)
 - **Troubleshooting:** [CLAUDE.md](../CLAUDE.md) > Troubleshooting
+- **RBAC:** [CLAUDE.md](../CLAUDE.md) > Sistema de Autenticacao e RBAC
 
 ---
 
