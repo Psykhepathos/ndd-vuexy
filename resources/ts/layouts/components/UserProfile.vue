@@ -26,7 +26,6 @@ const logout = async () => {
   }
 
   // Limpar cookies de autenticação
-  // IMPORTANTE: Limpar na ordem correta para evitar flicker na UI
   const accessTokenCookie = useCookie('accessToken')
   const userDataCookie = useCookie('userData')
   const userAbilityCookie = useCookie('userAbilityRules')
@@ -38,8 +37,11 @@ const logout = async () => {
   // Resetar abilities CASL
   ability.update([])
 
+  // Aguardar próximo tick para garantir que o estado reativo foi atualizado
+  await nextTick()
+
   // Redirecionar para login
-  await router.push({ name: 'login' })
+  router.push({ name: 'login' })
 }
 
 const userProfileList = [

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { apiPost } from '@/config/api'
+import { $api } from '@/utils/api'
 import type { CompraViagemFormData } from '../types'
 
 // Props & Emits
@@ -40,9 +40,10 @@ const validarPlaca = async () => {
 
   loadingPlaca.value = true
   try {
-    const response = await apiPost('/api/compra-viagem/validar-placa', { placa: placa.value })
-
-    const data = await response.json()
+    const data = await $api('/compra-viagem/validar-placa', {
+      method: 'POST',
+      body: { placa: placa.value }
+    })
 
     if (!data.success) {
       console.error('Erro ao validar placa:', data.error)

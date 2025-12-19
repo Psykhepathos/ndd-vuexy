@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { apiPost } from '@/config/api'
+import { $api } from '@/utils/api'
 import type { CompraViagemFormData } from '../types'
 
 // Props & Emits
@@ -46,16 +46,17 @@ const verificarPreco = async () => {
   try {
     console.log('💰 Calculando preço da viagem...')
 
-    const response = await apiPost('/api/compra-viagem/verificar-preco', {
-      codpac: props.formData.pacote.pacote.codpac,
-      cod_rota: props.formData.rota.rota.sPararRotID,
-      qtd_eixos: props.formData.placa.eixos,
-      placa: props.formData.placa.placa,
-      data_inicio: props.formData.configuracao.dataInicio,
-      data_fim: props.formData.configuracao.dataFim
+    const data = await $api('/compra-viagem/verificar-preco', {
+      method: 'POST',
+      body: {
+        codpac: props.formData.pacote.pacote.codpac,
+        cod_rota: props.formData.rota.rota.sPararRotID,
+        qtd_eixos: props.formData.placa.eixos,
+        placa: props.formData.placa.placa,
+        data_inicio: props.formData.configuracao.dataInicio,
+        data_fim: props.formData.configuracao.dataFim
+      }
     })
-
-    const data = await response.json()
 
     if (!data.success) {
       throw new Error(data.message || data.error || 'Erro ao calcular preço')

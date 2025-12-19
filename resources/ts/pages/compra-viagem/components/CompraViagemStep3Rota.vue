@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { apiFetch, apiPost, getApiUrl } from '@/config/api'
+import { $api } from '@/utils/api'
 import type { CompraViagemFormData, RotaCompraViagem } from '../types'
 
 // Props & Emits
@@ -64,13 +64,12 @@ watch(modoRetorno, () => {
 const carregarTodasRotas = async () => {
   loadingRotas.value = true
   try {
-    const params = new URLSearchParams({
-      search: '', // Vazio = busca TODAS
-      flg_cd: modoCD.value ? '1' : '0'
+    const data = await $api('/compra-viagem/rotas', {
+      query: {
+        search: '',
+        flg_cd: modoCD.value ? '1' : '0'
+      }
     })
-
-    const response = await apiFetch(getApiUrl(`/compra-viagem/rotas?${params}`))
-    const data = await response.json()
 
     if (!data.success) {
       throw new Error(data.message || 'Erro ao buscar rotas')
@@ -95,14 +94,15 @@ const selecionarRota = async (rotaIdValue: number | null) => {
 
   try {
     // VALIDAR ROTA PRIMEIRO
-    const response = await apiPost('/api/compra-viagem/validar-rota', {
-      codpac: props.formData.pacote.pacote?.codpac,
-      cod_rota: rotaIdValue,
-      flgcd: modoCD.value,
-      flgretorno: modoRetorno.value
+    const data = await $api('/compra-viagem/validar-rota', {
+      method: 'POST',
+      body: {
+        codpac: props.formData.pacote.pacote?.codpac,
+        cod_rota: rotaIdValue,
+        flgcd: modoCD.value,
+        flgretorno: modoRetorno.value
+      }
     })
-
-    const data = await response.json()
 
     if (!data.success) {
       console.error('Erro ao validar rota:', data.error)
@@ -158,8 +158,7 @@ const carregarMunicipiosRota = async (rotaIdValue: number) => {
 
   loadingRotaMunicipios.value = true
   try {
-    const response = await apiFetch(getApiUrl(`/semparar-rotas/${rotaIdValue}/municipios`))
-    const data = await response.json()
+    const data = await $api(`/semparar-rotas/${rotaIdValue}/municipios`)
 
     if (!data.success) {
       throw new Error(data.message || 'Erro ao carregar municípios')
