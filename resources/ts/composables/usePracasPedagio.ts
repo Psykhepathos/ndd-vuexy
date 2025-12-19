@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import L from 'leaflet'
-import { getApiUrl } from '@/config/api'
+import { apiFetch } from '@/config/api'
 
 /**
  * Composable para carregar e exibir praças de pedágio em mapas Leaflet
@@ -48,12 +48,7 @@ export function usePracasPedagio() {
     try {
       console.log('📍 Carregando TODAS as praças de pedágio...')
 
-      const response = await fetch(getApiUrl('/pracas-pedagio?per_page=500&situacao=Ativo'), {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        }
-      })
+      const response = await apiFetch('/pracas-pedagio?per_page=500&situacao=Ativo')
 
       const data = await response.json()
 
@@ -95,12 +90,8 @@ export function usePracasPedagio() {
     try {
       // Buscar praças próximas a cada waypoint
       for (const waypoint of waypoints) {
-        const response = await fetch(getApiUrl('/pracas-pedagio/proximidade'), {
+        const response = await apiFetch('/pracas-pedagio/proximidade', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
           body: JSON.stringify({
             lat: waypoint.lat,
             lon: waypoint.lon,

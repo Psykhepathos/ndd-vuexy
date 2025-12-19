@@ -62,8 +62,8 @@ export const API_ENDPOINTS = {
   semPararRotaMunicipios: (id: number) => `/semparar-rotas/${id}/municipios`,
   rotas: '/rotas',
 
-  // Municipios
-  municipios: '/municipios',
+  // Municipios (busca via SemParar Rotas)
+  municipios: '/semparar-rotas/municipios',
 
   // Geocoding
   geocodingIbge: '/geocoding/ibge',
