@@ -860,7 +860,8 @@ class ProgressService
             // Construir comando Java com classpath correto para o sistema operacional
             $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
             $separator = $isWindows ? ';' : ':';
-            $gsonPath = dirname($driverPath) . '/lib/gson-2.10.1.jar';
+            // GSON está em storage/app/java junto com o conector Java
+            $gsonPath = $javaPath . '/gson-2.10.1.jar';
             $classpath = ".{$separator}{$gsonPath}{$separator}{$driverPath}";
             $cmdParts = [
                 'java',
@@ -955,7 +956,8 @@ class ProgressService
         // Construir comando de compilação - compatível com Windows e Linux
         $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
         $separator = $isWindows ? ';' : ':';
-        $gsonPath = dirname($driverPath) . '/lib/gson-2.10.1.jar';
+        // GSON está em storage/app/java junto com o conector Java
+        $gsonPath = $javaPath . '/gson-2.10.1.jar';
         $classpath = "{$gsonPath}{$separator}{$driverPath}";
         $cdCmd = $isWindows ? "cd /d \"{$javaPath}\"" : "cd \"{$javaPath}\"";
         $compileCmd = "{$cdCmd} && javac -cp \"{$classpath}\" ProgressJDBCConnector.java 2>&1";
