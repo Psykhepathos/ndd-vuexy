@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
-import { API_BASE_URL } from '@/config/api'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { usePackageSimulation } from '@/composables/usePackageSimulation'
@@ -73,7 +72,7 @@ const apiFetch = async (url: string, options: RequestInit = {}) => {
   addDebugLog('info', 'API', `Request: ${options.method || 'GET'} ${url}`)
 
   try {
-    const response = await fetch(`${API_BASE_URL}${url}`, {
+    const response = await fetch(url, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -731,7 +730,7 @@ const geocodeByIBGE = async (municipios: any[]): Promise<Record<number, { lat: n
     const requestBody = { municipios }
     console.log('📍 Request body stringified:', JSON.stringify(requestBody, null, 2))
 
-    const response = await fetch(`${API_BASE_URL}/api/geocoding/lote`, {
+    const response = await fetch(`/api/geocoding/lote`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
@@ -810,7 +809,7 @@ async function calculateRouteWithMapService(waypoints: Array<[number, number]>):
 
     addDebugLog('info', 'MAPSERVICE', `Calculando rota com MapService para ${waypoints.length} waypoints`)
 
-    const response = await fetch(`${API_BASE_URL}/api/map/route`, {
+    const response = await fetch(`/api/map/route`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -868,7 +867,7 @@ const carregarMunicipiosRota = async (rotaIdValue: number) => {
   try {
     addDebugLog('info', 'ROTA', `Carregando municípios da rota ${rotaIdValue}...`)
 
-    const response = await fetch(`${API_BASE_URL}/api/semparar-rotas/${rotaIdValue}/municipios`)
+    const response = await fetch(`/api/semparar-rotas/${rotaIdValue}/municipios`)
     const data = await response.json()
 
     console.log('🗺️ Response municípios:', data)

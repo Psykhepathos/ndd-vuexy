@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import type { VpoEmissaoFormData, PacoteVpo, TransportadorVpo } from '../types'
 import { isEmpresa } from '../types'
-import { API_BASE_URL, apiFetch } from '@/config/api'
+import { apiFetch } from '@/config/api'
 
 // Props & Emits
 const props = defineProps<{
@@ -54,7 +54,7 @@ const buscarPacote = async () => {
   try {
     // Buscar pacote pelo código
     const response = await apiFetch(
-      `${API_BASE_URL}/api/pacotes/${codpacNumerico}`
+      `/api/pacotes/${codpacNumerico}`
     )
     const data = await response.json()
 
@@ -72,7 +72,7 @@ const buscarPacote = async () => {
     }
 
     // Sincronizar transportador
-    const syncResponse = await apiFetch(`${API_BASE_URL}/api/vpo/sync/transportador`, {
+    const syncResponse = await apiFetch(`/api/vpo/sync/transportador`, {
       method: 'POST',
       body: JSON.stringify({
         codtrn: pacote.codtrn,
@@ -99,7 +99,7 @@ const buscarPacote = async () => {
     }> = []
 
     try {
-      const itinerarioResponse = await apiFetch(`${API_BASE_URL}/api/pacotes/itinerario`, {
+      const itinerarioResponse = await apiFetch(`/api/pacotes/itinerario`, {
         method: 'POST',
         body: JSON.stringify({ codPac: pacote.codpac }),
       })

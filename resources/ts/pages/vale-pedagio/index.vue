@@ -271,7 +271,7 @@
 import L from 'leaflet'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import draggable from 'vuedraggable'
-import { API_BASE_URL, apiFetch } from '@/config/api'
+import { apiFetch } from '@/config/api'
 
 // Interfaces
 interface Pedido {
@@ -401,7 +401,7 @@ function initMap() {
 async function loadRotaFromDatabase() {
   try {
     // Buscar rota do pacote 3043368 da API usando POST com parâmetro correto
-    const response = await apiFetch(`${API_BASE_URL}/api/pacotes/itinerario`, {
+    const response = await apiFetch(`/api/pacotes/itinerario`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -836,7 +836,7 @@ async function fetchRealRoute(coordinates: Array<[number, number]>): Promise<L.L
 // Função para buscar rota no cache via API Laravel
 async function getCachedRoute(coordinates: Array<[number, number]>): Promise<L.LatLng[] | null> {
   try {
-    const response = await apiFetch(`${API_BASE_URL}/api/route-cache/find`, {
+    const response = await apiFetch(`/api/route-cache/find`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -882,7 +882,7 @@ async function saveRouteToCache(
     // Converter Leaflet coords para array simples
     const coordsArray = routeCoords.map(coord => [coord.lat, coord.lng])
 
-    const response = await apiFetch(`${API_BASE_URL}/api/route-cache/save`, {
+    const response = await apiFetch(`/api/route-cache/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

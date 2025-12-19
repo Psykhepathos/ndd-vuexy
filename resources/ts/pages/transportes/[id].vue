@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { API_BASE_URL, apiFetch } from '@/config/api'
+import { apiFetch } from '@/config/api'
 
 // Interface para tipagem
 interface Transporte {
@@ -108,7 +108,7 @@ const showMotoristaDialog = ref(false)
 const fetchTransporte = async () => {
   try {
     loading.value = true
-    const response = await apiFetch(`${API_BASE_URL}/api/transportes/${route.params.id}`, {
+    const response = await apiFetch(`/api/transportes/${route.params.id}`, {
       headers: { 'Accept': 'application/json' }
     })
     

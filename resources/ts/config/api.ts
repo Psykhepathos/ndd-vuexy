@@ -23,92 +23,33 @@ export const getAppBasePath = (): string => {
 }
 
 /**
- * Obtém a URL completa para chamadas API
- * Sempre usa origin + path configurado no VITE_API_BASE_URL
+ * Base URL para chamadas API (apenas o path, sem origin)
+ * Usa VITE_API_BASE_URL do .env ou fallback para '/api'
  *
- * @param endpoint - O endpoint da API (ex: '/pacotes', '/auth/login')
- * @returns URL completa para a API
- *
- * @example
- * getApiUrl('/pacotes') // 'http://192.168.19.34/valepedagio/api/pacotes'
- * getApiUrl('/auth/login') // 'http://192.168.19.34/valepedagio/api/auth/login'
+ * IMPORTANTE: NÃO usar window.location.origin - usar apenas paths relativos
  */
-export const getApiUrl = (endpoint: string): string => {
-  // VITE_API_BASE_URL já contém o path completo (ex: /valepedagio/api)
-  const apiBase = import.meta.env.VITE_API_BASE_URL || '/api'
-
-  // Remove barra inicial do endpoint se apiBase terminar com barra
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
-
-  return `${window.location.origin}${apiBase}${cleanEndpoint}`
-}
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
 /**
- * @deprecated Use getApiUrl() em vez disso
- * Mantido para compatibilidade - será removido em versão futura
+ * Obtém a URL para chamadas API
+ * Combina API_BASE_URL com o endpoint
+ *
+ * @param endpoint - O endpoint da API (ex: '/pacotes', '/auth/login')
+ * @returns URL para a API (path relativo)
+ *
+ * @example
+ * getApiUrl('/pacotes') // '/api/pacotes'
+ * getApiUrl('pacotes')  // '/api/pacotes'
  */
-export const API_BASE_URL = (() => {
-  const apiBase = import.meta.env.VITE_API_BASE_URL || '/api'
+export const getApiUrl = (endpoint: string): string => {
+  // Remove barra inicial do endpoint para evitar duplicação
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
 
-  // Remove '/api' do final se presente para manter compatibilidade
-  const basePath = apiBase.replace(/\/api\/?$/, '')
+  // Remove barra final do API_BASE_URL se existir
+  const cleanBase = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL
 
-  return `${window.location.origin}${basePath}`
-})()
-
-// Endpoints principais
-export const API_ENDPOINTS = {
-  // Auth
-  login: `${API_BASE_URL}/api/login`,
-  logout: `${API_BASE_URL}/api/logout`,
-  me: `${API_BASE_URL}/api/me`,
-
-  // Progress Database
-  progressTest: `${API_BASE_URL}/api/progress/test-connection`,
-  progressQuery: `${API_BASE_URL}/api/progress/query`,
-
-  // Transportes
-  transportes: `${API_BASE_URL}/api/transportes`,
-  transporte: (id: number) => `${API_BASE_URL}/api/transportes/${id}`,
-
-  // Pacotes
-  pacotes: `${API_BASE_URL}/api/pacotes`,
-  pacote: (id: number) => `${API_BASE_URL}/api/pacotes/${id}`,
-  pacoteItinerario: `${API_BASE_URL}/api/pacotes/itinerario`,
-  pacoteAutocomplete: `${API_BASE_URL}/api/pacotes/autocomplete`,
-
-  // Rotas SemParar
-  semPararRotas: `${API_BASE_URL}/api/semparar-rotas`,
-  semPararRota: (id: number) => `${API_BASE_URL}/api/semparar-rotas/${id}`,
-  semPararRotaMunicipios: (id: number) => `${API_BASE_URL}/api/semparar-rotas/${id}/municipios`,
-
-  // Routing & Geocoding (OSRM gratuito)
-  // routingCalculate: DEPRECATED - Use osrmRoute instead (Google Directions removido)
-  geocodingIbge: `${API_BASE_URL}/api/geocoding/ibge`,
-  geocodingLote: `${API_BASE_URL}/api/geocoding/lote`,
-  osrmRoute: `${API_BASE_URL}/api/routing/route`, // Proxy OSRM gratuito
-
-  // Rotas (autocomplete)
-  rotas: `${API_BASE_URL}/api/rotas`,
-
-  // Estados e Municípios
-  estados: `${API_BASE_URL}/api/semparar-rotas/estados`,
-  municipios: `${API_BASE_URL}/api/semparar-rotas/municipios`,
-
-  // Compra de Viagem (⚠️ MODO DE TESTE - Não faz compras reais)
-  compraViagem: {
-    initialize: `${API_BASE_URL}/api/compra-viagem/initialize`,
-    statistics: `${API_BASE_URL}/api/compra-viagem/statistics`,
-    health: `${API_BASE_URL}/api/compra-viagem/health`,
-    validarPacote: `${API_BASE_URL}/api/compra-viagem/validar-pacote`,
-    validarPlaca: `${API_BASE_URL}/api/compra-viagem/validar-placa`,
-    rotas: `${API_BASE_URL}/api/compra-viagem/rotas`,
-    verificarPreco: `${API_BASE_URL}/api/compra-viagem/verificar-preco`,
-    // TODO: Adicionar endpoints das próximas fases
-    // comprar: `${API_BASE_URL}/api/compra-viagem/comprar`,
-    // gerarRecibo: `${API_BASE_URL}/api/compra-viagem/gerar-recibo`,
-  },
-} as const
+  return `${cleanBase}/${cleanEndpoint}`
+}
 
 // Headers padrão para requisições
 export const DEFAULT_HEADERS = {
@@ -124,7 +65,7 @@ export const DEFAULT_HEADERS = {
  * - Token de autenticação Bearer (se disponível)
  *
  * @example
- * // GET request
+ * // GET request com path relativo
  * const response = await apiFetch('/api/pacotes')
  *
  * // POST request com body

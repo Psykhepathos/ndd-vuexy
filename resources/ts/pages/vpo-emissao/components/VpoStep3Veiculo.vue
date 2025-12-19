@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import type { VpoEmissaoFormData, VeiculoVpo } from '../types'
 import { formatPlaca } from '../types'
-import { API_BASE_URL, apiFetch } from '@/config/api'
+import { apiFetch } from '@/config/api'
 
 // Props & Emits
 const props = defineProps<{
@@ -78,7 +78,7 @@ const carregarVeiculosCache = async () => {
   loadingCache.value = true
   try {
     const response = await fetch(
-      `${API_BASE_URL}/api/veiculos-cache/transportador/${transportador.value.codtrn}`
+      `/api/veiculos-cache/transportador/${transportador.value.codtrn}`
     )
     const data = await response.json()
 
@@ -97,7 +97,7 @@ const carregarVeiculosCache = async () => {
 const verificarCache = async (placa: string): Promise<any | null> => {
   try {
     const placaNormalizada = placa.replace(/[^A-Z0-9]/gi, '').toUpperCase()
-    const response = await apiFetch(`${API_BASE_URL}/api/veiculos-cache/${placaNormalizada}`)
+    const response = await apiFetch(`/api/veiculos-cache/${placaNormalizada}`)
 
     if (response.ok) {
       const data = await response.json()
@@ -114,7 +114,7 @@ const verificarCache = async (placa: string): Promise<any | null> => {
 // Salvar veículo no cache após validação
 const salvarNoCache = async (veiculoData: any, codtrn: number) => {
   try {
-    await apiFetch(`${API_BASE_URL}/api/veiculos-cache`, {
+    await apiFetch(`/api/veiculos-cache`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -142,7 +142,7 @@ const carregarVeiculos = async () => {
     // Para empresas, buscar veículos do transportador
     if (props.formData.motorista.isEmpresa) {
       const response = await fetch(
-        `${API_BASE_URL}/api/transportes/${transportador.value.codtrn}`
+        `/api/transportes/${transportador.value.codtrn}`
       )
       const data = await response.json()
 
@@ -224,7 +224,7 @@ const validarPlaca = async () => {
       successMessage.value = 'Veículo encontrado no cache! Dados carregados automaticamente.'
     } else {
       // 2. Validar placa no SemParar (status do veículo)
-      const response = await apiFetch(`${API_BASE_URL}/api/semparar/status-veiculo`, {
+      const response = await apiFetch(`/api/semparar/status-veiculo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ placa }),
@@ -348,7 +348,7 @@ const informarTagManual = async () => {
   try {
     // Primeiro, tentar validar novamente no SemParar
     // Pode ser que a tag já tenha sido cadastrada e agora está disponível
-    const response = await apiFetch(`${API_BASE_URL}/api/semparar/status-veiculo`, {
+    const response = await apiFetch(`/api/semparar/status-veiculo`, {
       method: 'POST',
       body: JSON.stringify({
         placa: veiculoSelecionado.value.placa.replace(/[^A-Z0-9]/gi, ''),
