@@ -8,7 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class ProgressJDBCConnector {
-    
+
     private String jdbcUrl;
     private String username;
     private String password;
@@ -21,45 +21,45 @@ public class ProgressJDBCConnector {
     }
 
     /**
-     * Testa a conexão com o banco Progress
+     * Testa a conexao com o banco Progress
      */
     public String testConnection() {
         JsonObject result = new JsonObject();
-        
+
         try {
             // Carregar driver JDBC
             Class.forName("com.ddtek.jdbc.openedge.OpenEdgeDriver");
-            
-            // Estabelecer conexão
+
+            // Estabelecer conexao
             Properties props = new Properties();
             props.setProperty("user", username);
             props.setProperty("password", password);
-            
+
             connection = DriverManager.getConnection(jdbcUrl, props);
-            
-            // Testar conexão - sem consulta complexa
+
+            // Testar conexao - sem consulta complexa
             String timestamp = new java.util.Date().toString();
-            
+
             result.addProperty("success", true);
-            result.addProperty("message", "Conexão Progress JDBC estabelecida com sucesso");
-            
+            result.addProperty("message", "Conexao Progress JDBC estabelecida com sucesso");
+
             JsonObject data = new JsonObject();
             data.addProperty("host", extractHost(jdbcUrl));
             data.addProperty("database", extractDatabase(jdbcUrl));
             data.addProperty("timestamp", timestamp);
             data.addProperty("jdbc_url", jdbcUrl);
             result.add("data", data);
-            
+
         } catch (ClassNotFoundException e) {
             result.addProperty("success", false);
-            result.addProperty("error", "Driver JDBC Progress não encontrado: " + e.getMessage());
+            result.addProperty("error", "Driver JDBC Progress nao encontrado: " + e.getMessage());
         } catch (SQLException e) {
             result.addProperty("success", false);
-            result.addProperty("error", "Erro na conexão Progress JDBC: " + e.getMessage());
+            result.addProperty("error", "Erro na conexao Progress JDBC: " + e.getMessage());
         } finally {
             closeConnection();
         }
-        
+
         return result.toString();
     }
 
@@ -68,7 +68,7 @@ public class ProgressJDBCConnector {
      */
     public String getTransportes(String whereClause, int limit) {
         JsonObject result = new JsonObject();
-        
+
         try {
             // Carregar driver e conectar
             Class.forName("com.ddtek.jdbc.openedge.OpenEdgeDriver");
@@ -76,32 +76,32 @@ public class ProgressJDBCConnector {
             props.setProperty("user", username);
             props.setProperty("password", password);
             connection = DriverManager.getConnection(jdbcUrl, props);
-            
-            // Construir query simples para Progress 
+
+            // Construir query simples para Progress
             StringBuilder sql = new StringBuilder("SELECT nomtrn, codtrn FROM PUB.transporte");
-            
+
             // Adicionar filtros se fornecidos
             if (whereClause != null && !whereClause.trim().isEmpty()) {
                 sql.append(" WHERE ").append(whereClause);
             }
-            
-            // Progress pode ter sintaxe específica para ORDER BY, removendo por enquanto
-            
+
+            // Progress pode ter sintaxe especifica para ORDER BY, removendo por enquanto
+
             Statement stmt = connection.createStatement();
             ResultSet rs = stmt.executeQuery(sql.toString());
-            
-            // Converter ResultSet para JSON com limitação
+
+            // Converter ResultSet para JSON com limitacao
             JsonArray transportes = new JsonArray();
             ResultSetMetaData metaData = rs.getMetaData();
             int columnCount = metaData.getColumnCount();
             int count = 0;
-            
+
             while (rs.next() && count < limit) {
                 JsonObject row = new JsonObject();
                 for (int i = 1; i <= columnCount; i++) {
                     String columnName = metaData.getColumnName(i).toLowerCase();
                     Object value = rs.getObject(i);
-                    
+
                     if (value == null) {
                         row.add(columnName, null);
                     } else if (value instanceof String) {
@@ -117,29 +117,29 @@ public class ProgressJDBCConnector {
                 transportes.add(row);
                 count++;
             }
-            
+
             result.addProperty("success", true);
             result.addProperty("message", "Dados da tabela transporte obtidos com sucesso");
-            
+
             JsonObject data = new JsonObject();
             data.add("transportes", transportes);
             data.addProperty("total", transportes.size());
             data.addProperty("sql_executed", sql.toString());
             result.add("data", data);
-            
+
             rs.close();
             stmt.close();
-            
+
         } catch (ClassNotFoundException e) {
             result.addProperty("success", false);
-            result.addProperty("error", "Driver JDBC Progress não encontrado: " + e.getMessage());
+            result.addProperty("error", "Driver JDBC Progress nao encontrado: " + e.getMessage());
         } catch (SQLException e) {
             result.addProperty("success", false);
             result.addProperty("error", "Erro na consulta Progress JDBC: " + e.getMessage());
         } finally {
             closeConnection();
         }
-        
+
         return result.toString();
     }
 
@@ -148,7 +148,7 @@ public class ProgressJDBCConnector {
      */
     public String getTransportesPaginated(String whereClause, int limit, int offset) {
         JsonObject result = new JsonObject();
-        
+
         try {
             // Carregar driver e conectar
             Class.forName("com.ddtek.jdbc.openedge.OpenEdgeDriver");
@@ -156,46 +156,46 @@ public class ProgressJDBCConnector {
             props.setProperty("user", username);
             props.setProperty("password", password);
             connection = DriverManager.getConnection(jdbcUrl, props);
-            
+
             // Construir query paginada usando Progress TOP syntax
             StringBuilder sql = new StringBuilder();
             sql.append("SELECT TOP ").append(limit).append(" codtrn, nomtrn FROM PUB.transporte");
-            
+
             // Adicionar filtros se fornecidos
             if (whereClause != null && !whereClause.trim().isEmpty()) {
                 sql.append(" ").append(whereClause);
             }
-            
-            // Progress não suporte OFFSET diretamente, simulamos com condições WHERE
+
+            // Progress nao suporte OFFSET diretamente, simulamos com condicoes WHERE
             if (offset > 0) {
                 String offsetCondition = whereClause.isEmpty() ? " WHERE " : " AND ";
                 sql.append(offsetCondition).append("codtrn > (SELECT MAX(codtrn) FROM (SELECT TOP ")
                    .append(offset).append(" codtrn FROM PUB.transporte");
-                
+
                 if (whereClause != null && !whereClause.trim().isEmpty()) {
                     sql.append(" ").append(whereClause);
                 }
-                
+
                 sql.append(" ORDER BY codtrn) sub)");
             }
-            
+
             // Ordenar resultados
             sql.append(" ORDER BY codtrn");
-            
+
             Statement stmt = connection.createStatement();
             ResultSet rs = stmt.executeQuery(sql.toString());
-            
+
             // Converter ResultSet para JSON
             JsonArray transportes = new JsonArray();
             ResultSetMetaData metaData = rs.getMetaData();
             int columnCount = metaData.getColumnCount();
-            
+
             while (rs.next()) {
                 JsonObject row = new JsonObject();
                 for (int i = 1; i <= columnCount; i++) {
                     String columnName = metaData.getColumnName(i).toLowerCase();
                     Object value = rs.getObject(i);
-                    
+
                     if (value == null) {
                         row.add(columnName, null);
                     } else if (value instanceof String) {
@@ -210,10 +210,10 @@ public class ProgressJDBCConnector {
                 }
                 transportes.add(row);
             }
-            
+
             result.addProperty("success", true);
             result.addProperty("message", "Dados paginados da tabela transporte obtidos com sucesso");
-            
+
             JsonObject data = new JsonObject();
             data.add("results", transportes);
             data.addProperty("count", transportes.size());
@@ -221,20 +221,20 @@ public class ProgressJDBCConnector {
             data.addProperty("limit", limit);
             data.addProperty("offset", offset);
             result.add("data", data);
-            
+
             rs.close();
             stmt.close();
-            
+
         } catch (ClassNotFoundException e) {
             result.addProperty("success", false);
-            result.addProperty("error", "Driver JDBC Progress não encontrado: " + e.getMessage());
+            result.addProperty("error", "Driver JDBC Progress nao encontrado: " + e.getMessage());
         } catch (SQLException e) {
             result.addProperty("success", false);
             result.addProperty("error", "Erro na consulta paginada Progress JDBC: " + e.getMessage());
         } finally {
             closeConnection();
         }
-        
+
         return result.toString();
     }
 
@@ -243,37 +243,37 @@ public class ProgressJDBCConnector {
      */
     public String executeCustomQuery(String sql) {
         JsonObject result = new JsonObject();
-        
+
         try {
-            // Validação básica de segurança
+            // Validacao basica de seguranca
             String sqlUpper = sql.toUpperCase().trim();
             if (!sqlUpper.startsWith("SELECT")) {
                 result.addProperty("success", false);
-                result.addProperty("error", "Apenas consultas SELECT são permitidas");
+                result.addProperty("error", "Apenas consultas SELECT sao permitidas");
                 return result.toString();
             }
-            
+
             // Carregar driver e conectar
             Class.forName("com.ddtek.jdbc.openedge.OpenEdgeDriver");
             Properties props = new Properties();
             props.setProperty("user", username);
             props.setProperty("password", password);
             connection = DriverManager.getConnection(jdbcUrl, props);
-            
+
             Statement stmt = connection.createStatement();
             ResultSet rs = stmt.executeQuery(sql);
-            
+
             // Converter ResultSet para JSON
             JsonArray results = new JsonArray();
             ResultSetMetaData metaData = rs.getMetaData();
             int columnCount = metaData.getColumnCount();
-            
+
             while (rs.next()) {
                 JsonObject row = new JsonObject();
                 for (int i = 1; i <= columnCount; i++) {
                     String columnName = metaData.getColumnName(i).toLowerCase();
                     Object value = rs.getObject(i);
-                    
+
                     if (value == null) {
                         row.add(columnName, null);
                     } else if (value instanceof String) {
@@ -288,29 +288,29 @@ public class ProgressJDBCConnector {
                 }
                 results.add(row);
             }
-            
+
             result.addProperty("success", true);
             result.addProperty("message", "Consulta executada com sucesso");
-            
+
             JsonObject data = new JsonObject();
             data.add("results", results);
             data.addProperty("total", results.size());
             data.addProperty("sql", sql);
             result.add("data", data);
-            
+
             rs.close();
             stmt.close();
-            
+
         } catch (ClassNotFoundException e) {
             result.addProperty("success", false);
-            result.addProperty("error", "Driver JDBC Progress não encontrado: " + e.getMessage());
+            result.addProperty("error", "Driver JDBC Progress nao encontrado: " + e.getMessage());
         } catch (SQLException e) {
             result.addProperty("success", false);
-            result.addProperty("error", "Erro na execução da consulta: " + e.getMessage());
+            result.addProperty("error", "Erro na execucao da consulta: " + e.getMessage());
         } finally {
             closeConnection();
         }
-        
+
         return result.toString();
     }
 
@@ -321,11 +321,11 @@ public class ProgressJDBCConnector {
         JsonObject result = new JsonObject();
 
         try {
-            // Validação básica de segurança - permitir apenas UPDATE, INSERT, DELETE
+            // Validacao basica de seguranca - permitir apenas UPDATE, INSERT, DELETE
             String sqlUpper = sql.toUpperCase().trim();
             if (!sqlUpper.startsWith("UPDATE") && !sqlUpper.startsWith("INSERT") && !sqlUpper.startsWith("DELETE")) {
                 result.addProperty("success", false);
-                result.addProperty("error", "Apenas comandos UPDATE, INSERT e DELETE são permitidos");
+                result.addProperty("error", "Apenas comandos UPDATE, INSERT e DELETE sao permitidos");
                 return result.toString();
             }
 
@@ -351,10 +351,10 @@ public class ProgressJDBCConnector {
 
         } catch (ClassNotFoundException e) {
             result.addProperty("success", false);
-            result.addProperty("error", "Driver JDBC Progress não encontrado: " + e.getMessage());
+            result.addProperty("error", "Driver JDBC Progress nao encontrado: " + e.getMessage());
         } catch (SQLException e) {
             result.addProperty("success", false);
-            result.addProperty("error", "Erro na execução do comando: " + e.getMessage());
+            result.addProperty("error", "Erro na execucao do comando: " + e.getMessage());
         } finally {
             closeConnection();
         }
@@ -363,11 +363,11 @@ public class ProgressJDBCConnector {
     }
 
     /**
-     * Obtém o schema/estrutura de uma tabela específica
+     * Obtem o schema/estrutura de uma tabela especifica
      */
     public String getTableSchema(String tableName) {
         JsonObject result = new JsonObject();
-        
+
         try {
             // Carregar driver e conectar
             Class.forName("com.ddtek.jdbc.openedge.OpenEdgeDriver");
@@ -375,42 +375,42 @@ public class ProgressJDBCConnector {
             props.setProperty("user", username);
             props.setProperty("password", password);
             connection = DriverManager.getConnection(jdbcUrl, props);
-            
-            // Usar DatabaseMetaData para obter informações da tabela
+
+            // Usar DatabaseMetaData para obter informacoes da tabela
             DatabaseMetaData metaData = connection.getMetaData();
-            
-            // Obter informações das colunas
+
+            // Obter informacoes das colunas
             ResultSet columns = metaData.getColumns(null, "PUB", tableName.toUpperCase(), null);
-            
+
             JsonArray columnsArray = new JsonArray();
             Map<String, String> columnTypes = new HashMap<>();
-            
+
             while (columns.next()) {
                 JsonObject column = new JsonObject();
-                
+
                 String columnName = columns.getString("COLUMN_NAME");
                 String dataType = columns.getString("TYPE_NAME");
                 int columnSize = columns.getInt("COLUMN_SIZE");
                 int decimalDigits = columns.getInt("DECIMAL_DIGITS");
                 boolean nullable = columns.getBoolean("NULLABLE");
                 String defaultValue = columns.getString("COLUMN_DEF");
-                
+
                 column.addProperty("name", columnName.toLowerCase());
                 column.addProperty("type", dataType);
                 column.addProperty("size", columnSize);
                 column.addProperty("decimal_digits", decimalDigits);
                 column.addProperty("nullable", nullable);
                 column.addProperty("default_value", defaultValue);
-                
+
                 columnTypes.put(columnName.toLowerCase(), dataType);
                 columnsArray.add(column);
             }
             columns.close();
-            
-            // Obter informações das chaves primárias
+
+            // Obter informacoes das chaves primarias
             ResultSet primaryKeys = metaData.getPrimaryKeys(null, "PUB", tableName.toUpperCase());
             JsonArray primaryKeysArray = new JsonArray();
-            
+
             while (primaryKeys.next()) {
                 JsonObject pk = new JsonObject();
                 pk.addProperty("column_name", primaryKeys.getString("COLUMN_NAME").toLowerCase());
@@ -419,12 +419,12 @@ public class ProgressJDBCConnector {
                 primaryKeysArray.add(pk);
             }
             primaryKeys.close();
-            
-            // Obter informações dos índices
+
+            // Obter informacoes dos indices
             ResultSet indexes = metaData.getIndexInfo(null, "PUB", tableName.toUpperCase(), false, false);
             JsonArray indexesArray = new JsonArray();
             Map<String, JsonObject> indexMap = new HashMap<>();
-            
+
             while (indexes.next()) {
                 String indexName = indexes.getString("INDEX_NAME");
                 if (indexName != null) {
@@ -436,35 +436,35 @@ public class ProgressJDBCConnector {
                         index.add("columns", new JsonArray());
                         indexMap.put(indexName, index);
                     }
-                    
+
                     JsonObject indexColumn = new JsonObject();
                     indexColumn.addProperty("column_name", indexes.getString("COLUMN_NAME").toLowerCase());
                     indexColumn.addProperty("ordinal_position", indexes.getInt("ORDINAL_POSITION"));
                     indexColumn.addProperty("asc_or_desc", indexes.getString("ASC_OR_DESC"));
-                    
+
                     index.getAsJsonArray("columns").add(indexColumn);
                 }
             }
-            
+
             for (JsonObject index : indexMap.values()) {
                 indexesArray.add(index);
             }
             indexes.close();
-            
-            // Tentar obter uma amostra dos dados para análise adicional
+
+            // Tentar obter uma amostra dos dados para analise adicional
             JsonArray sampleData = new JsonArray();
             try {
                 Statement stmt = connection.createStatement();
                 ResultSet rs = stmt.executeQuery("SELECT TOP 3 * FROM PUB." + tableName);
                 ResultSetMetaData rsMetaData = rs.getMetaData();
                 int columnCount = rsMetaData.getColumnCount();
-                
+
                 while (rs.next()) {
                     JsonObject row = new JsonObject();
                     for (int i = 1; i <= columnCount; i++) {
                         String columnName = rsMetaData.getColumnName(i).toLowerCase();
                         Object value = rs.getObject(i);
-                        
+
                         if (value == null) {
                             row.add(columnName, null);
                         } else if (value instanceof String) {
@@ -492,12 +492,12 @@ public class ProgressJDBCConnector {
                 stmt.close();
             } catch (SQLException e) {
                 // Se falhar ao obter dados de amostra, continuar sem eles
-                System.err.println("Aviso: Não foi possível obter dados de amostra: " + e.getMessage());
+                System.err.println("Aviso: Nao foi possivel obter dados de amostra: " + e.getMessage());
             }
-            
+
             result.addProperty("success", true);
             result.addProperty("message", "Schema da tabela obtido com sucesso");
-            
+
             JsonObject data = new JsonObject();
             data.addProperty("table_name", tableName.toLowerCase());
             data.add("columns", columnsArray);
@@ -508,17 +508,17 @@ public class ProgressJDBCConnector {
             data.addProperty("primary_key_count", primaryKeysArray.size());
             data.addProperty("index_count", indexesArray.size());
             result.add("data", data);
-            
+
         } catch (ClassNotFoundException e) {
             result.addProperty("success", false);
-            result.addProperty("error", "Driver JDBC Progress não encontrado: " + e.getMessage());
+            result.addProperty("error", "Driver JDBC Progress nao encontrado: " + e.getMessage());
         } catch (SQLException e) {
             result.addProperty("success", false);
             result.addProperty("error", "Erro ao obter schema da tabela: " + e.getMessage());
         } finally {
             closeConnection();
         }
-        
+
         return result.toString();
     }
 
@@ -528,7 +528,7 @@ public class ProgressJDBCConnector {
                 connection.close();
             }
         } catch (SQLException e) {
-            System.err.println("Erro ao fechar conexão: " + e.getMessage());
+            System.err.println("Erro ao fechar conexao: " + e.getMessage());
         }
     }
 
@@ -593,7 +593,7 @@ public class ProgressJDBCConnector {
                 System.out.println(connector.getTableSchema(tableName));
                 break;
             default:
-                System.out.println("{\"success\":false,\"error\":\"Ação inválida. Use: test, transportes, query-paginated, query, update, ou schema\"}");
+                System.out.println("{\"success\":false,\"error\":\"Acao invalida. Use: test, transportes, query-paginated, query, update, ou schema\"}");
         }
     }
 }
