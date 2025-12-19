@@ -26,6 +26,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Middleware de proteção para Google Maps (apenas em rotas específicas)
         $middleware->alias([
             'google.quota' => \App\Http\Middleware\GoogleMapsQuotaProtection::class,
+            'permission' => \App\Http\Middleware\CheckPermission::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
