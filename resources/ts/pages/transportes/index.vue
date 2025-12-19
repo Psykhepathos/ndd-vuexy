@@ -2,7 +2,7 @@
 import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { watchDebounced } from '@vueuse/core'
-import { apiFetch } from '@/config/api'
+import { apiFetch, getApiUrl } from '@/config/api'
 import { showError } from '@/utils/api'
 
 const router = useRouter()
@@ -117,7 +117,7 @@ const fetchStatistics = async () => {
   try {
     loadingStats.value = true
 
-    const response = await apiFetch(`/api/transportes/statistics`, {
+    const response = await apiFetch(getApiUrl(`/transportes/statistics`), {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
@@ -178,7 +178,7 @@ const fetchTransportes = async (direction: 'next' | 'prev' | null = null) => {
       params.append('status_ativo', filtroStatus.value === 'ativo' ? 'true' : 'false')
     }
 
-    const response = await apiFetch(`/api/transportes?${params}`, {
+    const response = await apiFetch(getApiUrl(`/transportes?${params}`), {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'

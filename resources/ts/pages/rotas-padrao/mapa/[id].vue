@@ -6,7 +6,7 @@ import draggable from 'vuedraggable'
 import { usePackageSimulation } from '@/composables/usePackageSimulation'
 import { usePracasPedagio } from '@/composables/usePracasPedagio'
 import { useToast } from '@/composables/useToast'
-import { API_ENDPOINTS, apiFetch } from '@/config/api'
+import { API_ENDPOINTS, apiFetch, getApiUrl } from '@/config/api'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -301,7 +301,7 @@ async function calculateRouteWithMapService(waypoints: Array<[number, number]>):
 
     addDebugLog('info', 'MAPSERVICE', `Calculando rota com MapService para ${waypoints.length} waypoints`)
 
-    const response = await apiFetch(`/api/map/route`, {
+    const response = await apiFetch(getApiUrl(`/map/route`), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

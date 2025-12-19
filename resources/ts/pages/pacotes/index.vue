@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { apiFetch } from '@/config/api'
+import { apiFetch, getApiUrl } from '@/config/api'
 import { showError } from '@/utils/api'
 
 // Interface para tipagem
@@ -101,7 +101,7 @@ const fetchTransportadores = async (searchTerm: string = '') => {
       per_page: '20'
     })
 
-    const response = await apiFetch(`/api/transportes?${params}`, {
+    const response = await apiFetch(getApiUrl(`/transportes?${params}`), {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -136,7 +136,7 @@ const fetchRotas = async (searchTerm: string = '') => {
     const params = new URLSearchParams({
       search: searchTerm
     })
-    const response = await apiFetch(`/api/rotas?${params}`, {
+    const response = await apiFetch(getApiUrl(`/rotas?${params}`), {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -179,7 +179,7 @@ const fetchPacotes = async () => {
       data_fim: dataFim.value || ''
     })
 
-    const response = await apiFetch(`/api/pacotes?${params}`, {
+    const response = await apiFetch(getApiUrl(`/pacotes?${params}`), {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',

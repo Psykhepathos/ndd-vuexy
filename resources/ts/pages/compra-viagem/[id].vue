@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { apiPost } from '@/config/api'
+import { apiPost, getApiUrl } from '@/config/api'
 
 // ============================================================================
 // TIPOS
@@ -72,7 +72,7 @@ const fetchViagem = async () => {
     const tresMesesAtras = new Date()
     tresMesesAtras.setMonth(tresMesesAtras.getMonth() - 3)
 
-    const response = await apiPost(`/api/compra-viagem/viagens`, {
+    const response = await apiPost(getApiUrl(`/compra-viagem/viagens`), {
       data_inicio: tresMesesAtras.toISOString().split('T')[0],
       data_fim: hoje.toISOString().split('T')[0],
     })
@@ -117,7 +117,7 @@ const fetchViagem = async () => {
  */
 const cancelarViagem = async () => {
   try {
-    const response = await apiPost(`/api/semparar/cancelar-viagem`, {
+    const response = await apiPost(getApiUrl(`/semparar/cancelar-viagem`), {
       cod_viagem: codViagem.value,
     })
     const data = await response.json()
@@ -146,7 +146,7 @@ const reemitirViagem = async () => {
   }
 
   try {
-    const response = await apiPost(`/api/semparar/reemitir-viagem`, {
+    const response = await apiPost(getApiUrl(`/semparar/reemitir-viagem`), {
       cod_viagem: codViagem.value,
       placa: novaPlaca.value.toUpperCase(),
     })
@@ -177,7 +177,7 @@ const gerarRecibo = async () => {
   }
 
   try {
-    const response = await apiPost(`/api/semparar/gerar-recibo`, {
+    const response = await apiPost(getApiUrl(`/semparar/gerar-recibo`), {
       cod_viagem: codViagem.value,
       telefone: `55${telefone.value.replace(/\D/g, '')}`,
       email: email.value || undefined,

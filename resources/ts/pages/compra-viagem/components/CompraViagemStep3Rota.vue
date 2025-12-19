@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { apiFetch, apiPost } from '@/config/api'
+import { apiFetch, apiPost, getApiUrl } from '@/config/api'
 import type { CompraViagemFormData, RotaCompraViagem } from '../types'
 
 // Props & Emits
@@ -69,7 +69,7 @@ const carregarTodasRotas = async () => {
       flg_cd: modoCD.value ? '1' : '0'
     })
 
-    const response = await apiFetch(`/api/compra-viagem/rotas?${params}`)
+    const response = await apiFetch(getApiUrl(`/compra-viagem/rotas?${params}`))
     const data = await response.json()
 
     if (!data.success) {
@@ -158,7 +158,7 @@ const carregarMunicipiosRota = async (rotaIdValue: number) => {
 
   loadingRotaMunicipios.value = true
   try {
-    const response = await apiFetch(`/api/semparar-rotas/${rotaIdValue}/municipios`)
+    const response = await apiFetch(getApiUrl(`/semparar-rotas/${rotaIdValue}/municipios`))
     const data = await response.json()
 
     if (!data.success) {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { apiFetch } from '@/config/api'
+import { apiFetch, getApiUrl } from '@/config/api'
 
 // Types - baseado na estrutura retornada por GET /api/vpo/emissao (VpoEmissao model)
 interface VpoEmissao {
@@ -141,7 +141,7 @@ const carregarEmissoes = async () => {
     }
 
     // Usar o endpoint correto do VpoEmissaoController
-    const response = await apiFetch(`/api/vpo/emissao?${params}`)
+    const response = await apiFetch(getApiUrl(`/vpo/emissao?${params}`))
     const data = await response.json()
 
     console.log('Emissões carregadas:', data)
@@ -170,7 +170,7 @@ const carregarStats = async () => {
 
   try {
     // Usar o endpoint de estatísticas do VpoEmissaoController
-    const response = await apiFetch(`/api/vpo/emissao/statistics`)
+    const response = await apiFetch(getApiUrl(`/vpo/emissao/statistics`))
     const data = await response.json()
 
     if (data.success) {
@@ -218,7 +218,7 @@ const consultarResultado = async (emissao: VpoEmissao) => {
   try {
     // Se falhou com TIMEOUT ou NDD_CARGO_ERROR, forçar retry para tentar novamente
     const forceRetry = emissao.status === 'failed' && ['TIMEOUT', 'NDD_CARGO_ERROR'].includes(emissao.error_code || '')
-    const url = `/api/vpo/emissao/${emissao.uuid}${forceRetry ? '?force_retry=1' : ''}`
+    const url = getApiUrl(`/vpo/emissao/${emissao.uuid}${forceRetry ? '?force_retry=1' : ''}`)
 
     console.log('Consultando resultado:', { uuid: emissao.uuid, forceRetry, url })
 
@@ -278,7 +278,7 @@ const consultarResultado = async (emissao: VpoEmissao) => {
  */
 const recarregarEmissao = async (uuid: string) => {
   try {
-    const response = await apiFetch(`/api/vpo/emissao/${uuid}`)
+    const response = await apiFetch(getApiUrl(`/vpo/emissao/${uuid}`))
     const data = await response.json()
 
     if (data.success) {

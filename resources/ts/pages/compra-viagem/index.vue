@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { watchDebounced } from '@vueuse/core'
-import { apiPost } from '@/config/api'
+import { apiPost, getApiUrl } from '@/config/api'
 
 definePage({
   meta: {
@@ -141,7 +141,7 @@ const buscarRotas = async (search: string) => {
   rotasLoading.value = true
   try {
     const response = await fetch(
-      `/api/semparar-rotas/municipios?search=${encodeURIComponent(search)}`
+      getApiUrl(`/semparar-rotas/municipios?search=${encodeURIComponent(search)}`)
     )
     const data = await response.json()
 
@@ -170,7 +170,7 @@ const buscarTransportadores = async (search: string) => {
   transportadoresLoading.value = true
   try {
     const response = await fetch(
-      `/api/transportes?search=${encodeURIComponent(search)}&per_page=20`
+      getApiUrl(`/transportes?search=${encodeURIComponent(search)}&per_page=20`)
     )
     const data = await response.json()
 
@@ -224,7 +224,7 @@ const fetchViagens = async () => {
 
     console.log('🔍 Buscando viagens com filtros:', payload)
 
-    const response = await apiPost(`/api/compra-viagem/viagens`, payload)
+    const response = await apiPost(getApiUrl(`/compra-viagem/viagens`), payload)
     const data = await response.json()
 
     if (!data.success) {
@@ -359,7 +359,7 @@ const baixarRecibo = async (codViagem: string) => {
     const telefone = prompt('Digite o número com DDD (ex: 31988887777)')
     if (!telefone) return
 
-    const response = await apiPost(`/api/semparar/gerar-recibo`, {
+    const response = await apiPost(getApiUrl(`/semparar/gerar-recibo`), {
       cod_viagem: codViagem,
       telefone: `55${telefone}`,
       flg_imprime: false,
@@ -386,7 +386,7 @@ const cancelarViagem = async (codViagem: string) => {
   }
 
   try {
-    const response = await apiPost(`/api/semparar/cancelar-viagem`, {
+    const response = await apiPost(getApiUrl(`/semparar/cancelar-viagem`), {
       cod_viagem: codViagem,
     })
     const data = await response.json()
@@ -414,7 +414,7 @@ const reemitirViagem = async (codViagem: string) => {
   }
 
   try {
-    const response = await apiPost(`/api/semparar/reemitir-viagem`, {
+    const response = await apiPost(getApiUrl(`/semparar/reemitir-viagem`), {
       cod_viagem: codViagem,
       placa: novaPlaca.toUpperCase(),
     })

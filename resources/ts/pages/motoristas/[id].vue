@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { apiPost } from '@/config/api'
+import { apiPost, getApiUrl } from '@/config/api'
 
 // Interface para tipagem
 interface Motorista {
@@ -49,7 +49,7 @@ const fetchMotorista = async () => {
   try {
     loading.value = true
     // Usando a tabela trnmot do Progress para motoristas
-    const response = await apiPost(`/api/transportes/query`, {
+    const response = await apiPost(getApiUrl(`/transportes/query`), {
       sql: `SELECT codtrn, nomtrn, codcnpjcpf, desend, numend, cplend, numceptrn, numtel, dddtel, numcel, dddcel,
             "e-mail", numpla, natcam, tipcam, flgati, indcd, numhab, venhab, esthab, cathab, datnas, orgrg, numrg, exprg,
             renavam, numcha, fabmod, marvei, corvei, ufvei, desvei
