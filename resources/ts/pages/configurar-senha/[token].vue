@@ -1,9 +1,20 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import logo from '@images/logo.svg'
+import { VNodeRenderer } from '@layouts/components/VNodeRenderer'
+import { themeConfig } from '@themeConfig'
+import loginBackground from '@images/pages/login-background.jpg'
 import { $api } from '@/utils/api'
 import { API_ENDPOINTS } from '@/config/api'
+
+// IMPORTANTE: Página pública - não requer autenticação
+definePage({
+  meta: {
+    layout: 'blank',
+    public: true,
+    unauthenticatedOnly: true,
+  },
+})
 
 const route = useRoute()
 const router = useRouter()
@@ -156,183 +167,261 @@ function goToLogin() {
 </script>
 
 <template>
-  <div class="auth-wrapper d-flex align-center justify-center pa-4">
+  <div class="auth-wrapper">
+    <!-- Background Image -->
+    <div
+      class="auth-background"
+      :style="{ backgroundImage: `url(${loginBackground})` }"
+    />
+
+    <!-- Overlay -->
+    <div class="auth-overlay" />
+
+    <!-- Card -->
     <VCard
-      class="auth-card pa-4 pt-7"
-      max-width="448"
+      class="auth-card pa-6 pa-sm-8"
+      max-width="480"
     >
-      <VCardItem class="justify-center">
-        <template #prepend>
-          <div class="d-flex">
-            <img
-              :src="logo"
-              alt="Logo NDD"
-              height="50"
-            >
-          </div>
-        </template>
-      </VCardItem>
+      <!-- Logo -->
+      <div class="d-flex justify-center mb-6">
+        <RouterLink
+          :to="{ name: 'login' }"
+          class="d-flex align-center gap-x-3 text-decoration-none"
+        >
+          <VNodeRenderer :nodes="themeConfig.app.logo" />
+          <h1 class="auth-title text-h4">
+            {{ themeConfig.app.title }}
+          </h1>
+        </RouterLink>
+      </div>
 
-      <VCardText class="pt-2">
-        <!-- Loading -->
-        <div v-if="loading" class="text-center py-8">
-          <VProgressCircular
-            indeterminate
-            color="primary"
-            size="64"
+      <!-- Loading -->
+      <div v-if="loading" class="text-center py-8">
+        <VProgressCircular
+          indeterminate
+          color="primary"
+          size="64"
+        />
+        <p class="text-body-1 mt-4">
+          Verificando link...
+        </p>
+      </div>
+
+      <!-- Token Invalid / Expired -->
+      <div v-else-if="!tokenValid" class="text-center">
+        <VAvatar
+          :color="tokenExpired ? 'warning' : 'error'"
+          variant="tonal"
+          size="80"
+          class="mb-4"
+        >
+          <VIcon
+            :icon="tokenExpired ? 'tabler-clock-x' : 'tabler-link-off'"
+            size="40"
           />
-          <p class="text-body-1 mt-4">Verificando link...</p>
-        </div>
+        </VAvatar>
 
-        <!-- Token Invalid / Expired -->
-        <div v-else-if="!tokenValid" class="text-center">
-          <VAvatar
-            :color="tokenExpired ? 'warning' : 'error'"
-            variant="tonal"
-            size="80"
-            class="mb-4"
-          >
-            <VIcon
-              :icon="tokenExpired ? 'tabler-clock-x' : 'tabler-link-off'"
-              size="40"
-            />
-          </VAvatar>
+        <h4 class="text-h4 mb-2">
+          {{ tokenExpired ? 'Link Expirado' : 'Link Inválido' }}
+        </h4>
+        <p class="text-body-1 text-medium-emphasis mb-6">
+          {{ errorMessage }}
+        </p>
 
-          <h4 class="text-h4 mb-2">
-            {{ tokenExpired ? 'Link Expirado' : 'Link Inválido' }}
-          </h4>
-          <p class="text-body-1 text-medium-emphasis mb-6">
-            {{ errorMessage }}
-          </p>
+        <VBtn
+          color="primary"
+          @click="goToLogin"
+        >
+          <VIcon icon="tabler-arrow-left" class="me-2" />
+          Ir para Login
+        </VBtn>
+      </div>
 
-          <VBtn
-            color="primary"
-            @click="goToLogin"
-          >
-            <VIcon icon="tabler-arrow-left" class="me-2" />
-            Ir para Login
-          </VBtn>
-        </div>
+      <!-- Success -->
+      <div v-else-if="successMessage" class="text-center">
+        <VAvatar
+          color="success"
+          variant="tonal"
+          size="80"
+          class="mb-4"
+        >
+          <VIcon icon="tabler-check" size="40" />
+        </VAvatar>
 
-        <!-- Success -->
-        <div v-else-if="successMessage" class="text-center">
-          <VAvatar
-            color="success"
-            variant="tonal"
-            size="80"
-            class="mb-4"
-          >
-            <VIcon icon="tabler-check" size="40" />
-          </VAvatar>
+        <h4 class="text-h4 mb-2">
+          Senha Configurada!
+        </h4>
+        <p class="text-body-1 text-medium-emphasis">
+          {{ successMessage }}
+        </p>
 
-          <h4 class="text-h4 mb-2">Senha Configurada!</h4>
-          <p class="text-body-1 text-medium-emphasis">
-            {{ successMessage }}
-          </p>
+        <VProgressCircular
+          indeterminate
+          color="primary"
+          size="32"
+          class="mt-4"
+        />
+      </div>
 
-          <VProgressCircular
-            indeterminate
-            color="primary"
-            size="32"
-            class="mt-4"
-          />
-        </div>
-
-        <!-- Setup Form -->
-        <div v-else>
-          <h4 class="text-h4 mb-1 text-center">
+      <!-- Setup Form -->
+      <div v-else>
+        <VCardText class="text-center pa-0 mb-6">
+          <h4 class="text-h5 mb-2">
             Bem-vindo(a), {{ user.name }}!
           </h4>
-          <p class="text-body-1 text-center mb-6">
+          <p class="text-body-2 text-medium-emphasis mb-0">
             Configure sua senha para acessar o sistema
           </p>
+        </VCardText>
 
-          <VAlert
-            type="info"
-            variant="tonal"
-            class="mb-6"
-          >
-            <template #prepend>
-              <VIcon icon="tabler-info-circle" />
-            </template>
-            <strong>Requisitos da senha:</strong>
-            <ul class="mt-1 mb-0 pl-4">
-              <li>Mínimo 8 caracteres</li>
-              <li>1 letra minúscula</li>
-              <li>1 letra maiúscula</li>
-              <li>1 número</li>
-              <li>1 caractere especial (@$!%*#?&)</li>
-            </ul>
-          </VAlert>
+        <VAlert
+          type="info"
+          variant="tonal"
+          class="mb-6"
+        >
+          <template #prepend>
+            <VIcon icon="tabler-info-circle" />
+          </template>
+          <strong>Requisitos da senha:</strong>
+          <ul class="mt-1 mb-0 pl-4">
+            <li>Mínimo 8 caracteres</li>
+            <li>1 letra minúscula</li>
+            <li>1 letra maiúscula</li>
+            <li>1 número</li>
+            <li>1 caractere especial (@$!%*#?&)</li>
+          </ul>
+        </VAlert>
 
-          <VForm @submit.prevent="handleSubmit">
-            <VRow>
-              <VCol cols="12">
-                <VTextField
-                  v-model="form.password"
-                  label="Nova Senha"
-                  placeholder="Digite sua nova senha"
-                  :type="isPasswordVisible ? 'text' : 'password'"
-                  :append-inner-icon="isPasswordVisible ? 'tabler-eye-off' : 'tabler-eye'"
-                  :rules="passwordRules"
-                  @click:append-inner="isPasswordVisible = !isPasswordVisible"
+        <VAlert
+          v-if="errorMessage"
+          type="error"
+          variant="tonal"
+          class="mb-4"
+          closable
+          @click:close="errorMessage = ''"
+        >
+          {{ errorMessage }}
+        </VAlert>
+
+        <VForm @submit.prevent="handleSubmit">
+          <VRow>
+            <VCol cols="12">
+              <AppTextField
+                v-model="form.password"
+                label="Nova Senha"
+                placeholder="Digite sua nova senha"
+                :type="isPasswordVisible ? 'text' : 'password'"
+                :append-inner-icon="isPasswordVisible ? 'tabler-eye-off' : 'tabler-eye'"
+                :rules="passwordRules"
+                :disabled="submitting"
+                @click:append-inner="isPasswordVisible = !isPasswordVisible"
+              />
+              <div v-if="form.password" class="mt-2">
+                <VProgressLinear
+                  :model-value="passwordStrength.score"
+                  :color="passwordStrength.color"
+                  height="4"
+                  rounded
                 />
-                <div v-if="form.password" class="mt-2">
-                  <VProgressLinear
-                    :model-value="passwordStrength.score"
-                    :color="passwordStrength.color"
-                    height="4"
-                    rounded
-                  />
-                  <span class="text-caption" :class="`text-${passwordStrength.color}`">
-                    Força: {{ passwordStrength.label }}
-                  </span>
-                </div>
-              </VCol>
+                <span class="text-caption" :class="`text-${passwordStrength.color}`">
+                  Força: {{ passwordStrength.label }}
+                </span>
+              </div>
+            </VCol>
 
-              <VCol cols="12">
-                <VTextField
-                  v-model="form.password_confirmation"
-                  label="Confirmar Senha"
-                  placeholder="Digite novamente sua senha"
-                  :type="isConfirmPasswordVisible ? 'text' : 'password'"
-                  :append-inner-icon="isConfirmPasswordVisible ? 'tabler-eye-off' : 'tabler-eye'"
-                  :rules="confirmPasswordRules"
-                  @click:append-inner="isConfirmPasswordVisible = !isConfirmPasswordVisible"
-                />
-              </VCol>
+            <VCol cols="12">
+              <AppTextField
+                v-model="form.password_confirmation"
+                label="Confirmar Senha"
+                placeholder="Digite novamente sua senha"
+                :type="isConfirmPasswordVisible ? 'text' : 'password'"
+                :append-inner-icon="isConfirmPasswordVisible ? 'tabler-eye-off' : 'tabler-eye'"
+                :rules="confirmPasswordRules"
+                :disabled="submitting"
+                @click:append-inner="isConfirmPasswordVisible = !isConfirmPasswordVisible"
+              />
+            </VCol>
 
-              <VCol cols="12">
-                <VAlert
-                  v-if="errorMessage"
-                  type="error"
-                  variant="tonal"
-                  class="mb-4"
-                  closable
-                  @click:close="errorMessage = ''"
-                >
-                  {{ errorMessage }}
-                </VAlert>
+            <VCol cols="12">
+              <VBtn
+                block
+                type="submit"
+                size="large"
+                :loading="submitting"
+                :disabled="submitting"
+              >
+                <VIcon icon="tabler-check" class="me-2" />
+                Configurar Senha e Entrar
+              </VBtn>
+            </VCol>
 
-                <VBtn
-                  block
-                  color="primary"
-                  type="submit"
-                  :loading="submitting"
-                  :disabled="submitting"
-                >
-                  <VIcon icon="tabler-check" class="me-2" />
-                  Configurar Senha e Entrar
-                </VBtn>
-              </VCol>
-            </VRow>
-          </VForm>
-        </div>
-      </VCardText>
+            <VCol cols="12" class="text-center">
+              <RouterLink
+                class="text-primary text-sm"
+                :to="{ name: 'login' }"
+              >
+                <VIcon icon="tabler-arrow-left" size="16" class="me-1" />
+                Voltar para Login
+              </RouterLink>
+            </VCol>
+          </VRow>
+        </VForm>
+      </div>
     </VCard>
+
+    <!-- Footer -->
+    <div class="auth-footer">
+      <span class="text-white text-body-2">
+        &copy; {{ new Date().getFullYear() }} Tambasa Atacadista
+      </span>
+    </div>
   </div>
 </template>
 
-<style lang="scss">
-@use "@core-scss/template/pages/page-auth";
+<style lang="scss" scoped>
+.auth-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-background {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: 0;
+}
+
+.auth-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1;
+}
+
+.auth-card {
+  position: relative;
+  z-index: 2;
+  background: rgb(var(--v-theme-surface));
+  border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+}
+
+.auth-title {
+  color: rgb(var(--v-theme-on-surface));
+  font-weight: 600;
+}
+
+.auth-footer {
+  position: absolute;
+  inset-block-end: 24px;
+  inset-inline: 0;
+  text-align: center;
+  z-index: 2;
+}
 </style>
