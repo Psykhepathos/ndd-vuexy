@@ -17,15 +17,7 @@ const userData = useCookie<any>('userData')
  * 4. Redireciona para login
  */
 const logout = async () => {
-  // Tentar chamar o backend para invalidar o token (best effort - não bloqueia logout)
-  try {
-    await $api(API_ENDPOINTS.authLogout, { method: 'POST' })
-  }
-  catch (error) {
-    console.warn('Erro ao invalidar token no servidor (continuando logout local):', error)
-  }
-
-  // Limpar cookies de autenticação
+  // Limpar cookies de autenticação PRIMEIRO (antes de qualquer navegação)
   const accessTokenCookie = useCookie('accessToken')
   const userDataCookie = useCookie('userData')
   const userAbilityCookie = useCookie('userAbilityRules')
@@ -37,11 +29,16 @@ const logout = async () => {
   // Resetar abilities CASL
   ability.update([])
 
-  // Aguardar próximo tick para garantir que o estado reativo foi atualizado
-  await nextTick()
+  // Tentar chamar o backend para invalidar o token (best effort - não bloqueia logout)
+  try {
+    await $api(API_ENDPOINTS.authLogout, { method: 'POST' })
+  }
+  catch (error) {
+    // Ignorar erro - token já foi limpo localmente
+  }
 
-  // Redirecionar para login
-  router.push({ name: 'login' })
+  // Redirecionar para login usando replace (não adiciona ao histórico)
+  router.replace({ name: 'login' })
 }
 
 const userProfileList = [
