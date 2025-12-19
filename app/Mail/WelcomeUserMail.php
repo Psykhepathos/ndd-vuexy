@@ -34,7 +34,7 @@ class WelcomeUserMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Bem-vindo ao ' . config('app.name') . ' - Configure sua teste',
+            subject: 'Bem-vindo ao ' . config('app.name') . ' - Configure sua Senha',
         );
     }
 

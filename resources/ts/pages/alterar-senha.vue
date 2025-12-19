@@ -55,7 +55,7 @@ const changePassword = async () => {
     }
   } catch (error: any) {
     console.error('Erro ao alterar senha:', error)
-    errorMessage.value = error?.data?.message || 'Erro ao alterar a senha. Tente novamente.'
+    errorMessage.value = error?.data?.message || 'Erro ao alterar a senha. Tente novamente mais tarde.'
   } finally {
     isLoading.value = false
   }
