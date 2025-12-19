@@ -192,9 +192,17 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
   }
 
   // Se a URL começa com / e não é uma URL absoluta, prefixar com API_BASE_URL
+  // Mas evitar duplicação se já contém API_BASE_URL
   let finalUrl = url
   if (url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/http')) {
-    finalUrl = getApiUrl(url)
+    // Evitar duplicação: se já contém API_BASE_URL, não adicionar de novo
+    if (!url.includes(API_BASE_URL) && API_BASE_URL !== '/api') {
+      finalUrl = getApiUrl(url)
+    } else if (API_BASE_URL === '/api' && !url.startsWith('/api')) {
+      // Em dev, prefixar com /api se não começar com /api
+      finalUrl = getApiUrl(url)
+    }
+    // Se já começa com API_BASE_URL ou /api, usar como está
   }
 
   return fetch(finalUrl, {

@@ -301,7 +301,7 @@ async function calculateRouteWithMapService(waypoints: Array<[number, number]>):
 
     addDebugLog('info', 'MAPSERVICE', `Calculando rota com MapService para ${waypoints.length} waypoints`)
 
-    const response = await apiFetch(getApiUrl(`/map/route`), {
+    const response = await apiFetch(API_ENDPOINTS.mapRoute, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
