@@ -55,6 +55,8 @@ export const API_ENDPOINTS = {
 
   // Rotas
   semPararRotas: '/semparar-rotas',
+  semPararRota: (id: number) => `/semparar-rotas/${id}`,
+  semPararRotaMunicipios: (id: number) => `/semparar-rotas/${id}/municipios`,
 
   // Geocoding
   geocodingIbge: '/geocoding/ibge',
