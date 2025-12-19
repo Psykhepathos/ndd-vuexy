@@ -67,6 +67,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
             ->middleware(['throttle:30,1', 'permission:usuarios.delete']);
         Route::post('{user}/reset-password', [UserController::class, 'resetPassword'])
             ->middleware(['throttle:10,1', 'permission:usuarios.reset_password']);
+        Route::post('{user}/resend-setup-email', [UserController::class, 'resendSetupEmail'])
+            ->middleware(['throttle:5,1', 'permission:usuarios.edit']);
         Route::get('{user}/audit-logs', [UserController::class, 'auditLogs'])
             ->middleware(['throttle:30,1', 'permission:auditoria.view']);
     });

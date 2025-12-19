@@ -8,9 +8,12 @@ use App\Models\Role;
 use App\Models\Permission;
 use App\Models\PasswordResetRequest;
 use App\Models\UserAuditLog;
+use App\Mail\WelcomeUserMail;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -172,10 +175,35 @@ class UserController extends Controller
             ]
         );
 
+        // Enviar email de boas-vindas com link para configurar senha
+        $setupUrl = url("/configurar-senha/{$setupToken}");
+        $emailSent = false;
+        $emailError = null;
+
+        try {
+            Mail::to($user->email)->send(new WelcomeUserMail($user, $setupUrl));
+            $emailSent = true;
+            Log::info('Email de boas-vindas enviado', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+            ]);
+        } catch (\Exception $e) {
+            $emailError = $e->getMessage();
+            Log::error('Falha ao enviar email de boas-vindas', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'error' => $emailError,
+            ]);
+        }
+
         return response()->json([
-            'message' => 'Usuário criado com sucesso. O usuário receberá um link para criar sua senha.',
+            'message' => $emailSent
+                ? 'Usuario criado com sucesso. Um email foi enviado para ' . $user->email . ' com as instrucoes de acesso.'
+                : 'Usuario criado com sucesso. Nao foi possivel enviar o email automaticamente. Copie o link abaixo e envie manualmente.',
             'user' => $user->load('roleRelation'),
-            'setupUrl' => url("/configurar-senha/{$setupToken}"),
+            'setupUrl' => $setupUrl,
+            'emailSent' => $emailSent,
+            'emailError' => $emailError,
         ], 201);
     }
 
@@ -356,6 +384,65 @@ class UserController extends Controller
             'message' => 'Senha resetada com sucesso. O usuário precisará criar uma nova senha no próximo login.',
             'temporaryPassword' => $temporaryPassword,
         ]);
+    }
+
+    /**
+     * Reenvia o email de configuracao de senha para o usuario
+     */
+    public function resendSetupEmail(User $user): JsonResponse
+    {
+        // Verificar se o usuario ainda precisa configurar senha
+        if (!$user->password_reset_required) {
+            return response()->json([
+                'message' => 'Este usuario ja configurou sua senha.',
+            ], 400);
+        }
+
+        // Gerar novo token se nao existir
+        if (empty($user->setup_token)) {
+            $user->setup_token = Str::random(64);
+            $user->save();
+        }
+
+        $setupUrl = url("/configurar-senha/{$user->setup_token}");
+
+        try {
+            Mail::to($user->email)->send(new WelcomeUserMail($user, $setupUrl));
+
+            Log::info('Email de configuracao reenviado', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'performed_by' => auth()->id(),
+            ]);
+
+            // Registrar auditoria
+            UserAuditLog::log(
+                $user->id,
+                UserAuditLog::ACTION_UPDATED,
+                auth()->id(),
+                'setup_email',
+                null,
+                'Email reenviado',
+                'Email de configuracao de senha reenviado'
+            );
+
+            return response()->json([
+                'message' => 'Email reenviado com sucesso para ' . $user->email,
+                'setupUrl' => $setupUrl,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Falha ao reenviar email de configuracao', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Falha ao enviar email. Copie o link abaixo e envie manualmente.',
+                'setupUrl' => $setupUrl,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
