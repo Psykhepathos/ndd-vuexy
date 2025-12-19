@@ -65,6 +65,7 @@ export const API_ENDPOINTS = {
 
   // Auth
   authLogin: '/auth/login',
+  authLogout: '/auth/logout',
   authVerifySetupToken: '/auth/verify-setup-token',
   authSetupPassword: '/auth/setup-password',
 } as const

@@ -18,13 +18,23 @@ export type CookieRef<T> = Ref<T>
 /**
  * Detecta o path base da aplicação para cookies
  * Suporta deploy em subdiretório (ex: /valepedagio)
+ *
+ * IMPORTANTE: Cookies devem usar o path base da aplicação SEM /build
+ * para garantir que sejam criados e deletados corretamente.
+ *
+ * Exemplos:
+ * - Desenvolvimento: BASE_URL='/' -> path='/'
+ * - Produção com ASSET_URL=/valepedagio: BASE_URL='/valepedagio/build' -> path='/valepedagio'
  */
 const getBasePath = (): string => {
-  // Em produção, usa o BASE_URL do Vite (configurado via ASSET_URL)
-  // Remove '/build' se presente no final
   const baseUrl = import.meta.env.BASE_URL || '/'
 
-  return baseUrl.replace(/\/build\/?$/, '') || '/'
+  // Remove '/build' do final se presente (Vite adiciona automaticamente)
+  // Também remove trailing slash para consistência
+  let path = baseUrl.replace(/\/build\/?$/, '').replace(/\/$/, '')
+
+  // Garantir que sempre tenha pelo menos '/'
+  return path || '/'
 }
 
 const CookieDefaults: CookieOptions<any> = {
@@ -47,9 +57,29 @@ export const useCookie = <T = string | null | undefined>(name: string, _opts?: C
   return cookie as CookieRef<T>
 }
 
+/**
+ * Serializa cookie para document.cookie
+ *
+ * Ao deletar (value = null), tenta limpar em múltiplos paths
+ * para garantir remoção mesmo que o cookie tenha sido criado
+ * com path diferente (ex: migração de / para /valepedagio)
+ */
 function serializeCookie(name: string, value: any, opts: CookieSerializeOptions = {}) {
-  if (value === null || value === undefined)
-    return serialize(name, value, { ...opts, maxAge: -1 })
+  if (value === null || value === undefined) {
+    const basePath = opts.path || '/'
+    const pathsToTry = new Set([basePath])
+
+    // Adicionar paths alternativos comuns para garantir limpeza
+    pathsToTry.add('/')
+    if (basePath !== '/') {
+      pathsToTry.add(basePath + '/build') // Vite pode ter criado com /build
+    }
+
+    // Gerar múltiplos Set-Cookie para limpar em todos os paths
+    return Array.from(pathsToTry).map(path =>
+      serialize(name, '', { ...opts, path, maxAge: -1 })
+    ).join('; ')
+  }
 
   return serialize(name, value, { ...opts, maxAge: 60 * 60 * 24 * 30 })
 }

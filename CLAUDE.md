@@ -125,6 +125,8 @@ git commit -m "Add: Endpoint validacao de veiculo"
 git commit -m "Update: Melhorar cache de geocoding"
 
 # NUNCA mencionar AI/Claude nos commits
+# NUNCA adicionar Co-Authored-By do Claude
+# Commits devem parecer feitos por humano
 ```
 
 ---

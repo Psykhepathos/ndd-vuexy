@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { PerfectScrollbar } from 'vue3-perfect-scrollbar'
+import { $api } from '@/utils/api'
+import { API_ENDPOINTS } from '@/config/api'
 
 const router = useRouter()
 const ability = useAbility()
@@ -7,22 +9,37 @@ const ability = useAbility()
 // TODO: Get type from backend
 const userData = useCookie<any>('userData')
 
+/**
+ * Função de logout robusta
+ * 1. Chama o backend para invalidar o token (best effort)
+ * 2. Limpa todos os cookies de autenticação
+ * 3. Reseta as abilities CASL
+ * 4. Redireciona para login
+ */
 const logout = async () => {
-  // Remove "accessToken" from cookie
-  useCookie('accessToken').value = null
+  // Tentar chamar o backend para invalidar o token (best effort - não bloqueia logout)
+  try {
+    await $api(API_ENDPOINTS.authLogout, { method: 'POST' })
+  }
+  catch (error) {
+    console.warn('Erro ao invalidar token no servidor (continuando logout local):', error)
+  }
 
-  // Remove "userData" from cookie
-  userData.value = null
+  // Limpar cookies de autenticação
+  // IMPORTANTE: Limpar na ordem correta para evitar flicker na UI
+  const accessTokenCookie = useCookie('accessToken')
+  const userDataCookie = useCookie('userData')
+  const userAbilityCookie = useCookie('userAbilityRules')
 
-  // Redirect to login page
-  await router.push({ name: 'login' })
+  accessTokenCookie.value = null
+  userDataCookie.value = null
+  userAbilityCookie.value = null
 
-  // ℹ️ We had to remove abilities in then block because if we don't nav menu items mutation is visible while redirecting user to login page
-  // Remove "userAbilities" from cookie
-  useCookie('userAbilityRules').value = null
-
-  // Reset ability to initial ability
+  // Resetar abilities CASL
   ability.update([])
+
+  // Redirecionar para login
+  await router.push({ name: 'login' })
 }
 
 const userProfileList = [
