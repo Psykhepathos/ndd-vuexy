@@ -56,7 +56,9 @@ declare global {
   const getActivePinia: typeof import('pinia')['getActivePinia']
   const getCurrentInstance: typeof import('vue')['getCurrentInstance']
   const getCurrentScope: typeof import('vue')['getCurrentScope']
+  const getErrorMessage: typeof import('./resources/ts/utils/api')['getErrorMessage']
   const h: typeof import('vue')['h']
+  const handleApiError: typeof import('./resources/ts/utils/api')['handleApiError']
   const hexToRgb: typeof import('./resources/ts/@core/utils/colorConverter')['hexToRgb']
   const ignorableWatch: typeof import('@vueuse/core')['ignorableWatch']
   const inject: typeof import('vue')['inject']
@@ -138,6 +140,10 @@ declare global {
   const shallowReactive: typeof import('vue')['shallowReactive']
   const shallowReadonly: typeof import('vue')['shallowReadonly']
   const shallowRef: typeof import('vue')['shallowRef']
+  const showError: typeof import('./resources/ts/utils/api')['showError']
+  const showInfo: typeof import('./resources/ts/utils/api')['showInfo']
+  const showSuccess: typeof import('./resources/ts/utils/api')['showSuccess']
+  const showWarning: typeof import('./resources/ts/utils/api')['showWarning']
   const storeToRefs: typeof import('pinia')['storeToRefs']
   const syncRef: typeof import('@vueuse/core')['syncRef']
   const syncRefs: typeof import('@vueuse/core')['syncRefs']
@@ -423,7 +429,9 @@ declare module 'vue' {
     readonly getActivePinia: UnwrapRef<typeof import('pinia')['getActivePinia']>
     readonly getCurrentInstance: UnwrapRef<typeof import('vue')['getCurrentInstance']>
     readonly getCurrentScope: UnwrapRef<typeof import('vue')['getCurrentScope']>
+    readonly getErrorMessage: UnwrapRef<typeof import('./resources/ts/utils/api')['getErrorMessage']>
     readonly h: UnwrapRef<typeof import('vue')['h']>
+    readonly handleApiError: UnwrapRef<typeof import('./resources/ts/utils/api')['handleApiError']>
     readonly hexToRgb: UnwrapRef<typeof import('./resources/ts/@core/utils/colorConverter')['hexToRgb']>
     readonly ignorableWatch: UnwrapRef<typeof import('@vueuse/core')['ignorableWatch']>
     readonly inject: UnwrapRef<typeof import('vue')['inject']>
@@ -505,6 +513,10 @@ declare module 'vue' {
     readonly shallowReactive: UnwrapRef<typeof import('vue')['shallowReactive']>
     readonly shallowReadonly: UnwrapRef<typeof import('vue')['shallowReadonly']>
     readonly shallowRef: UnwrapRef<typeof import('vue')['shallowRef']>
+    readonly showError: UnwrapRef<typeof import('./resources/ts/utils/api')['showError']>
+    readonly showInfo: UnwrapRef<typeof import('./resources/ts/utils/api')['showInfo']>
+    readonly showSuccess: UnwrapRef<typeof import('./resources/ts/utils/api')['showSuccess']>
+    readonly showWarning: UnwrapRef<typeof import('./resources/ts/utils/api')['showWarning']>
     readonly storeToRefs: UnwrapRef<typeof import('pinia')['storeToRefs']>
     readonly syncRef: UnwrapRef<typeof import('@vueuse/core')['syncRef']>
     readonly syncRefs: UnwrapRef<typeof import('@vueuse/core')['syncRefs']>
