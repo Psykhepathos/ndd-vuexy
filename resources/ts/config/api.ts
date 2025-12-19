@@ -47,29 +47,89 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 export const API_ENDPOINTS = {
   // Pacotes
   pacotes: '/pacotes',
+  pacote: (id: number | string) => `/pacotes/${id}`,
   pacoteAutocomplete: '/pacotes/autocomplete',
   pacoteItinerario: '/pacotes/itinerario',
 
   // Transportes
   transportes: '/transportes',
+  transporte: (id: number | string) => `/transportes/${id}`,
+  transportesStatistics: '/transportes/statistics',
 
-  // Rotas
+  // Rotas SemParar
   semPararRotas: '/semparar-rotas',
   semPararRota: (id: number) => `/semparar-rotas/${id}`,
   semPararRotaMunicipios: (id: number) => `/semparar-rotas/${id}/municipios`,
+  rotas: '/rotas',
+
+  // Municipios
+  municipios: '/municipios',
 
   // Geocoding
   geocodingIbge: '/geocoding/ibge',
   geocodingLote: '/geocoding/lote',
 
-  // Routing
+  // Routing / Map
   routingRoute: '/routing/route',
+  mapRoute: '/map/route',
+  routeCache: '/route-cache',
+  routeCacheFind: '/route-cache/find',
+  routeCacheSave: '/route-cache/save',
 
   // Auth
   authLogin: '/auth/login',
   authLogout: '/auth/logout',
+  authRegister: '/auth/register',
+  authChangePassword: '/auth/change-password',
   authVerifySetupToken: '/auth/verify-setup-token',
   authSetupPassword: '/auth/setup-password',
+
+  // Users
+  users: '/users',
+  user: (id: number | string) => `/users/${id}`,
+  usersStatistics: '/users/statistics',
+  userResetPassword: (id: number | string) => `/users/${id}/reset-password`,
+  userAuditLogs: (id: number | string) => `/users/${id}/audit-logs`,
+
+  // Roles / Perfis
+  roles: '/roles',
+  role: (id: number | string) => `/roles/${id}`,
+  rolesStatistics: '/roles/statistics',
+  rolesPermissions: '/roles/permissions',
+  roleSyncPermissions: (id: number | string) => `/roles/${id}/sync-permissions`,
+
+  // Compra Viagem
+  compraViagemInitialize: '/compra-viagem/initialize',
+  compraViagemValidarPacote: '/compra-viagem/validar-pacote',
+  compraViagemValidarPlaca: '/compra-viagem/validar-placa',
+  compraViagemRotas: '/compra-viagem/rotas',
+  compraViagemValidarRota: '/compra-viagem/validar-rota',
+  compraViagemVerificarPreco: '/compra-viagem/verificar-preco',
+  compraViagemComprar: '/compra-viagem/comprar',
+
+  // VPO Emissao
+  vpoEmissao: '/vpo/emissao',
+  vpoEmissaoById: (uuid: string) => `/vpo/emissao/${uuid}`,
+  vpoEmissaoStatistics: '/vpo/emissao/statistics',
+  vpoEmissaoIniciar: '/vpo/emissao/iniciar',
+  vpoSyncTransportador: '/vpo/sync/transportador',
+  vpoMotoristas: (codtrn: number | string) => `/vpo/motoristas/${codtrn}`,
+  vpoCalcularPracas: '/vpo/calcular-pracas',
+
+  // Veiculos Cache
+  veiculosCache: '/veiculos-cache',
+  veiculoCacheByPlaca: (placa: string) => `/veiculos-cache/${placa}`,
+
+  // SemParar SOAP
+  semPararStatusVeiculo: '/semparar/status-veiculo',
+
+  // NDD Cargo
+  nddCargoRoteirizador: '/ndd-cargo/roteirizador',
+  nddCargoResultado: (guid: string) => `/ndd-cargo/resultado/${guid}`,
+
+  // Pracas Pedagio
+  pracasPedagio: '/pracas-pedagio',
+  pracasPedagioEstatisticas: '/pracas-pedagio/estatisticas',
 } as const
 
 /**
