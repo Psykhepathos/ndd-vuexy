@@ -1,20 +1,8 @@
-<!-- ❗Errors in the form are set on line 60 -->
 <script setup lang="ts">
 import { VForm } from 'vuetify/components/VForm'
-import AuthProvider from '@/views/pages/authentication/AuthProvider.vue'
-import { useGenerateImageVariant } from '@core/composable/useGenerateImageVariant'
-import authV2LoginIllustrationBorderedDark from '@images/pages/auth-v2-login-illustration-bordered-dark.png'
-import authV2LoginIllustrationBorderedLight from '@images/pages/auth-v2-login-illustration-bordered-light.png'
-import authV2LoginIllustrationDark from '@images/pages/auth-v2-login-illustration-dark.png'
-import authV2LoginIllustrationLight from '@images/pages/auth-v2-login-illustration-light.png'
-import authV2MaskDark from '@images/pages/misc-mask-dark.png'
-import authV2MaskLight from '@images/pages/misc-mask-light.png'
 import { VNodeRenderer } from '@layouts/components/VNodeRenderer'
 import { themeConfig } from '@themeConfig'
-
-const authThemeImg = useGenerateImageVariant(authV2LoginIllustrationLight, authV2LoginIllustrationDark, authV2LoginIllustrationBorderedLight, authV2LoginIllustrationBorderedDark, true)
-
-const authThemeMask = useGenerateImageVariant(authV2MaskLight, authV2MaskDark)
+import loginBackground from '@images/pages/login-background.jpg'
 
 definePage({
   meta: {
@@ -24,6 +12,7 @@ definePage({
 })
 
 const isPasswordVisible = ref(false)
+const isLoading = ref(false)
 
 const route = useRoute()
 const router = useRouter()
@@ -35,6 +24,8 @@ const errors = ref<Record<string, string | undefined>>({
   password: undefined,
 })
 
+const generalError = ref<string | undefined>(undefined)
+
 const refVForm = ref<VForm>()
 
 const credentials = ref({
@@ -45,19 +36,40 @@ const credentials = ref({
 const rememberMe = ref(false)
 
 const login = async () => {
+  isLoading.value = true
+  errors.value = { email: undefined, password: undefined }
+  generalError.value = undefined
+
   try {
     const res = await $api('/auth/login', {
       method: 'POST',
       body: {
         email: credentials.value.email,
         password: credentials.value.password,
+        remember: rememberMe.value,
       },
       onResponseError({ response }) {
-        errors.value = response._data.errors
+        const data = response._data
+
+        // Erro de validação (422) - erros por campo
+        if (response.status === 422 && data?.errors) {
+          errors.value = data.errors
+        }
+        // Rate limit (429)
+        else if (response.status === 429) {
+          generalError.value = data?.message || 'Muitas tentativas. Aguarde alguns segundos.'
+        }
+        // Credenciais inválidas (401) ou outros erros
+        else if (data?.message) {
+          generalError.value = data.message
+        }
+        else {
+          generalError.value = 'Erro ao fazer login. Tente novamente.'
+        }
       },
     })
 
-    const { accessToken, userData, userAbilityRules } = res
+    const { accessToken, userData, userAbilityRules, passwordResetRequired } = res
 
     useCookie('userAbilityRules').value = userAbilityRules
     ability.update(userAbilityRules)
@@ -65,19 +77,26 @@ const login = async () => {
     useCookie('userData').value = userData
     useCookie('accessToken').value = accessToken
 
-    // Redirect to `to` query if exist or redirect to dashboard
-    // ❗ nextTick is required to wait for DOM updates and later redirect
     await nextTick(() => {
-      if (route.query.to) {
+      // Se precisar trocar a senha, redirecionar para página de alteração
+      if (passwordResetRequired) {
+        router.replace({ name: 'alterar-senha' })
+      } else if (route.query.to) {
         router.replace(String(route.query.to))
       } else {
-        // Redirecionar diretamente para o dashboard NDD para evitar loop de redirects
         router.replace({ name: 'ndd-dashboard' })
       }
     })
   }
-  catch (err) {
+  catch (err: any) {
+    // Se o erro não foi tratado pelo onResponseError
+    if (!generalError.value && !errors.value.email && !errors.value.password) {
+      generalError.value = 'Erro de conexão. Verifique sua internet.'
+    }
     console.error(err)
+  }
+  finally {
+    isLoading.value = false
   }
 }
 
@@ -91,167 +110,180 @@ const onSubmit = () => {
 </script>
 
 <template>
-  <RouterLink :to="{ name: 'ndd-dashboard' }">
-    <div class="auth-logo d-flex align-center gap-x-3">
-      <VNodeRenderer :nodes="themeConfig.app.logo" />
-      <h1 class="auth-title">
-        {{ themeConfig.app.title }}
-      </h1>
-    </div>
-  </RouterLink>
+  <div class="auth-wrapper">
+    <!-- Background Image -->
+    <div
+      class="auth-background"
+      :style="{ backgroundImage: `url(${loginBackground})` }"
+    />
 
-  <VRow
-    no-gutters
-    class="auth-wrapper bg-surface"
-  >
-    <VCol
-      md="8"
-      class="d-none d-md-flex"
+    <!-- Overlay -->
+    <div class="auth-overlay" />
+
+    <!-- Login Card -->
+    <VCard
+      class="auth-card pa-6 pa-sm-8"
+      max-width="450"
     >
-      <div class="position-relative bg-background w-100 me-0">
-        <div
-          class="d-flex align-center justify-center w-100 h-100"
-          style="padding-inline: 6.25rem;"
+      <!-- Logo -->
+      <div class="d-flex justify-center mb-6">
+        <RouterLink
+          :to="{ name: 'ndd-dashboard' }"
+          class="d-flex align-center gap-x-3 text-decoration-none"
         >
-          <VImg
-            max-width="613"
-            :src="authThemeImg"
-            class="auth-illustration mt-16 mb-2"
-          />
-        </div>
-
-        <img
-          class="auth-footer-mask"
-          :src="authThemeMask"
-          alt="auth-footer-mask"
-          height="280"
-          width="100"
-        >
+          <VNodeRenderer :nodes="themeConfig.app.logo" />
+          <h1 class="auth-title text-h4">
+            {{ themeConfig.app.title }}
+          </h1>
+        </RouterLink>
       </div>
-    </VCol>
 
-    <VCol
-      cols="12"
-      md="4"
-      class="auth-card-v2 d-flex align-center justify-center"
-    >
-      <VCard
-        flat
-        :max-width="500"
-        class="mt-12 mt-sm-0 pa-4"
+      <!-- Welcome Text -->
+      <VCardText class="text-center pa-0 mb-6">
+        <h4 class="text-h5 mb-2">
+          Bem-vindo!
+        </h4>
+        <p class="text-body-2 text-medium-emphasis mb-0">
+          Entre com suas credenciais para acessar o sistema
+        </p>
+      </VCardText>
+
+      <!-- General Error Alert -->
+      <VAlert
+        v-if="generalError"
+        type="error"
+        variant="tonal"
+        class="mb-4"
+        closable
+        @click:close="generalError = undefined"
       >
-        <VCardText>
-          <h4 class="text-h4 mb-1">
-            Bem-vindo ao <span class="text-capitalize"> {{ themeConfig.app.title }} </span>! 👋🏻
-          </h4>
-          <p class="mb-0">
-            Entre na sua conta e comece a usar o sistema
-          </p>
-        </VCardText>
-        <VCardText>
-          <VAlert
-            color="primary"
-            variant="tonal"
-          >
-            <p class="text-sm mb-2">
-              Email Admin: <strong>admin@ndd.com</strong> / Senha: <strong>Admin@123</strong>
-            </p>
-            <p class="text-sm mb-0">
-              Email Cliente: <strong>user@ndd.com</strong> / Senha: <strong>User@123</strong>
-            </p>
-          </VAlert>
-        </VCardText>
-        <VCardText>
-          <VForm
-            ref="refVForm"
-            @submit.prevent="onSubmit"
-          >
-            <VRow>
-              <!-- email -->
-              <VCol cols="12">
-                <AppTextField
-                  v-model="credentials.email"
-                  label="E-mail"
-                  placeholder="usuario@email.com"
-                  type="email"
-                  autofocus
-                  :rules="[requiredValidator, emailValidator]"
-                  :error-messages="errors.email"
+        {{ generalError }}
+      </VAlert>
+
+      <!-- Login Form -->
+      <VCardText class="pa-0">
+        <VForm
+          ref="refVForm"
+          @submit.prevent="onSubmit"
+        >
+          <VRow>
+            <!-- Email -->
+            <VCol cols="12">
+              <AppTextField
+                v-model="credentials.email"
+                label="E-mail"
+                placeholder="usuario@email.com"
+                type="email"
+                autofocus
+                :rules="[requiredValidator, emailValidator]"
+                :error-messages="errors.email"
+                :disabled="isLoading"
+              />
+            </VCol>
+
+            <!-- Password -->
+            <VCol cols="12">
+              <AppTextField
+                v-model="credentials.password"
+                label="Senha"
+                placeholder="Digite sua senha"
+                :rules="[requiredValidator]"
+                :type="isPasswordVisible ? 'text' : 'password'"
+                autocomplete="current-password"
+                :error-messages="errors.password"
+                :append-inner-icon="isPasswordVisible ? 'tabler-eye-off' : 'tabler-eye'"
+                :disabled="isLoading"
+                @click:append-inner="isPasswordVisible = !isPasswordVisible"
+              />
+            </VCol>
+
+            <!-- Remember Me & Forgot Password -->
+            <VCol cols="12">
+              <div class="d-flex align-center flex-wrap justify-space-between">
+                <VCheckbox
+                  v-model="rememberMe"
+                  label="Lembrar de mim"
+                  :disabled="isLoading"
                 />
-              </VCol>
-
-              <!-- password -->
-              <VCol cols="12">
-                <AppTextField
-                  v-model="credentials.password"
-                  label="Senha"
-                  placeholder="············"
-                  :rules="[requiredValidator]"
-                  :type="isPasswordVisible ? 'text' : 'password'"
-                  autocomplete="password"
-                  :error-messages="errors.password"
-                  :append-inner-icon="isPasswordVisible ? 'tabler-eye-off' : 'tabler-eye'"
-                  @click:append-inner="isPasswordVisible = !isPasswordVisible"
-                />
-
-                <div class="d-flex align-center flex-wrap justify-space-between my-6">
-                  <VCheckbox
-                    v-model="rememberMe"
-                    label="Lembrar de mim"
-                  />
-                  <RouterLink
-                    class="text-primary ms-2 mb-1"
-                    :to="{ name: 'forgot-password' }"
-                  >
-                    Esqueceu a senha?
-                  </RouterLink>
-                </div>
-
-                <VBtn
-                  block
-                  type="submit"
-                >
-                  Entrar
-                </VBtn>
-              </VCol>
-
-              <!-- create account -->
-              <VCol
-                cols="12"
-                class="text-center"
-              >
-                <span>Novo na plataforma?</span>
                 <RouterLink
-                  class="text-primary ms-1"
-                  :to="{ name: 'register' }"
+                  class="text-primary text-sm"
+                  :to="{ name: 'forgot-password' }"
                 >
-                  Criar conta
+                  Esqueceu a senha?
                 </RouterLink>
-              </VCol>
-              <VCol
-                cols="12"
-                class="d-flex align-center"
-              >
-                <VDivider />
-                <span class="mx-4">ou</span>
-                <VDivider />
-              </VCol>
+              </div>
+            </VCol>
 
-              <!-- auth providers -->
-              <VCol
-                cols="12"
-                class="text-center"
+            <!-- Submit Button -->
+            <VCol cols="12">
+              <VBtn
+                block
+                type="submit"
+                size="large"
+                :loading="isLoading"
+                :disabled="isLoading"
               >
-                <AuthProvider />
-              </VCol>
-            </VRow>
-          </VForm>
-        </VCardText>
-      </VCard>
-    </VCol>
-  </VRow>
+                Entrar
+              </VBtn>
+            </VCol>
+          </VRow>
+        </VForm>
+      </VCardText>
+    </VCard>
+
+    <!-- Footer -->
+    <div class="auth-footer">
+      <span class="text-white text-body-2">
+        &copy; {{ new Date().getFullYear() }} Tambasa Atacadista
+      </span>
+    </div>
+  </div>
 </template>
 
-<style lang="scss">
-@use "@core-scss/template/pages/page-auth";
+<style lang="scss" scoped>
+.auth-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-background {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: 0;
+}
+
+.auth-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1;
+}
+
+.auth-card {
+  position: relative;
+  z-index: 2;
+  background: rgb(var(--v-theme-surface));
+  border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+}
+
+.auth-title {
+  color: rgb(var(--v-theme-on-surface));
+  font-weight: 600;
+}
+
+.auth-footer {
+  position: absolute;
+  inset-block-end: 24px;
+  inset-inline: 0;
+  text-align: center;
+  z-index: 2;
+}
 </style>
