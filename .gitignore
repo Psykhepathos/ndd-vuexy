@@ -66,8 +66,8 @@ public/mockServiceWorker.js
 !.env.example
 docs/integracoes/ndd-cargo/transportadores_rntrc_10_2025.csv
 
-# Driver JDBC Progress (ambiente específico - Windows vs Linux)
-/driver/
+# Driver JDBC Progress - incluído no repositório para deploy
+# /driver/
 
 # Java compiled files (recompilado em cada ambiente)
 storage/app/java/*.class
