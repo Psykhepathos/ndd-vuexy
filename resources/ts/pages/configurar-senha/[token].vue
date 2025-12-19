@@ -2,10 +2,11 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import logo from '@images/logo.svg'
+import { $api } from '@/utils/api'
+import { API_ENDPOINTS } from '@/config/api'
 
 const route = useRoute()
 const router = useRouter()
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 
 // State
 const loading = ref(true)
@@ -75,29 +76,27 @@ onMounted(async () => {
   }
 
   try {
-    const response = await fetch(`${API_BASE}/auth/verify-setup-token`, {
+    const data = await $api(API_ENDPOINTS.authVerifySetupToken, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({ token }),
+      body: { token },
     })
 
-    const data = await response.json()
-
-    if (response.status === 410) {
-      tokenExpired.value = true
-      errorMessage.value = 'Este link expirou. Solicite um novo link ao administrador.'
-    } else if (!response.ok || !data.valid) {
-      errorMessage.value = data.message || 'Token inválido ou não encontrado.'
-    } else {
+    if (data.valid) {
       tokenValid.value = true
       user.value = data.user
+    } else {
+      errorMessage.value = data.message || 'Token inválido ou não encontrado.'
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro ao verificar token:', error)
-    errorMessage.value = 'Erro ao verificar link. Tente novamente mais tarde.'
+
+    // Verificar se é erro 410 (token expirado)
+    if (error?.response?.status === 410 || error?.status === 410) {
+      tokenExpired.value = true
+      errorMessage.value = 'Este link expirou. Solicite um novo link ao administrador.'
+    } else {
+      errorMessage.value = error?.data?.message || 'Erro ao verificar link. Tente novamente mais tarde.'
+    }
   } finally {
     loading.value = false
     verifying.value = false
@@ -119,29 +118,23 @@ async function handleSubmit() {
 
   try {
     const token = route.params.token as string
-    const response = await fetch(`${API_BASE}/auth/setup-password`, {
+    const data = await $api(API_ENDPOINTS.authSetupPassword, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({
+      body: {
         token,
         password: form.value.password,
         password_confirmation: form.value.password_confirmation,
-      }),
+      },
     })
 
-    const data = await response.json()
+    // Save auth data usando cookies (consistente com o resto do sistema)
+    const accessTokenCookie = useCookie('accessToken')
+    const userDataCookie = useCookie('userData')
+    const userAbilityRulesCookie = useCookie('userAbilityRules')
 
-    if (!response.ok) {
-      throw new Error(data.message || 'Erro ao configurar senha.')
-    }
-
-    // Save auth data
-    localStorage.setItem('accessToken', data.accessToken)
-    localStorage.setItem('userData', JSON.stringify(data.userData))
-    localStorage.setItem('userAbilityRules', JSON.stringify(data.userAbilityRules))
+    accessTokenCookie.value = data.accessToken
+    userDataCookie.value = JSON.stringify(data.userData)
+    userAbilityRulesCookie.value = JSON.stringify(data.userAbilityRules)
 
     successMessage.value = 'Senha configurada com sucesso! Redirecionando...'
 
@@ -151,7 +144,7 @@ async function handleSubmit() {
     }, 2000)
   } catch (error: any) {
     console.error('Erro ao configurar senha:', error)
-    errorMessage.value = error.message || 'Erro ao configurar senha. Tente novamente.'
+    errorMessage.value = error?.data?.message || 'Erro ao configurar senha. Tente novamente.'
   } finally {
     submitting.value = false
   }

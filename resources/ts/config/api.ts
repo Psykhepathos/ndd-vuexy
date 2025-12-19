@@ -31,26 +31,42 @@ export const getAppBasePath = (): string => {
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
 /**
- * Endpoints da API
- * Usar para manter consistência nas URLs
+ * Endpoints da API (SEM /api - usar com getApiUrl() ou $api())
+ *
+ * IMPORTANTE: Estes endpoints NÃO incluem /api porque:
+ * - $api() já usa API_BASE_URL como baseURL
+ * - getApiUrl() já combina com API_BASE_URL
+ *
+ * @example
+ * // Com $api (recomendado):
+ * $api(API_ENDPOINTS.pacotes)
+ *
+ * // Com getApiUrl + fetch:
+ * fetch(getApiUrl(API_ENDPOINTS.pacotes))
  */
 export const API_ENDPOINTS = {
   // Pacotes
-  pacoteAutocomplete: '/api/pacotes/autocomplete',
-  pacoteItinerario: '/api/pacotes/itinerario',
+  pacotes: '/pacotes',
+  pacoteAutocomplete: '/pacotes/autocomplete',
+  pacoteItinerario: '/pacotes/itinerario',
 
   // Transportes
-  transportes: '/api/transportes',
+  transportes: '/transportes',
 
   // Rotas
-  semPararRotas: '/api/semparar-rotas',
+  semPararRotas: '/semparar-rotas',
 
   // Geocoding
-  geocodingIbge: '/api/geocoding/ibge',
-  geocodingLote: '/api/geocoding/lote',
+  geocodingIbge: '/geocoding/ibge',
+  geocodingLote: '/geocoding/lote',
 
   // Routing
-  routingRoute: '/api/routing/route',
+  routingRoute: '/routing/route',
+
+  // Auth
+  authLogin: '/auth/login',
+  authVerifySetupToken: '/auth/verify-setup-token',
+  authSetupPassword: '/auth/setup-password',
 } as const
 
 /**
