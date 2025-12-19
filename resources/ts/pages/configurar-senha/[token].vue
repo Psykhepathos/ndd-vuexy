@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import logo from '@images/logo.png'
+import logo from '@images/logo.svg'
 
 const route = useRoute()
 const router = useRouter()
