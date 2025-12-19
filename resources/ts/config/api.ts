@@ -31,6 +31,29 @@ export const getAppBasePath = (): string => {
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
 /**
+ * Endpoints da API
+ * Usar para manter consistência nas URLs
+ */
+export const API_ENDPOINTS = {
+  // Pacotes
+  pacoteAutocomplete: '/api/pacotes/autocomplete',
+  pacoteItinerario: '/api/pacotes/itinerario',
+
+  // Transportes
+  transportes: '/api/transportes',
+
+  // Rotas
+  semPararRotas: '/api/semparar-rotas',
+
+  // Geocoding
+  geocodingIbge: '/api/geocoding/ibge',
+  geocodingLote: '/api/geocoding/lote',
+
+  // Routing
+  routingRoute: '/api/routing/route',
+} as const
+
+/**
  * Obtém a URL para chamadas API
  * Combina API_BASE_URL com o endpoint
  *

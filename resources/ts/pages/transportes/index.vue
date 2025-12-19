@@ -3,6 +3,7 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { watchDebounced } from '@vueuse/core'
 import { apiFetch } from '@/config/api'
+import { showError } from '@/utils/api'
 
 const router = useRouter()
 
@@ -127,10 +128,10 @@ const fetchStatistics = async () => {
 
     if (result.success && result.data) {
       statistics.value = result.data
-      console.log('✅ Estatísticas globais carregadas:', result.data)
     }
   } catch (error) {
     console.error('Erro ao buscar estatísticas:', error)
+    showError('Erro ao carregar estatísticas')
   } finally {
     loadingStats.value = false
   }
@@ -202,21 +203,15 @@ const fetchTransportes = async (direction: 'next' | 'prev' | null = null) => {
         hasPrev: pagination.has_prev || false
       }
 
-      console.log(`✅ Dados carregados - Página ${pagination.current_page}`, {
-        total: pagination.total,
-        count: pagination.count,
-        items: transportesList.length,
-        hasNext: cursors.value.hasNext,
-        hasPrev: cursors.value.hasPrev,
-        mode: direction ? 'keyset' : (options.value.page > 1 ? 'legacy' : 'first')
-      })
     } else {
       console.error('Erro ao buscar transportes:', result.message)
+      showError(result.message || 'Erro ao carregar transportadores')
       serverItems.value = []
       totalItems.value = 0
     }
   } catch (error) {
     console.error('Erro na requisição:', error)
+    showError('Erro ao conectar com o servidor')
     serverItems.value = []
     totalItems.value = 0
   } finally {

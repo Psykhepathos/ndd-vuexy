@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { showSuccess, showError } from '@/utils/api'
 
 interface Permission {
   id: number
@@ -137,6 +138,7 @@ async function fetchRoles() {
     totalRoles.value = data.totalRoles
   } catch (error) {
     console.error('Erro ao carregar perfis:', error)
+    showError('Erro ao carregar perfis')
   } finally {
     loading.value = false
   }
@@ -154,6 +156,7 @@ async function fetchStatistics() {
     statistics.value = await response.json()
   } catch (error) {
     console.error('Erro ao carregar estatísticas:', error)
+    showError('Erro ao carregar estatísticas')
   }
 }
 
@@ -171,6 +174,7 @@ async function fetchPermissions() {
     allPermissions.value = data.allPermissions
   } catch (error) {
     console.error('Erro ao carregar permissões:', error)
+    showError('Erro ao carregar permissões')
   }
 }
 
@@ -228,6 +232,7 @@ async function openPermissionsDialog(role: Role) {
       .map(p => p.id)
   } catch (error) {
     console.error('Erro ao carregar permissões do perfil:', error)
+    showError('Erro ao carregar permissões do perfil')
     selectedRolePermissions.value = []
   }
 
@@ -258,11 +263,12 @@ async function saveRole() {
     }
 
     dialogRole.value = false
+    showSuccess(editMode.value ? 'Perfil atualizado com sucesso!' : 'Perfil criado com sucesso!')
     fetchRoles()
     fetchStatistics()
   } catch (error: any) {
     console.error('Erro ao salvar perfil:', error)
-    alert(error.message)
+    showError(error.message || 'Erro ao salvar perfil')
   }
 }
 
@@ -285,11 +291,12 @@ async function deleteRole() {
     }
 
     dialogDelete.value = false
+    showSuccess('Perfil excluído com sucesso!')
     fetchRoles()
     fetchStatistics()
   } catch (error: any) {
     console.error('Erro ao excluir perfil:', error)
-    alert(error.message)
+    showError(error.message || 'Erro ao excluir perfil')
   }
 }
 
@@ -314,10 +321,11 @@ async function savePermissions() {
     }
 
     dialogPermissions.value = false
+    showSuccess('Permissões salvas com sucesso!')
     fetchRoles()
   } catch (error: any) {
     console.error('Erro ao salvar permissões:', error)
-    alert(error.message)
+    showError(error.message || 'Erro ao salvar permissões')
   }
 }
 

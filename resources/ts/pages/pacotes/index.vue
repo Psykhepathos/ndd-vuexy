@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiFetch } from '@/config/api'
+import { showError } from '@/utils/api'
 
 // Interface para tipagem
 interface Pacote {
@@ -118,6 +119,7 @@ const fetchTransportadores = async (searchTerm: string = '') => {
     }
   } catch (error) {
     console.error('Erro ao buscar transportadores:', error)
+    showError('Erro ao carregar transportadores')
     transportadoresOptions.value = []
   } finally {
     loadingTransportadores.value = false
@@ -151,6 +153,7 @@ const fetchRotas = async (searchTerm: string = '') => {
     }
   } catch (error) {
     console.error('Erro ao buscar rotas:', error)
+    showError('Erro ao carregar rotas')
     rotasOptions.value = []
   } finally {
     loadingRotas.value = false
@@ -191,9 +194,11 @@ const fetchPacotes = async () => {
       pagination.value = data.pagination || pagination.value
     } else {
       console.error('Erro na API:', data.message)
+      showError(data.message || 'Erro ao carregar pacotes')
     }
   } catch (error) {
     console.error('Erro ao carregar pacotes:', error)
+    showError('Erro ao conectar com o servidor')
   } finally {
     loading.value = false
   }

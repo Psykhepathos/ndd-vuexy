@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { VDataTableServer } from 'vuetify/components/VDataTable'
+import { showSuccess, showError, getErrorMessage } from '@/utils/api'
 
 interface Role {
   id: number
@@ -184,9 +185,11 @@ const createUser = async () => {
     setupUrl.value = response?.setupUrl || ''
     isAddUserDialogVisible.value = false
     resetNewUserForm()
+    showSuccess(response?.message || 'Usuario criado com sucesso!')
     fetchUsers()
     fetchStatistics()
-  } catch (error) {
+  } catch (error: any) {
+    // Erro já tratado pelo $api, apenas log adicional
     console.error('Erro ao criar usuário:', error)
   }
 }
@@ -211,14 +214,15 @@ const updateUser = async () => {
       payload.reason = editUser.value.reason
     }
 
-    await $api(`/users/${editUser.value.id}`, {
+    const response = await $api(`/users/${editUser.value.id}`, {
       method: 'PUT',
       body: payload,
     })
     isEditUserDialogVisible.value = false
+    showSuccess(response?.message || 'Usuario atualizado com sucesso!')
     fetchUsers()
     fetchStatistics()
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro ao atualizar usuário:', error)
   }
 }
@@ -228,14 +232,15 @@ const deleteUser = async () => {
   if (!selectedUser.value) return
 
   try {
-    await $api(`/users/${selectedUser.value.id}`, {
+    const response = await $api(`/users/${selectedUser.value.id}`, {
       method: 'DELETE',
     })
     isDeleteDialogVisible.value = false
     selectedUser.value = null
+    showSuccess(response?.message || 'Usuario excluido com sucesso!')
     fetchUsers()
     fetchStatistics()
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro ao excluir usuário:', error)
   }
 }
@@ -250,9 +255,10 @@ const resetPassword = async () => {
       body: { reason: resetReason.value },
     })
     temporaryPassword.value = response.temporaryPassword
+    showSuccess('Senha resetada com sucesso!')
     fetchUsers()
     fetchStatistics()
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro ao resetar senha:', error)
   }
 }

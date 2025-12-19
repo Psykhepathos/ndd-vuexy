@@ -11,6 +11,7 @@ import NavbarShortcuts from '@/layouts/components/NavbarShortcuts.vue'
 import NavbarThemeSwitcher from '@/layouts/components/NavbarThemeSwitcher.vue'
 import UserProfile from '@/layouts/components/UserProfile.vue'
 import NavBarI18n from '@core/components/I18n.vue'
+import GlobalToast from '@/components/GlobalToast.vue'
 import { HorizontalNavLayout } from '@layouts'
 import { VNodeRenderer } from '@layouts/components/VNodeRenderer'
 </script>
@@ -54,5 +55,8 @@ import { VNodeRenderer } from '@layouts/components/VNodeRenderer'
 
     <!-- 👉 Customizer -->
     <TheCustomizer />
+
+    <!-- 👉 Global Toast -->
+    <GlobalToast />
   </HorizontalNavLayout>
 </template>

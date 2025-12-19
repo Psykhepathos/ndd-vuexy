@@ -10,6 +10,7 @@ import NavbarShortcuts from '@/layouts/components/NavbarShortcuts.vue'
 import NavbarThemeSwitcher from '@/layouts/components/NavbarThemeSwitcher.vue'
 import UserProfile from '@/layouts/components/UserProfile.vue'
 import NavBarI18n from '@core/components/I18n.vue'
+import GlobalToast from '@/components/GlobalToast.vue'
 
 // @layouts plugin
 import { VerticalNavLayout } from '@layouts'
@@ -56,5 +57,8 @@ import { VerticalNavLayout } from '@layouts'
 
     <!-- 👉 Customizer -->
     <TheCustomizer />
+
+    <!-- 👉 Global Toast -->
+    <GlobalToast />
   </VerticalNavLayout>
 </template>
