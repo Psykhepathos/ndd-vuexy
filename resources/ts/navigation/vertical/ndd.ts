@@ -9,6 +9,20 @@ export default [
         to: 'ndd-dashboard',
         icon: { icon: 'tabler-dashboard' },
       },
+      {
+        title: 'Usuários',
+        to: 'usuarios',
+        icon: { icon: 'tabler-users' },
+        action: 'read',
+        subject: 'users',
+      },
+      {
+        title: 'Perfis e Permissões',
+        to: 'perfis',
+        icon: { icon: 'tabler-shield-lock' },
+        action: 'manage',
+        subject: 'roles',
+      },
             {
         title: 'Emissão VPO NDD',
         to: 'vpo-emissao',
