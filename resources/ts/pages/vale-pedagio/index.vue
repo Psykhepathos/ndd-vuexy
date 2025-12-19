@@ -401,7 +401,7 @@ function initMap() {
 async function loadRotaFromDatabase() {
   try {
     // Buscar rota do pacote 3043368 da API usando POST com parâmetro correto
-    const response = await apiFetch(getApiUrl(`/pacotes/itinerario`), {
+    const response = await apiFetch(`/pacotes/itinerario`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -836,7 +836,7 @@ async function fetchRealRoute(coordinates: Array<[number, number]>): Promise<L.L
 // Função para buscar rota no cache via API Laravel
 async function getCachedRoute(coordinates: Array<[number, number]>): Promise<L.LatLng[] | null> {
   try {
-    const response = await apiFetch(getApiUrl(`/route-cache/find`), {
+    const response = await apiFetch(`/route-cache/find`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -882,7 +882,7 @@ async function saveRouteToCache(
     // Converter Leaflet coords para array simples
     const coordsArray = routeCoords.map(coord => [coord.lat, coord.lng])
 
-    const response = await apiFetch(getApiUrl(`/route-cache/save`), {
+    const response = await apiFetch(`/route-cache/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

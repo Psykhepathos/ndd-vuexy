@@ -258,7 +258,7 @@ const calcularPracas = async () => {
       categoriaPedagio = 7 // Caminhão pesado (6+ eixos)
 
     // Chamar endpoint de cálculo de praças (IBGE → CEP → NDD Cargo)
-    const response = await apiFetch(getApiUrl('/vpo/calcular-pracas'), {
+    const response = await apiFetch('/vpo/calcular-pracas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -307,7 +307,7 @@ const calcularPracas = async () => {
         await new Promise(resolve => setTimeout(resolve, 3000))
 
         try {
-          const resultResponse = await apiFetch(getApiUrl(`/ndd-cargo/resultado/${data.guid}`), {
+          const resultResponse = await apiFetch(`/ndd-cargo/resultado/${data.guid}`, {
             headers: { 'Accept': 'application/json' }
           })
           const resultData = await resultResponse.json()

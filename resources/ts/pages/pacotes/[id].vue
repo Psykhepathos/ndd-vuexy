@@ -62,7 +62,7 @@ const fetchPacoteDetails = async () => {
   loading.value = true
   
   try {
-    const response = await apiFetch(getApiUrl(`/pacotes/${pacoteId.value}`), {
+    const response = await apiFetch(`/pacotes/${pacoteId.value}`, {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -95,7 +95,7 @@ const fetchItinerario = async () => {
       codPac: parseInt(pacoteId.value)
     }
 
-    const response = await apiFetch(getApiUrl(`/pacotes/itinerario`), {
+    const response = await apiFetch(`/pacotes/itinerario`, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',

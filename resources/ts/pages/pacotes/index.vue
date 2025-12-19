@@ -101,7 +101,7 @@ const fetchTransportadores = async (searchTerm: string = '') => {
       per_page: '20'
     })
 
-    const response = await apiFetch(getApiUrl(`/transportes?${params}`), {
+    const response = await apiFetch(`/transportes?${params}`, {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -136,7 +136,7 @@ const fetchRotas = async (searchTerm: string = '') => {
     const params = new URLSearchParams({
       search: searchTerm
     })
-    const response = await apiFetch(getApiUrl(`/rotas?${params}`), {
+    const response = await apiFetch(`/rotas?${params}`, {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -179,7 +179,7 @@ const fetchPacotes = async () => {
       data_fim: dataFim.value || ''
     })
 
-    const response = await apiFetch(getApiUrl(`/pacotes?${params}`), {
+    const response = await apiFetch(`/pacotes?${params}`, {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',

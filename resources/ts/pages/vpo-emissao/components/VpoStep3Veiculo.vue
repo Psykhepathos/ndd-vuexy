@@ -97,7 +97,7 @@ const carregarVeiculosCache = async () => {
 const verificarCache = async (placa: string): Promise<any | null> => {
   try {
     const placaNormalizada = placa.replace(/[^A-Z0-9]/gi, '').toUpperCase()
-    const response = await apiFetch(getApiUrl(`/veiculos-cache/${placaNormalizada}`))
+    const response = await apiFetch(`/veiculos-cache/${placaNormalizada}`)
 
     if (response.ok) {
       const data = await response.json()
@@ -114,7 +114,7 @@ const verificarCache = async (placa: string): Promise<any | null> => {
 // Salvar veículo no cache após validação
 const salvarNoCache = async (veiculoData: any, codtrn: number) => {
   try {
-    await apiFetch(getApiUrl(`/veiculos-cache`), {
+    await apiFetch(`/veiculos-cache`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -224,7 +224,7 @@ const validarPlaca = async () => {
       successMessage.value = 'Veículo encontrado no cache! Dados carregados automaticamente.'
     } else {
       // 2. Validar placa no SemParar (status do veículo)
-      const response = await apiFetch(getApiUrl(`/semparar/status-veiculo`), {
+      const response = await apiFetch(`/semparar/status-veiculo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ placa }),
@@ -348,7 +348,7 @@ const informarTagManual = async () => {
   try {
     // Primeiro, tentar validar novamente no SemParar
     // Pode ser que a tag já tenha sido cadastrada e agora está disponível
-    const response = await apiFetch(getApiUrl(`/semparar/status-veiculo`), {
+    const response = await apiFetch(`/semparar/status-veiculo`, {
       method: 'POST',
       body: JSON.stringify({
         placa: veiculoSelecionado.value.placa.replace(/[^A-Z0-9]/gi, ''),

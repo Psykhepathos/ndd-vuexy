@@ -82,7 +82,7 @@ const carregarMotoristas = async () => {
   errorMessage.value = null
 
   try {
-    const response = await apiFetch(getApiUrl(`/vpo/motoristas/${codtrn.value}`))
+    const response = await apiFetch(`/vpo/motoristas/${codtrn.value}`)
     const data = await response.json()
     console.log('API motoristas response:', data)
 
@@ -164,7 +164,7 @@ const salvarMotorista = async () => {
 
   try {
     const response = await apiFetch(
-      getApiUrl(`/vpo/motoristas/${codtrn.value}/${editingMotorista.value.codmot}`),
+      `/vpo/motoristas/${codtrn.value}/${editingMotorista.value.codmot}`,
       {
         method: 'POST',
         body: JSON.stringify(payload),

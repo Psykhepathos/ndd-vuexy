@@ -98,7 +98,7 @@ const canImport = computed(() => {
 const loadStatistics = async () => {
   loadingStats.value = true
   try {
-    const response = await apiFetch(getApiUrl('/pracas-pedagio/estatisticas'))
+    const response = await apiFetch('/pracas-pedagio/estatisticas')
     const data = await response.json()
     if (data.success) {
       statistics.value = data.data
@@ -125,7 +125,7 @@ const loadPracas = async () => {
     if (filtroRodovia.value) params.append('rodovia', filtroRodovia.value)
     if (filtroSituacao.value) params.append('situacao', filtroSituacao.value)
 
-    const response = await apiFetch(getApiUrl(`/pracas-pedagio?${params.toString()}`))
+    const response = await apiFetch(`/pracas-pedagio?${params.toString()}`)
     const data = await response.json()
 
     if (data.success) {

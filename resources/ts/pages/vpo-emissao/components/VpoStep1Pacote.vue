@@ -53,9 +53,7 @@ const buscarPacote = async () => {
 
   try {
     // Buscar pacote pelo código
-    const response = await apiFetch(
-      getApiUrl(`/pacotes/${codpacNumerico}`)
-    )
+    const response = await apiFetch(`/pacotes/${codpacNumerico}`)
     const data = await response.json()
 
     if (!data.success || !data.data) {
@@ -72,7 +70,7 @@ const buscarPacote = async () => {
     }
 
     // Sincronizar transportador
-    const syncResponse = await apiFetch(getApiUrl(`/vpo/sync/transportador`), {
+    const syncResponse = await apiFetch(`/vpo/sync/transportador`, {
       method: 'POST',
       body: JSON.stringify({
         codtrn: pacote.codtrn,
@@ -99,7 +97,7 @@ const buscarPacote = async () => {
     }> = []
 
     try {
-      const itinerarioResponse = await apiFetch(getApiUrl(`/pacotes/itinerario`), {
+      const itinerarioResponse = await apiFetch(`/pacotes/itinerario`, {
         method: 'POST',
         body: JSON.stringify({ codPac: pacote.codpac }),
       })

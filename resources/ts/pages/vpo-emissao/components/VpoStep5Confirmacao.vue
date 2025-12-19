@@ -186,7 +186,7 @@ const calcularCusto = async () => {
     const pontosParada = montarPontosParada()
 
     // Chamar API NDD Cargo - Roteirizador
-    const response = await apiFetch(getApiUrl(`/ndd-cargo/roteirizador`), {
+    const response = await apiFetch(`/ndd-cargo/roteirizador`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -241,7 +241,7 @@ const aguardarResultadoRoteirizador = async (guid: string, tentativas = 0) => {
     // Aguardar 2 segundos entre consultas
     await new Promise(resolve => setTimeout(resolve, 2000))
 
-    const response = await apiFetch(getApiUrl(`/ndd-cargo/resultado/${guid}`))
+    const response = await apiFetch(`/ndd-cargo/resultado/${guid}`)
     const data = await response.json()
 
     if (data.success && data.data) {
@@ -378,7 +378,7 @@ const emitirVpo = async () => {
     console.log('km_total:', dadosEmissao.km_total)
 
     // Chamar API de emissão VPO (NDD Cargo) com as praças de pedágio
-    const response = await apiFetch(getApiUrl(`/vpo/emissao/iniciar`), {
+    const response = await apiFetch(`/vpo/emissao/iniciar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dadosEmissao),
@@ -436,7 +436,7 @@ const consultarResultadoEmissao = async () => {
   console.log(`Polling tentativa ${emissaoTentativas.value} para UUID: ${emissaoUuid.value}`)
 
   try {
-    const response = await apiFetch(getApiUrl(`/vpo/emissao/${emissaoUuid.value}`))
+    const response = await apiFetch(`/vpo/emissao/${emissaoUuid.value}`)
     const data = await response.json()
 
     console.log('Resposta polling:', data)

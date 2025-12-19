@@ -117,7 +117,7 @@ const fetchStatistics = async () => {
   try {
     loadingStats.value = true
 
-    const response = await apiFetch(getApiUrl(`/transportes/statistics`), {
+    const response = await apiFetch(`/transportes/statistics`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
@@ -178,7 +178,7 @@ const fetchTransportes = async (direction: 'next' | 'prev' | null = null) => {
       params.append('status_ativo', filtroStatus.value === 'ativo' ? 'true' : 'false')
     }
 
-    const response = await apiFetch(getApiUrl(`/transportes?${params}`), {
+    const response = await apiFetch(`/transportes?${params}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'

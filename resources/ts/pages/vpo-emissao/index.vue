@@ -141,7 +141,7 @@ const carregarEmissoes = async () => {
     }
 
     // Usar o endpoint correto do VpoEmissaoController
-    const response = await apiFetch(getApiUrl(`/vpo/emissao?${params}`))
+    const response = await apiFetch(`/vpo/emissao?${params}`)
     const data = await response.json()
 
     console.log('Emissões carregadas:', data)
@@ -170,7 +170,7 @@ const carregarStats = async () => {
 
   try {
     // Usar o endpoint de estatísticas do VpoEmissaoController
-    const response = await apiFetch(getApiUrl(`/vpo/emissao/statistics`))
+    const response = await apiFetch(`/vpo/emissao/statistics`)
     const data = await response.json()
 
     if (data.success) {
@@ -278,7 +278,7 @@ const consultarResultado = async (emissao: VpoEmissao) => {
  */
 const recarregarEmissao = async (uuid: string) => {
   try {
-    const response = await apiFetch(getApiUrl(`/vpo/emissao/${uuid}`))
+    const response = await apiFetch(`/vpo/emissao/${uuid}`)
     const data = await response.json()
 
     if (data.success) {

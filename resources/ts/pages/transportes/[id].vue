@@ -108,7 +108,7 @@ const showMotoristaDialog = ref(false)
 const fetchTransporte = async () => {
   try {
     loading.value = true
-    const response = await apiFetch(getApiUrl(`/transportes/${route.params.id}`), {
+    const response = await apiFetch(`/transportes/${route.params.id}`, {
       headers: { 'Accept': 'application/json' }
     })
     
