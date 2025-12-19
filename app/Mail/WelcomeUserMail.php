@@ -10,6 +10,12 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
+/**
+ * Email de boas-vindas para novos usuarios
+ *
+ * Usa ShouldQueue para enviar em background.
+ * Requer: php artisan queue:work rodando no servidor.
+ */
 class WelcomeUserMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;

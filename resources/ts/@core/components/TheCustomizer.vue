@@ -65,17 +65,17 @@ const themeMode = computed(() => {
     {
       bgImage: 'tabler-sun',
       value: Theme.Light,
-      label: 'Light',
+      label: 'Claro',
     },
     {
       bgImage: 'tabler-moon-stars',
       value: Theme.Dark,
-      label: 'Dark',
+      label: 'Escuro',
     },
     {
       bgImage: 'tabler-device-desktop-analytics',
       value: Theme.System,
-      label: 'System',
+      label: 'Sistema',
     },
   ]
 })
@@ -86,12 +86,12 @@ const themeSkin = computed(() => {
     {
       bgImage: defaultSkin,
       value: Skins.Default,
-      label: 'Default',
+      label: 'Padrão',
     },
     {
       bgImage: borderSkin,
       value: Skins.Bordered,
-      label: 'Bordered',
+      label: 'Com Borda',
     },
   ]
 })
@@ -109,7 +109,7 @@ const layouts = computed(() => {
     {
       bgImage: collapsed,
       value: Layout.Collapsed,
-      label: 'Collapsed',
+      label: 'Recolhido',
     },
     {
       bgImage: horizontalLight,
@@ -146,12 +146,12 @@ const contentWidth = computed(() => {
     {
       bgImage: compact,
       value: ContentWidth.Boxed,
-      label: 'Compact',
+      label: 'Compacto',
     },
     {
       bgImage: wideSvg,
       value: ContentWidth.Fluid,
-      label: 'Wide',
+      label: 'Amplo',
     },
   ]
 })
@@ -164,12 +164,12 @@ const direction = computed(() => {
     {
       bgImage: ltrSvg,
       value: Direction.Ltr,
-      label: 'Left to right',
+      label: 'Esq. p/ Dir.',
     },
     {
       bgImage: rtlSvg,
       value: Direction.Rtl,
-      label: 'Right to left',
+      label: 'Dir. p/ Esq.',
     },
   ]
 })
@@ -290,10 +290,10 @@ const resetCustomizer = async () => {
       <div class="customizer-heading d-flex align-center justify-space-between">
         <div>
           <h6 class="text-h6">
-            Theme Customizer
+            Personalizar Tema
           </h6>
           <p class="text-body-2 mb-0">
-            Customize & Preview in Real Time
+            Visualize em tempo real
           </p>
         </div>
 
@@ -344,13 +344,13 @@ const resetCustomizer = async () => {
       >
         <!-- SECTION Theming -->
         <CustomizerSection
-          title="Theming"
+          title="Aparência"
           :divider="false"
         >
           <!-- 👉 Primary Color -->
           <div class="d-flex flex-column gap-2">
             <h6 class="text-h6">
-              Primary Color
+              Cor Principal
             </h6>
 
             <div
@@ -422,7 +422,7 @@ const resetCustomizer = async () => {
           <!-- 👉 Theme -->
           <div class="d-flex flex-column gap-2">
             <h6 class="text-h6">
-              Theme
+              Tema
             </h6>
 
             <CustomRadiosWithImage
@@ -454,7 +454,7 @@ const resetCustomizer = async () => {
           <!-- 👉 Skin -->
           <div class="d-flex flex-column gap-2">
             <h6 class="text-h6">
-              Skins
+              Estilo
             </h6>
 
             <CustomRadiosWithImage
@@ -478,7 +478,7 @@ const resetCustomizer = async () => {
               for="customizer-semi-dark"
               class="text-h6 text-high-emphasis"
             >
-              Semi Dark Menu
+              Menu Semi Escuro
             </VLabel>
 
             <div>
@@ -497,7 +497,7 @@ const resetCustomizer = async () => {
           <!-- 👉 Layouts -->
           <div class="d-flex flex-column gap-2">
             <h6 class="text-base font-weight-medium">
-              Layout
+              Disposição
             </h6>
 
             <CustomRadiosWithImage
@@ -515,7 +515,7 @@ const resetCustomizer = async () => {
           <!-- 👉 Content Width -->
           <div class="d-flex flex-column gap-2">
             <h6 class="text-base font-weight-medium">
-              Content
+              Conteúdo
             </h6>
 
             <CustomRadiosWithImage
@@ -533,7 +533,7 @@ const resetCustomizer = async () => {
           <!-- 👉 Direction -->
           <div class="d-flex flex-column gap-2">
             <h6 class="text-base font-weight-medium">
-              Direction
+              Direção
             </h6>
 
             <CustomRadiosWithImage
