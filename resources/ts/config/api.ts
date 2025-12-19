@@ -103,13 +103,14 @@ export const DEFAULT_HEADERS = {
  * Adiciona automaticamente:
  * - Headers JSON padrão (Accept, Content-Type, X-Requested-With)
  * - Token de autenticação Bearer (se disponível)
+ * - Prefixo API_BASE_URL para endpoints relativos (começando com /)
  *
  * @example
- * // GET request com path relativo
- * const response = await apiFetch('/api/pacotes')
+ * // GET request com endpoint (sem /api)
+ * const response = await apiFetch('/pacotes')  // -> /ndd-vuexy/public/api/pacotes
  *
  * // POST request com body
- * const response = await apiFetch('/api/compra-viagem/comprar', {
+ * const response = await apiFetch('/compra-viagem/comprar', {
  *   method: 'POST',
  *   body: JSON.stringify({ pacote: 123 })
  * })
@@ -128,7 +129,13 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
     headers['Authorization'] = `Bearer ${accessToken}`
   }
 
-  return fetch(url, {
+  // Se a URL começa com / e não é uma URL absoluta, prefixar com API_BASE_URL
+  let finalUrl = url
+  if (url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/http')) {
+    finalUrl = getApiUrl(url)
+  }
+
+  return fetch(finalUrl, {
     ...options,
     headers
   })
