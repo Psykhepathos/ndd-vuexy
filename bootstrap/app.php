@@ -3,6 +3,8 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -16,7 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/*',
             'auth/*',
         ]);
-        
+
         $middleware->api([
             \App\Http\Middleware\CorsMiddleware::class,
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
@@ -28,7 +30,22 @@ return Application::configure(basePath: dirname(__DIR__))
             'google.quota' => \App\Http\Middleware\GoogleMapsQuotaProtection::class,
             'permission' => \App\Http\Middleware\CheckPermission::class,
         ]);
+
+        // Para requisições API não autenticadas, retornar JSON 401 ao invés de redirecionar
+        $middleware->redirectGuestsTo(function (Request $request) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return null; // Não redirecionar - deixar o exception handler lidar
+            }
+            return '/login';
+        });
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // Tratar AuthenticationException para retornar JSON em requisições API
+        $exceptions->render(function (AuthenticationException $e, Request $request) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'message' => 'Não autenticado.',
+                ], 401);
+            }
+        });
     })->create();

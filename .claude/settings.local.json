@@ -40,7 +40,8 @@
       "Bash(powershell -Command \"Get-Content storage\\\\logs\\\\laravel.log -Tail 30\")",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd: Sistema RBAC - Models, Migrations e Seeders\n\n- Criar models Permission, Role, UserAuditLog, PasswordResetRequest\n- Adicionar migrations para tabelas de roles e permissions\n- Criar migration para status e password_reset_required em users\n- Adicionar PermissionSeeder com 47 permissoes em 6 grupos\n- Suporte a 4 roles: admin, operador, visualizador, tv\nEOF\n\\)\")",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd: Sistema RBAC - Controllers e Middleware\n\n- Criar UserController para CRUD de usuarios\n- Criar RoleController para gestao de perfis\n- Criar PasswordResetRequestController para reset de senha\n- Criar CheckPermission middleware para validacao de permissoes\nEOF\n\\)\")",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []
