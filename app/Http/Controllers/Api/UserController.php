@@ -9,6 +9,7 @@ use App\Models\Permission;
 use App\Models\PasswordResetRequest;
 use App\Models\UserAuditLog;
 use App\Mail\WelcomeUserMail;
+use App\Mail\PasswordResetMail;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
@@ -345,7 +346,7 @@ class UserController extends Controller
     }
 
     /**
-     * Reseta a senha de um usuário (força troca no próximo login)
+     * Reseta a senha de um usuário e envia email com link para configurar nova senha
      */
     public function resetPassword(Request $request, User $user): JsonResponse
     {
@@ -360,13 +361,15 @@ class UserController extends Controller
             'reason' => ['sometimes', 'nullable', 'string', 'max:500'],
         ]);
 
-        // Gera uma senha temporária aleatória
-        $temporaryPassword = Str::random(12);
+        // Gerar novo setup_token para reset de senha
+        $setupToken = Str::random(64);
+        $reason = $validated['reason'] ?? null;
 
         $user->update([
-            'password' => Hash::make($temporaryPassword),
+            'password' => Hash::make(Str::random(32)), // Senha aleatória (não será usada)
             'password_reset_required' => true,
             'password_changed_at' => now(),
+            'setup_token' => $setupToken,
         ]);
 
         // Registrar auditoria
@@ -377,12 +380,38 @@ class UserController extends Controller
             'password',
             null,
             null,
-            $validated['reason'] ?? 'Senha resetada pelo administrador'
+            $reason ?? 'Senha resetada pelo administrador'
         );
 
+        // Enviar email com link para configurar nova senha
+        $setupUrl = url("/configurar-senha/{$setupToken}");
+        $emailSent = false;
+        $emailError = null;
+
+        try {
+            Mail::to($user->email)->send(new PasswordResetMail($user, $setupUrl, $reason));
+            $emailSent = true;
+            Log::info('Email de reset de senha enviado', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'performed_by' => auth()->id(),
+            ]);
+        } catch (\Exception $e) {
+            $emailError = $e->getMessage();
+            Log::error('Falha ao enviar email de reset de senha', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'error' => $emailError,
+            ]);
+        }
+
         return response()->json([
-            'message' => 'Senha resetada com sucesso. O usuário precisará criar uma nova senha no próximo login.',
-            'temporaryPassword' => $temporaryPassword,
+            'message' => $emailSent
+                ? 'Senha resetada com sucesso. Um email foi enviado para ' . $user->email . ' com o link para configurar a nova senha.'
+                : 'Senha resetada. O email não pôde ser enviado. Use o link abaixo.',
+            'emailSent' => $emailSent,
+            'emailError' => $emailError,
+            'setupUrl' => $setupUrl, // Fallback caso o email não seja enviado
         ]);
     }
 
