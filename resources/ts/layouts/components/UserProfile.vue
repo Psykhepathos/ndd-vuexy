@@ -6,13 +6,41 @@ import { API_ENDPOINTS } from '@/config/api'
 const router = useRouter()
 const ability = useAbility()
 
-// TODO: Get type from backend
-const userData = useCookie<any>('userData')
+// Manter uma cópia local dos dados do usuário para o template
+// Isso evita que o componente seja destruído quando os cookies são limpos
+const userDataCookie = useCookie<any>('userData')
+const userData = ref(userDataCookie.value)
+
+// Sincronizar quando o cookie mudar (ex: login em outra aba)
+watch(userDataCookie, (newValue) => {
+  if (newValue) {
+    userData.value = newValue
+  }
+})
+
+// Flag para controlar se o logout está em andamento
+const isLoggingOut = ref(false)
 
 /**
  * Função de logout
+ *
+ * IMPORTANTE: A ordem das operações é crítica!
+ *
+ * Problema original:
+ * - O template tem v-if="userData" que destrói o componente quando userData é null
+ * - O guard do router redireciona usuários logados para dashboard quando tentam acessar /login
+ *
+ * Solução:
+ * 1. Chamar backend (com token ainda válido)
+ * 2. Resetar CASL
+ * 3. Limpar cookies PRIMEIRO (para que o guard permita ir para /login)
+ * 4. Redirecionar para login
  */
 const logout = async () => {
+  // Prevenir múltiplos cliques
+  if (isLoggingOut.value) return
+  isLoggingOut.value = true
+
   // 1. Chamar backend para invalidar o token (com token ainda presente)
   try {
     await $api(API_ENDPOINTS.authLogout, { method: 'POST' })
@@ -21,22 +49,20 @@ const logout = async () => {
     console.warn('Erro ao invalidar token no servidor:', error)
   }
 
-  // 2. Limpar cookies usando document.cookie diretamente (mais confiável)
-  document.cookie = 'accessToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
-  document.cookie = 'userData=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
-  document.cookie = 'userAbilityRules=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+  // 2. Resetar abilities CASL
+  ability.update([])
 
-  // 3. Também limpar via useCookie para manter reatividade
+  // 3. Limpar cookies ANTES do redirect
+  // Isso é necessário porque o guard não permite ir para /login se estiver logado
+  // Usamos useCookie diretamente - o componente não será destruído porque
+  // userData agora é um ref independente, não o cookie direto
   useCookie('accessToken').value = null
   useCookie('userData').value = null
   useCookie('userAbilityRules').value = null
 
-  // 4. Resetar abilities CASL
-  ability.update([])
-
-  // 5. Aguardar próximo tick e redirecionar
-  await nextTick()
-  router.replace({ name: 'login' })
+  // 4. Redirecionar para login
+  // Agora o guard vai permitir porque os cookies foram limpos
+  await router.push({ name: 'login' })
 }
 
 const userProfileList = [
