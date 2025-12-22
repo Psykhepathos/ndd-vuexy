@@ -166,6 +166,7 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
+import { useCookie } from '@/@core/composable/useCookie'
 import { $api } from '@/utils/api'
 import { getApiUrl } from '@/config/api'
 import L from 'leaflet'
@@ -493,12 +494,19 @@ async function calculateSingleRoute(waypoints: Array<[number, number]>): Promise
       }
     }
 
+    // Obter token de autenticação
+    const accessToken = useCookie('accessToken').value
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    }
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`
+    }
+
     const response = await fetch(getApiUrl('/map/route'), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
+      headers,
       body: JSON.stringify(payload)
     })
 
