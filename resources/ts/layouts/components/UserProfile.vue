@@ -10,43 +10,33 @@ const ability = useAbility()
 const userData = useCookie<any>('userData')
 
 /**
- * Função de logout robusta
- * ORDEM CORRETA:
- * 1. Chamar backend para invalidar o token (COM o token ainda presente)
- * 2. Limpar todos os cookies de autenticação
- * 3. Resetar as abilities CASL
- * 4. Redirecionar para login
+ * Função de logout
  */
 const logout = async () => {
-  // 1. PRIMEIRO chamar o backend para invalidar o token (ANTES de limpar cookies!)
-  // Isso garante que o token é deletado do banco de dados
+  // 1. Chamar backend para invalidar o token (com token ainda presente)
   try {
     await $api(API_ENDPOINTS.authLogout, { method: 'POST' })
   }
   catch (error) {
-    // Ignorar erro - pode ser token já expirado
     console.warn('Erro ao invalidar token no servidor:', error)
   }
 
-  // 2. DEPOIS limpar cookies de autenticação
-  const accessTokenCookie = useCookie('accessToken')
-  const userDataCookie = useCookie('userData')
-  const userAbilityCookie = useCookie('userAbilityRules')
+  // 2. Limpar cookies usando document.cookie diretamente (mais confiável)
+  document.cookie = 'accessToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+  document.cookie = 'userData=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+  document.cookie = 'userAbilityRules=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
 
-  accessTokenCookie.value = null
-  userDataCookie.value = null
-  userAbilityCookie.value = null
+  // 3. Também limpar via useCookie para manter reatividade
+  useCookie('accessToken').value = null
+  useCookie('userData').value = null
+  useCookie('userAbilityRules').value = null
 
-  // 3. Resetar abilities CASL
+  // 4. Resetar abilities CASL
   ability.update([])
 
-  // 4. Redirecionar para login usando hard redirect para garantir limpeza completa
-  // Usar pathname atual para detectar o subdiretório correto (ex: /ndd-vuexy/public/)
-  const currentPath = window.location.pathname
-  // Extrair base path removendo a rota atual (ex: /ndd-vuexy/public/dashboard -> /ndd-vuexy/public)
-  const basePath = currentPath.replace(/\/[^/]*$/, '') || ''
-  const loginUrl = window.location.origin + basePath + '/login'
-  window.location.href = loginUrl
+  // 5. Aguardar próximo tick e redirecionar
+  await nextTick()
+  router.replace({ name: 'login' })
 }
 
 const userProfileList = [

@@ -99,12 +99,8 @@ export const $api = ofetch.create({
         if (!isLoginPage) {
           showWarning('Sessão expirada. Faça login novamente.')
 
-          // Usar hard redirect para garantir que cookies são limpos antes da navegação
-          // Detectar base path do pathname atual (ex: /ndd-vuexy/public/dashboard -> /ndd-vuexy/public)
-          const currentPath = window.location.pathname
-          const basePath = currentPath.replace(/\/[^/]*$/, '') || ''
-          const loginUrl = window.location.origin + basePath + '/login'
-          window.location.href = loginUrl
+          // Redirecionar via Vue Router (sabe o base path correto)
+          router.push({ name: 'login' })
         }
 
         setTimeout(() => {
