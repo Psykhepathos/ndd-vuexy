@@ -2782,6 +2782,10 @@ class ProgressService
                 ];
             }
 
+            // CORREÇÃO: Progress JDBC não reconhece TODAY - usar CURDATE() ou data formatada
+            // Formato Progress SQL: 'YYYY-MM-DD' ou função CURDATE()
+            $dataHoje = date('Y-m-d');
+
             $sql = "INSERT INTO PUB.sPararViagem (" .
                    "CodPac, codRotCreateSP, codtrn, codViagem, nomRotSemParar, " .
                    "NumPla, sPararRotID, valViagem, resCompra, dataCompra" .
@@ -2795,20 +2799,58 @@ class ProgressService
                    "{$dados['rotaId']}, " .
                    "{$dados['valorViagem']}, " .
                    $this->escapeSqlString($dados['usuario']) . ", " .
-                   "TODAY" .
+                   "'{$dataHoje}'" .
                    ")";
 
+            // DEBUG: Log completo do SQL e dados
+            Log::warning('[DEBUG] Tentando INSERT sPararViagem', [
+                'sql_completo' => $sql,
+                'dados_recebidos' => $dados
+            ]);
+
             $result = $this->executeUpdate($sql);
+
+            // DEBUG: Log completo do resultado do Java
+            Log::warning('[DEBUG] Resultado executeUpdate', [
+                'result_completo' => $result,
+                'success' => $result['success'] ?? 'NAO_DEFINIDO',
+                'error' => $result['error'] ?? 'SEM_ERRO',
+                'data' => $result['data'] ?? 'SEM_DATA'
+            ]);
+
+            // CORREÇÃO: affected_rows está dentro de data (estrutura do Java connector)
+            $rowsAffected = $result['data']['affected_rows'] ?? 0;
+
+            // Se o Java retornou success=false, propagar o erro
+            if (!($result['success'] ?? false)) {
+                Log::error('[DEBUG] Java retornou success=false', [
+                    'result' => $result
+                ]);
+                return [
+                    'success' => false,
+                    'error' => $result['error'] ?? 'Erro desconhecido ao salvar viagem'
+                ];
+            }
 
             Log::info('Viagem SemParar salva no Progress', [
                 'codpac' => $dados['codpac'],
                 'codViagem' => $dados['codViagem'],
-                'rows_affected' => $result['rows_affected'] ?? 0
+                'rows_affected' => $rowsAffected,
+                'sql_executado' => substr($sql, 0, 300)
+            ]);
+
+            // DEBUG: Verificar se registro existe após INSERT
+            $verificaSql = "SELECT codViagem, CodPac FROM PUB.sPararViagem WHERE codViagem = " .
+                          $this->escapeSqlString($dados['codViagem']);
+            $verificaResult = $this->executeCustomQuery($verificaSql);
+            Log::warning('[DEBUG] Verificação pós-INSERT', [
+                'sql_verifica' => $verificaSql,
+                'resultado' => $verificaResult
             ]);
 
             return [
                 'success' => true,
-                'rows_affected' => $result['rows_affected'] ?? 0
+                'rows_affected' => $rowsAffected
             ];
         } catch (Exception $e) {
             Log::error('Erro ao salvar sPararViagem', [
@@ -2831,6 +2873,8 @@ class ProgressService
     {
         try {
             $rowsAffected = 0;
+            // CORREÇÃO: Progress JDBC não reconhece TODAY - usar data formatada
+            $dataHoje = date('Y-m-d');
 
             foreach ($municipios as $index => $mun) {
                 $sql = "INSERT INTO PUB.semPararRotMuLog (" .
@@ -2841,12 +2885,13 @@ class ProgressService
                        $this->escapeSqlString($mun['DesMun'] ?? '') . ", " .
                        ($index + 1) . ", " .
                        $this->escapeSqlString($codViagem) . ", " .
-                       "TODAY, " .
+                       "'{$dataHoje}', " .
                        $this->escapeSqlString($mun['resAtu'] ?? 'SYSTEM') .
                        ")";
 
                 $result = $this->executeUpdate($sql);
-                $rowsAffected += $result['rows_affected'] ?? 0;
+                // CORREÇÃO: affected_rows está dentro de data
+                $rowsAffected += $result['data']['affected_rows'] ?? 0;
             }
 
             Log::info('Log de municípios salvo', [

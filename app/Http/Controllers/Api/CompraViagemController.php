@@ -1131,6 +1131,11 @@ class CompraViagemController extends Controller
             }
 
             // PASSO 1: Salva sPararViagem no Progress (linha 856-867)
+            // resCompra no Progress espera string com nome do usuário (igual userid("dictdb"))
+            // CORREÇÃO: Campo resCompra tem limite de 8 caracteres (tamanho userid Progress)
+            $user = request()->user();
+            $nomeUsuario = $user ? substr($user->name, 0, 8) : 'SYSTEM';
+
             $dadosViagem = [
                 'codpac' => $validated['codpac'],
                 'codRotCreateSP' => $validated['cod_rota_semparar'],
@@ -1140,7 +1145,7 @@ class CompraViagemController extends Controller
                 'placa' => $validated['placa'],
                 'rotaId' => $validated['cod_rota'],
                 'valorViagem' => $validated['valor_viagem'],
-                'usuario' => request()->user()->id ?? 'SYSTEM'
+                'usuario' => $nomeUsuario
             ];
 
             $resultViagem = $this->progressService->salvarSPararViagem($dadosViagem);
