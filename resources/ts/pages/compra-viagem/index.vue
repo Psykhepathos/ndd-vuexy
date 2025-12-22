@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { watchDebounced } from '@vueuse/core'
-import { apiPost, getApiUrl } from '@/config/api'
+import { apiPost, apiFetch } from '@/config/api'
 
 definePage({
   meta: {
@@ -140,8 +140,8 @@ const buscarRotas = async (search: string) => {
 
   rotasLoading.value = true
   try {
-    const response = await fetch(
-      getApiUrl(`/semparar-rotas/municipios?search=${encodeURIComponent(search)}`)
+    const response = await apiFetch(
+      `/semparar-rotas/municipios?search=${encodeURIComponent(search)}`
     )
     const data = await response.json()
 
@@ -169,8 +169,8 @@ const buscarTransportadores = async (search: string) => {
 
   transportadoresLoading.value = true
   try {
-    const response = await fetch(
-      getApiUrl(`/transportes?search=${encodeURIComponent(search)}&per_page=20`)
+    const response = await apiFetch(
+      `/transportes?search=${encodeURIComponent(search)}&per_page=20`
     )
     const data = await response.json()
 

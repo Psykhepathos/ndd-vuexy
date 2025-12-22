@@ -4,7 +4,7 @@ import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount, nextTick 
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { usePracasPedagio } from '@/composables/usePracasPedagio'
-import { getApiUrl } from '@/config/api'
+import { $api } from '@/utils/api'
 import type { CompraViagemFormData } from '../types'
 
 // ============================================================================
@@ -482,29 +482,17 @@ const calcularRota = async (waypoints: L.LatLng[]) => {
     // Converter waypoints para formato MapService [lat, lon]
     const mapServiceWaypoints = waypoints.map(w => [w.lat, w.lng] as [number, number])
 
-    // Chamar MapService
-    const response = await fetch(getApiUrl('/map/route'), {
+    // Chamar MapService usando $api (que inclui token automaticamente)
+    const result = await $api('/map/route', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
+      body: {
         waypoints: mapServiceWaypoints,
         options: {
           use_cache: true,
           fallback_to_straight: true
         }
-      })
+      }
     })
-
-    if (!response.ok) {
-      console.error('❌ MapService retornou erro:', response.status)
-      desenharLinhaReta(waypoints)
-      return
-    }
-
-    const result = await response.json()
 
     if (result.success && result.data?.coordinates) {
       console.log(`✅ Rota Compra Viagem calculada: ${result.data.distance_km}km via ${result.data.provider}`)
