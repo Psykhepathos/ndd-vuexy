@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\PracaPedagio;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Service para fazer matching entre pracas de pedagio do SemParar/NDD
@@ -58,8 +57,21 @@ class PracaPedagioMatchingService
         $km = $praca['km'] ?? null;
         $nome = $praca['praca'] ?? '';
 
+        // SemParar às vezes retorna km=0, mas o km está no nome da praça
+        // Ex: "BR-040, KM487,268, NORTE, CAPIM BRANCO" -> km=487.268
+        if (($km === null || $km == 0) && $nome) {
+            $kmExtraido = $this->extractKmFromName($nome);
+            if ($kmExtraido !== null) {
+                $km = $kmExtraido;
+                Log::debug('[PracaMatching] KM extraído do nome', [
+                    'nome' => $nome,
+                    'km_extraido' => $km
+                ]);
+            }
+        }
+
         // Tenta match por rodovia + km (mais preciso)
-        if ($rodovia && $km !== null) {
+        if ($rodovia && $km !== null && $km > 0) {
             $matched = $this->matchByRodoviaKm($rodovia, $km);
             if ($matched) {
                 return $this->mergeWithMatch($praca, $matched, false);
@@ -71,6 +83,43 @@ class PracaPedagioMatchingService
             $matched = $this->matchByNome($nome, $rodovia);
             if ($matched) {
                 return $this->mergeWithMatch($praca, $matched, true);
+            }
+        }
+
+        // Última tentativa: buscar por município extraído do nome
+        $municipioExtraido = $this->extractMunicipioFromName($nome);
+        if ($municipioExtraido && $rodovia) {
+            $matched = $this->matchByMunicipio($municipioExtraido, $rodovia);
+            if ($matched) {
+                Log::debug('[PracaMatching] Match por município extraído', [
+                    'nome' => $nome,
+                    'municipio' => $municipioExtraido
+                ]);
+                return $this->mergeWithMatch($praca, $matched, true);
+            }
+        }
+
+        // Última tentativa: geocodificar o município extraído usando Google Geocoding
+        if ($municipioExtraido) {
+            $geocoded = $this->geocodeMunicipio($municipioExtraido);
+            if ($geocoded) {
+                Log::debug('[PracaMatching] Match por geocoding do município', [
+                    'nome' => $nome,
+                    'municipio' => $municipioExtraido,
+                    'lat' => $geocoded['latitude'],
+                    'lon' => $geocoded['longitude']
+                ]);
+
+                return array_merge($praca, [
+                    'lat' => (float) $geocoded['latitude'],
+                    'lon' => (float) $geocoded['longitude'],
+                    'nome' => $praca['praca'] ?? 'Pedágio',
+                    'cidade' => $municipioExtraido,
+                    'uf' => $geocoded['uf'] ?? '',
+                    'valor' => $praca['valor'] ?? 0,
+                    'match_incerto' => true,
+                    'match_source' => 'geocoding'
+                ]);
             }
         }
 
@@ -92,6 +141,182 @@ class PracaPedagioMatchingService
             'match_incerto' => true,
             'match_source' => 'none'
         ]);
+    }
+
+    /**
+     * Geocodifica um município para obter coordenadas aproximadas
+     * Usa o cache de município_coordenadas primeiro, depois Google Geocoding API
+     */
+    protected function geocodeMunicipio(string $municipio): ?array
+    {
+        try {
+            // Buscar no cache de municípios (MunicipioCoordenada)
+            $cached = \App\Models\MunicipioCoordenada::where(function ($query) use ($municipio) {
+                $munNorm = strtoupper(trim($municipio));
+                $query->whereRaw('UPPER(nome_municipio) = ?', [$munNorm])
+                      ->orWhereRaw('UPPER(nome_municipio) LIKE ?', ['%' . $munNorm . '%']);
+            })->first();
+
+            if ($cached && $cached->latitude && $cached->longitude) {
+                Log::debug('[PracaMatching] Município encontrado no cache', [
+                    'municipio' => $municipio,
+                    'lat' => $cached->latitude,
+                    'lon' => $cached->longitude
+                ]);
+                return [
+                    'latitude' => $cached->latitude,
+                    'longitude' => $cached->longitude,
+                    'uf' => $cached->uf ?? ''
+                ];
+            }
+
+            // Fallback: chamar Google Geocoding API diretamente
+            $apiKey = config('services.google_maps.api_key');
+            if (!$apiKey) {
+                Log::warning('[PracaMatching] Google Maps API Key não configurada');
+                return null;
+            }
+
+            $address = $municipio . ', Brasil';
+            $response = \Illuminate\Support\Facades\Http::timeout(10)->get('https://maps.googleapis.com/maps/api/geocode/json', [
+                'address' => $address,
+                'key' => $apiKey,
+                'region' => 'br',
+                'language' => 'pt-BR'
+            ]);
+
+            if (!$response->successful()) {
+                Log::warning('[PracaMatching] Erro na requisição Google Geocoding', [
+                    'municipio' => $municipio,
+                    'status' => $response->status()
+                ]);
+                return null;
+            }
+
+            $data = $response->json();
+
+            if ($data['status'] === 'OK' && count($data['results']) > 0) {
+                $location = $data['results'][0]['geometry']['location'];
+
+                Log::info('[PracaMatching] Geocoding via Google bem-sucedido', [
+                    'municipio' => $municipio,
+                    'lat' => $location['lat'],
+                    'lng' => $location['lng']
+                ]);
+
+                return [
+                    'latitude' => $location['lat'],
+                    'longitude' => $location['lng'],
+                    'uf' => ''
+                ];
+            }
+
+            Log::warning('[PracaMatching] Google Geocoding não encontrou resultados', [
+                'municipio' => $municipio,
+                'status' => $data['status'] ?? 'unknown'
+            ]);
+
+            return null;
+        } catch (\Exception $e) {
+            Log::warning('[PracaMatching] Erro ao geocodificar município', [
+                'municipio' => $municipio,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Extrai o km do nome da praça SemParar
+     * Ex: "BR-040, KM487,268, NORTE, CAPIM BRANCO" -> 487.268
+     * Ex: "ALEXÂNIA KM 43 SUL" -> 43
+     */
+    protected function extractKmFromName(string $nome): ?float
+    {
+        // Padrão 1: "KM487,268" ou "KM 487.268" ou "KM487"
+        if (preg_match('/KM\s*(\d+)[,.]?(\d*)/i', $nome, $matches)) {
+            $kmInteiro = $matches[1];
+            $kmDecimal = $matches[2] ?? '';
+            if ($kmDecimal) {
+                return floatval($kmInteiro . '.' . $kmDecimal);
+            }
+            return floatval($kmInteiro);
+        }
+
+        return null;
+    }
+
+    /**
+     * Extrai o município do nome da praça SemParar
+     * Ex: "BR-040, KM487,268, NORTE, CAPIM BRANCO" -> "CAPIM BRANCO"
+     * Ex: "ALEXÂNIA KM 43 SUL" -> "ALEXÂNIA"
+     */
+    protected function extractMunicipioFromName(string $nome): ?string
+    {
+        // Padrão 1: Último elemento após vírgula (sem "NORTE", "SUL", "KM", etc)
+        $partes = explode(',', $nome);
+        if (count($partes) > 1) {
+            // Pega a última parte que não seja direção ou KM
+            for ($i = count($partes) - 1; $i >= 0; $i--) {
+                $parte = trim($partes[$i]);
+                // Ignorar direções e KM
+                if (!preg_match('/^(NORTE|SUL|LESTE|OESTE|KM\s*\d+|BR[- ]\d+)$/i', $parte)) {
+                    // Remove números do início/fim
+                    $parte = preg_replace('/^\d+\s*|\s*\d+$/', '', $parte);
+                    if (strlen($parte) > 2) {
+                        return strtoupper(trim($parte));
+                    }
+                }
+            }
+        }
+
+        // Padrão 2: Início do nome até "KM" (ex: "ALEXÂNIA KM 43 SUL")
+        if (preg_match('/^([A-ZÀ-ÿ\s]+)\s+KM/i', $nome, $matches)) {
+            return strtoupper(trim($matches[1]));
+        }
+
+        return null;
+    }
+
+    /**
+     * Match por município na rodovia
+     */
+    protected function matchByMunicipio(string $municipio, string $rodovia): ?array
+    {
+        $rodoviaNorm = $this->normalizeRodovia($rodovia);
+        $municipioNorm = $this->normalizeNome($municipio);
+
+        $pracaANTT = PracaPedagio::where('situacao', 'Ativo')
+            ->where(function ($query) use ($rodoviaNorm) {
+                $query->whereRaw('UPPER(REPLACE(rodovia, " ", "")) = ?', [$rodoviaNorm])
+                    ->orWhereRaw('UPPER(REPLACE(rodovia, " ", "")) = ?', ['BR-' . ltrim($rodoviaNorm, 'BR-')])
+                    ->orWhereRaw('UPPER(REPLACE(rodovia, " ", "")) = ?', [ltrim($rodoviaNorm, 'BR-')]);
+            })
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->get()
+            ->filter(function ($p) use ($municipioNorm) {
+                $pracaMunNorm = $this->normalizeNome($p->municipio ?? '');
+                // Match exato ou contém
+                return $pracaMunNorm === $municipioNorm ||
+                       str_contains($pracaMunNorm, $municipioNorm) ||
+                       str_contains($municipioNorm, $pracaMunNorm);
+            })
+            ->first();
+
+        if ($pracaANTT) {
+            return [
+                'latitude' => $pracaANTT->latitude,
+                'longitude' => $pracaANTT->longitude,
+                'praca_antt' => $pracaANTT->praca,
+                'municipio' => $pracaANTT->municipio,
+                'uf' => $pracaANTT->uf,
+                'concessionaria' => $pracaANTT->concessionaria,
+                'km_antt' => $pracaANTT->km
+            ];
+        }
+
+        return null;
     }
 
     /**

@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\NddCargoController;
 use App\Http\Controllers\Api\VpoController;
 use App\Http\Controllers\Api\MotoristaEmpresaController;
 use App\Http\Controllers\Api\VeiculoCacheController;
+use App\Http\Controllers\Api\NotificationController;
 use Illuminate\Support\Facades\Route;
 
 // Rotas de autenticação (públicas) com rate limiting por IP
@@ -562,5 +563,30 @@ Route::middleware(['api', 'auth:sanctum'])->group(function () {
         // Vincular veículo a transportador
         Route::post('{id}/vincular', [VeiculoCacheController::class, 'vincular'])
             ->middleware(['throttle:30,1', 'permission:veiculos.validate_semparar']);
+    });
+
+    // Rotas para Sistema de Notificações
+    Route::prefix('notifications')->group(function () {
+        // Rotas do usuário (navbar)
+        Route::get('/', [NotificationController::class, 'index'])
+            ->middleware('throttle:120,1');
+        Route::get('history', [NotificationController::class, 'history'])
+            ->middleware('throttle:60,1');
+        Route::post('{id}/read', [NotificationController::class, 'markAsRead'])
+            ->middleware('throttle:60,1');
+        Route::post('{id}/unread', [NotificationController::class, 'markAsUnread'])
+            ->middleware('throttle:60,1');
+        Route::post('read-all', [NotificationController::class, 'markAllAsRead'])
+            ->middleware('throttle:30,1');
+
+        // Rotas de administração (criar/editar/deletar)
+        Route::get('admin', [NotificationController::class, 'adminIndex'])
+            ->middleware(['throttle:60,1', 'permission:notificacoes.view']);
+        Route::post('admin', [NotificationController::class, 'store'])
+            ->middleware(['throttle:30,1', 'permission:notificacoes.create']);
+        Route::put('admin/{id}', [NotificationController::class, 'update'])
+            ->middleware(['throttle:30,1', 'permission:notificacoes.edit']);
+        Route::delete('admin/{id}', [NotificationController::class, 'destroy'])
+            ->middleware(['throttle:30,1', 'permission:notificacoes.delete']);
     });
 });

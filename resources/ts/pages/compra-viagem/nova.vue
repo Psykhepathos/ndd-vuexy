@@ -187,15 +187,16 @@ const voltarParaListagem = () => {
     </div>
 
     <!-- Main Content: Split-Screen Layout -->
-    <VCard>
-      <VRow no-gutters>
+    <VCard class="wizard-card">
+      <VRow no-gutters class="wizard-row">
         <!-- LEFT COLUMN: Stepper + Form (4 cols) -->
         <VCol
           cols="12"
           md="4"
+          class="wizard-left-col"
           :class="$vuetify.display.smAndDown ? 'border-b' : 'border-e'"
         >
-          <VCardText>
+          <VCardText class="wizard-content">
             <!-- AppStepper Vertical -->
             <AppStepper
               v-model:current-step="currentStep"
@@ -315,6 +316,7 @@ const voltarParaListagem = () => {
         <VCol
           cols="12"
           md="8"
+          class="wizard-right-col"
         >
           <CompraViagemMapaFixo :form-data="formData" />
         </VCol>
@@ -324,6 +326,34 @@ const voltarParaListagem = () => {
 </template>
 
 <style scoped>
+/* Layout do Wizard - Altura fixa */
+.wizard-card {
+  height: calc(100vh - 200px);
+  min-height: 600px;
+  max-height: 900px;
+  overflow: hidden;
+}
+
+.wizard-row {
+  height: 100%;
+}
+
+.wizard-left-col {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.wizard-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.wizard-right-col {
+  height: 100%;
+}
+
 /* Ajustes para o stepper */
 :deep(.stepper-icon-step-bg) {
   box-shadow: none !important;
@@ -336,6 +366,25 @@ const voltarParaListagem = () => {
 
 /* Responsividade */
 @media (max-width: 960px) {
+  .wizard-card {
+    height: auto;
+    min-height: auto;
+    max-height: none;
+  }
+
+  .wizard-row {
+    height: auto;
+  }
+
+  .wizard-left-col {
+    height: auto;
+    max-height: 60vh;
+  }
+
+  .wizard-right-col {
+    height: 400px;
+  }
+
   .border-e {
     border-inline-end: none !important;
   }

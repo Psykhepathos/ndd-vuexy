@@ -116,6 +116,8 @@ declare module 'vue-router/auto-routes' {
     'motoristas-id': RouteRecordInfo<'motoristas-id', '/motoristas/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
     'ndd-dashboard': RouteRecordInfo<'ndd-dashboard', '/ndd-dashboard', Record<never, never>, Record<never, never>>,
     'not-authorized': RouteRecordInfo<'not-authorized', '/not-authorized', Record<never, never>, Record<never, never>>,
+    'notificacoes': RouteRecordInfo<'notificacoes', '/notificacoes', Record<never, never>, Record<never, never>>,
+    'notificacoes-admin': RouteRecordInfo<'notificacoes-admin', '/notificacoes/admin', Record<never, never>, Record<never, never>>,
     'pacotes': RouteRecordInfo<'pacotes', '/pacotes', Record<never, never>, Record<never, never>>,
     'pacotes-id': RouteRecordInfo<'pacotes-id', '/pacotes/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
     'pages-account-settings-tab': RouteRecordInfo<'pages-account-settings-tab', '/pages/account-settings/:tab', { tab: ParamValue<true> }, { tab: ParamValue<false> }>,

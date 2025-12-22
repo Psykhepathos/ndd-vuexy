@@ -170,6 +170,17 @@
   "Perfis e Permissões": "Perfis e Permissões",
   "Emissão VPO NDD": "Emissão VPO NDD",
   "Emissão VPO SemParar": "Emissão VPO SemParar",
+  "Operações": "Operações",
+  "Cadastros": "Cadastros",
+  "Administração": "Administração",
+  "Transportes": "Transportes",
+  "Rotas": "Rotas",
+  "Usuários e Acessos": "Usuários e Acessos",
+  "Comunicação": "Comunicação",
+  "Minhas Notificações": "Minhas Notificações",
+  "Gerenciar Notificações": "Gerenciar Notificações",
+  "Compra SemParar": "Compra SemParar",
+  "Notificações": "Notificações",
   "5": "5",
   "10": "10",
   "20": "20",
@@ -221,6 +232,10 @@
       "ariaLabel": {
         "item": "item"
       }
+    },
+    "dataIterator": {
+      "loadingText": "Carregando itens...",
+      "noResultsText": "Nenhum resultado encontrado"
     }
   }
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { $api } from '@/utils/api'
+import { $api, getErrorMessage } from '@/utils/api'
 import type { CompraViagemFormData } from '../types'
 
 // Props & Emits
@@ -16,11 +16,35 @@ const emit = defineEmits<{
 // State
 const loadingPreco = ref(false)
 const error = ref<string | null>(null)
-const etapaAtual = ref<'inicial' | 'calculando' | 'concluido'>('inicial')
+const showPracasExpanded = ref(false)
 
 // Computed
 const isStepValid = computed(() => {
   return props.formData.preco.calculado && props.formData.preco.valor > 0
+})
+
+// Praças processadas para exibição
+const pracasProcessadas = computed(() => {
+  return (props.formData.preco.pracas || []).map((praca: any, index: number) => ({
+    ...praca,
+    idx: index + 1,
+    nome: praca.praca || praca.nome || `Praça ${index + 1}`,
+    rodoviaFormatada: praca.rodovia || '-',
+    kmFormatado: praca.km ? `km ${praca.km}` : '',
+    concessionaria: praca.concessionaria || praca.concessionaria_antt || '-',
+    matchIncerto: praca.match_incerto || false,
+    temCoordenadas: !!(praca.lat && praca.lon)
+  }))
+})
+
+// Estatísticas
+const stats = computed(() => {
+  const pracas = props.formData.preco.pracas || []
+  const total = pracas.length
+  const comCoordenadas = pracas.filter((p: any) => p.lat && p.lon).length
+  const incertas = pracas.filter((p: any) => p.match_incerto).length
+
+  return { total, comCoordenadas, incertas }
 })
 
 // Watchers
@@ -40,12 +64,9 @@ const verificarPreco = async () => {
   }
 
   loadingPreco.value = true
-  etapaAtual.value = 'calculando'
   error.value = null
 
   try {
-    console.log('💰 Calculando preço da viagem...')
-
     const data = await $api('/compra-viagem/verificar-preco', {
       method: 'POST',
       body: {
@@ -62,9 +83,6 @@ const verificarPreco = async () => {
       throw new Error(data.message || data.error || 'Erro ao calcular preço')
     }
 
-    console.log(`✅ Preço calculado: R$ ${data.data.valor}`)
-
-    // Atualizar formData
     const updated: CompraViagemFormData = {
       ...props.formData,
       preco: {
@@ -79,12 +97,9 @@ const verificarPreco = async () => {
     }
 
     emit('update:formData', updated)
-    etapaAtual.value = 'concluido'
 
   } catch (err: any) {
-    console.error('❌ Erro ao calcular preço:', err)
-    error.value = err.message || 'Erro desconhecido ao calcular preço'
-    etapaAtual.value = 'inicial'
+    error.value = getErrorMessage(err)
   } finally {
     loadingPreco.value = false
   }
@@ -105,11 +120,10 @@ const recalcular = () => {
   }
 
   emit('update:formData', updated)
-  etapaAtual.value = 'inicial'
   verificarPreco()
 }
 
-// Lifecycle - Calcular automaticamente ao entrar no step
+// Lifecycle
 onMounted(() => {
   if (!props.formData.preco.calculado && props.formData.step3Completo) {
     verificarPreco()
@@ -118,38 +132,40 @@ onMounted(() => {
 </script>
 
 <template>
-  <div>
-    <!-- Header -->
-    <h6 class="text-h6 font-weight-medium mb-2">
-      Cálculo do Preço
-    </h6>
-    <p class="text-body-2 text-medium-emphasis mb-6">
-      Aguarde enquanto calculamos o valor da viagem
-    </p>
+  <div class="step4-container">
+    <!-- Header compacto -->
+    <div class="d-flex align-center justify-space-between mb-4">
+      <div>
+        <h6 class="text-h6 font-weight-medium">Cálculo do Preço</h6>
+        <p class="text-caption text-medium-emphasis mb-0">
+          Valor total dos pedágios na rota
+        </p>
+      </div>
+      <VBtn
+        v-if="props.formData.preco.calculado"
+        icon
+        size="small"
+        variant="text"
+        color="default"
+        @click="recalcular"
+      >
+        <VIcon icon="tabler-refresh" size="18" />
+        <VTooltip activator="parent" location="top">Recalcular</VTooltip>
+      </VBtn>
+    </div>
 
     <!-- Loading State -->
-    <div v-if="loadingPreco">
-      <VCard variant="tonal" color="primary">
-        <VCardText>
-          <div class="d-flex flex-column align-center gap-4 py-8">
-            <VProgressCircular
-              :size="64"
-              :width="6"
-              color="primary"
-              indeterminate
-            />
-
-            <div class="text-center">
-              <div class="text-h6 mb-2">
-                Calculando preço da viagem...
-              </div>
-              <div class="text-body-2 text-medium-emphasis">
-                Este processo pode levar alguns segundos
-              </div>
-            </div>
-          </div>
-        </VCardText>
-      </VCard>
+    <div v-if="loadingPreco" class="text-center py-8">
+      <VProgressCircular
+        :size="48"
+        :width="4"
+        color="primary"
+        indeterminate
+        class="mb-4"
+      />
+      <div class="text-body-2 text-medium-emphasis">
+        Calculando preço...
+      </div>
     </div>
 
     <!-- Error State -->
@@ -157,171 +173,258 @@ onMounted(() => {
       v-else-if="error"
       type="error"
       variant="tonal"
+      density="compact"
       class="mb-4"
     >
-      <template #prepend>
-        <VIcon icon="tabler-alert-circle" />
-      </template>
-
-      <VAlertTitle>Erro no Cálculo</VAlertTitle>
-      <div class="text-caption">{{ error }}</div>
-
-      <template #append>
-        <VBtn
-          size="small"
-          variant="tonal"
-          @click="recalcular"
-        >
-          Tentar Novamente
+      <div class="d-flex align-center justify-space-between flex-wrap gap-2">
+        <span class="text-caption">{{ error }}</span>
+        <VBtn size="x-small" variant="text" @click="recalcular">
+          Tentar novamente
         </VBtn>
-      </template>
+      </div>
     </VAlert>
 
-    <!-- Success State - Layout Compacto -->
-    <VCard v-else-if="props.formData.preco.calculado" class="mt-4">
-      <VCardText class="pa-3">
-        <VRow dense>
-          <!-- Coluna Esquerda: Preço -->
-          <VCol cols="12" md="5">
-            <div class="d-flex flex-column align-center justify-center h-100 pa-2">
-              <div class="text-caption text-medium-emphasis mb-1">
-                Valor Total
-              </div>
-              <div class="text-h4 text-success font-weight-bold mb-2">
+    <!-- Success State -->
+    <template v-else-if="props.formData.preco.calculado">
+      <!-- Card de Valor Principal -->
+      <VCard
+        color="success"
+        variant="flat"
+        class="mb-4"
+      >
+        <VCardText class="pa-4">
+          <div class="d-flex align-center gap-3">
+            <VAvatar color="white" size="48">
+              <VIcon icon="tabler-coin" color="success" size="24" />
+            </VAvatar>
+            <div class="flex-grow-1">
+              <div class="text-h4 font-weight-bold text-white">
                 R$ {{ props.formData.preco.valor.toFixed(2) }}
               </div>
-              <VChip
-                v-if="props.formData.preco.pracas?.length > 0"
-                size="small"
-                color="warning"
-                prepend-icon="tabler-road"
-              >
-                {{ props.formData.preco.pracas.length }} pedágios
-              </VChip>
-              <VBtn
-                icon="tabler-refresh"
-                size="x-small"
-                variant="text"
-                class="mt-2"
-                @click="recalcular"
-              />
+              <div class="text-caption text-white-50">
+                {{ stats.total }} praça{{ stats.total !== 1 ? 's' : '' }} de pedágio
+              </div>
             </div>
-          </VCol>
+          </div>
+        </VCardText>
+      </VCard>
 
-          <VDivider vertical />
-
-          <!-- Coluna Direita: Detalhes -->
-          <VCol cols="12" md="7">
-            <VList density="compact" class="py-0">
-              <VListItem class="px-2" min-height="32">
-                <template #prepend>
-                  <VIcon icon="tabler-route" size="small" color="primary" />
-                </template>
-                <VListItemTitle class="text-caption font-weight-medium">
-                  Rota SemParar
-                </VListItemTitle>
-                <VListItemSubtitle class="text-caption">
-                  {{ props.formData.preco.nomeRotaSemParar }}
-                </VListItemSubtitle>
-              </VListItem>
-
-              <VListItem class="px-2" min-height="32">
-                <template #prepend>
-                  <VIcon icon="tabler-package" size="small" color="success" />
-                </template>
-                <VListItemTitle class="text-caption font-weight-medium">
-                  Pacote #{{ props.formData.pacote.pacote?.codpac }}
-                </VListItemTitle>
-                <VListItemSubtitle class="text-caption">
-                  {{ props.formData.pacote.entregas.length }} entregas
-                </VListItemSubtitle>
-              </VListItem>
-
-              <VListItem class="px-2" min-height="32">
-                <template #prepend>
-                  <VIcon icon="tabler-car" size="small" color="info" />
-                </template>
-                <VListItemTitle class="text-caption font-weight-medium">
-                  {{ props.formData.placa.placa }}
-                </VListItemTitle>
-                <VListItemSubtitle class="text-caption">
-                  {{ props.formData.placa.eixos }} eixos
-                </VListItemSubtitle>
-              </VListItem>
-
-              <VListItem class="px-2" min-height="32">
-                <template #prepend>
-                  <VIcon icon="tabler-calendar" size="small" color="warning" />
-                </template>
-                <VListItemTitle class="text-caption font-weight-medium">
-                  Período
-                </VListItemTitle>
-                <VListItemSubtitle class="text-caption">
-                  {{ new Date(props.formData.configuracao.dataInicio).toLocaleDateString('pt-BR') }} -
-                  {{ new Date(props.formData.configuracao.dataFim).toLocaleDateString('pt-BR') }}
-                </VListItemSubtitle>
-              </VListItem>
-            </VList>
-          </VCol>
-        </VRow>
-      </VCardText>
-    </VCard>
-
-    <!-- Praças de Pedágio - Expandible -->
-    <VExpansionPanels
-      v-if="props.formData.preco.calculado && props.formData.preco.pracas && props.formData.preco.pracas.length > 0"
-      class="mt-3"
-    >
-      <VExpansionPanel>
-        <VExpansionPanelTitle class="text-body-2 py-2">
-          <VIcon icon="tabler-road" color="warning" size="small" class="me-2" />
-          Ver Detalhes dos Pedágios ({{ props.formData.preco.pracas.length }})
-        </VExpansionPanelTitle>
-        <VExpansionPanelText>
-          <VList density="compact" class="py-0">
-            <VListItem
-              v-for="(praca, index) in props.formData.preco.pracas"
-              :key="index"
-              class="px-2"
-              min-height="28"
-            >
-              <template #prepend>
-                <VChip size="x-small" color="warning" class="me-2">{{ index + 1 }}</VChip>
-              </template>
-              <VListItemTitle class="text-caption">
-                {{ praca.praca || 'Praça não identificada' }}
-              </VListItemTitle>
-              <VListItemSubtitle class="text-caption">
-                {{ praca.rodovia }} - KM {{ praca.km }} ({{ praca.concessionaria }})
-              </VListItemSubtitle>
-            </VListItem>
-          </VList>
-        </VExpansionPanelText>
-      </VExpansionPanel>
-    </VExpansionPanels>
-
-    <!-- Initial State -->
-    <VAlert
-      v-else
-      type="info"
-      variant="tonal"
-    >
-      <template #prepend>
-        <VIcon icon="tabler-info-circle" />
-      </template>
-
-      <VAlertTitle>Pronto para Calcular</VAlertTitle>
-      <div class="text-caption mb-4">
-        Clique em "Próximo" ou aguarde o cálculo automático
+      <!-- Resumo Compacto em Grid -->
+      <div class="summary-grid mb-4">
+        <div class="summary-item">
+          <VIcon icon="tabler-route" size="16" color="primary" />
+          <span class="text-caption text-truncate">
+            {{ props.formData.rota.rota?.desSPararRot || 'Rota' }}
+          </span>
+        </div>
+        <div class="summary-item">
+          <VIcon icon="tabler-car" size="16" color="info" />
+          <span class="text-caption">
+            {{ props.formData.placa.placa }} ({{ props.formData.placa.eixos }}e)
+          </span>
+        </div>
+        <div class="summary-item">
+          <VIcon icon="tabler-calendar" size="16" color="warning" />
+          <span class="text-caption">
+            {{ new Date(props.formData.configuracao.dataInicio).toLocaleDateString('pt-BR') }}
+          </span>
+        </div>
+        <div class="summary-item">
+          <VIcon icon="tabler-map-pin" size="16" color="success" />
+          <span class="text-caption">
+            {{ stats.comCoordenadas }}/{{ stats.total }} no mapa
+          </span>
+        </div>
       </div>
 
+      <!-- Lista de Praças Expansível -->
+      <VCard v-if="stats.total > 0" variant="outlined" density="compact">
+        <VCardItem
+          class="py-2 cursor-pointer"
+          @click="showPracasExpanded = !showPracasExpanded"
+        >
+          <template #prepend>
+            <VIcon icon="tabler-toll" size="18" color="warning" />
+          </template>
+          <VCardTitle class="text-body-2">
+            Praças de Pedágio
+          </VCardTitle>
+          <template #append>
+            <div class="d-flex align-center gap-2">
+              <VChip size="x-small" color="warning" variant="tonal">
+                {{ stats.total }}
+              </VChip>
+              <VIcon
+                :icon="showPracasExpanded ? 'tabler-chevron-up' : 'tabler-chevron-down'"
+                size="18"
+              />
+            </div>
+          </template>
+        </VCardItem>
+
+        <VExpandTransition>
+          <div v-show="showPracasExpanded">
+            <VDivider />
+            <VList density="compact" class="pracas-list">
+              <VListItem
+                v-for="praca in pracasProcessadas"
+                :key="praca.idx"
+                density="compact"
+                class="px-3 py-1"
+              >
+                <template #prepend>
+                  <VAvatar
+                    :color="praca.matchIncerto ? 'warning' : 'success'"
+                    size="24"
+                    variant="tonal"
+                  >
+                    <span class="text-caption font-weight-medium">{{ praca.idx }}</span>
+                  </VAvatar>
+                </template>
+
+                <VListItemTitle class="text-caption praca-nome">
+                  {{ praca.nome }}
+                </VListItemTitle>
+
+                <VListItemSubtitle class="text-caption">
+                  {{ praca.rodoviaFormatada }} {{ praca.kmFormatado }}
+                  <span v-if="praca.concessionaria !== '-'" class="text-disabled">
+                    - {{ praca.concessionaria }}
+                  </span>
+                </VListItemSubtitle>
+
+                <template #append>
+                  <VIcon
+                    v-if="praca.matchIncerto"
+                    icon="tabler-alert-triangle"
+                    size="14"
+                    color="warning"
+                  >
+                    <VTooltip activator="parent" location="left">
+                      Localização aproximada
+                    </VTooltip>
+                  </VIcon>
+                  <VIcon
+                    v-else-if="praca.temCoordenadas"
+                    icon="tabler-map-pin-check"
+                    size="14"
+                    color="success"
+                  />
+                  <VIcon
+                    v-else
+                    icon="tabler-map-pin-off"
+                    size="14"
+                    color="disabled"
+                  />
+                </template>
+              </VListItem>
+            </VList>
+          </div>
+        </VExpandTransition>
+      </VCard>
+
+      <!-- Indicador de Sucesso -->
+      <VAlert
+        type="success"
+        variant="tonal"
+        density="compact"
+        class="mt-4"
+      >
+        <template #prepend>
+          <VIcon icon="tabler-check" size="18" />
+        </template>
+        <span class="text-caption">
+          Passo completo! Clique em "Próximo" para revisar.
+        </span>
+      </VAlert>
+    </template>
+
+    <!-- Initial State -->
+    <VCard
+      v-else
+      variant="tonal"
+      color="info"
+      class="text-center pa-6"
+    >
+      <VIcon icon="tabler-calculator" size="48" color="info" class="mb-3" />
+      <div class="text-body-2 mb-4">
+        Pronto para calcular o preço da viagem
+      </div>
       <VBtn
         color="primary"
+        size="small"
         prepend-icon="tabler-calculator"
         @click="verificarPreco"
       >
-        Calcular Agora
+        Calcular Preço
       </VBtn>
-    </VAlert>
+    </VCard>
   </div>
 </template>
+
+<style scoped>
+.step4-container {
+  max-height: 100%;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.summary-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.summary-item .text-caption {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pracas-list {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.pracas-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.pracas-list::-webkit-scrollbar-thumb {
+  background: rgba(var(--v-border-color), 0.5);
+  border-radius: 2px;
+}
+
+.praca-nome {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.cursor-pointer:hover {
+  background: rgba(var(--v-theme-on-surface), 0.04);
+}
+
+/* Dark mode */
+.v-theme--dark .summary-item {
+  background: rgba(var(--v-theme-surface-variant), 0.15);
+}
+
+/* Texto branco com opacidade */
+.text-white-50 {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+</style>

@@ -44,7 +44,12 @@
       "Bash(cat:*)",
       "Bash(del \"c:\\\\Users\\\\15857\\\\Desktop\\\\NDD\\\\ndd-vuexy\\\\app\\\\Http\\\\Middleware\\\\StripUrlPrefix.php\")",
       "Bash(Get-Content \"c:\\\\Users\\\\15857\\\\Desktop\\\\NDD\\\\ndd-vuexy\\\\storage\\\\logs\\\\laravel.log\" -Tail 100)",
-      "Bash(Select-String -Pattern \"mail|email|welcome|boas-vindas\" -CaseSensitive:$false)"
+      "Bash(Select-String -Pattern \"mail|email|welcome|boas-vindas\" -CaseSensitive:$false)",
+      "Bash(Select-String -Pattern \"verificarPreco|400|Bad Request|ValidationException|Erro\" -Context 2,2)",
+      "Bash(Select-String -Pattern \"PracaMatching|Praças enriquecidas|roteirizarPracas|coordenadas ANTT\" -Context 0,2)",
+      "Bash(powershell:*)",
+      "Bash(php artisan make:migration:*)",
+      "Bash(php artisan config:clear:*)"
     ],
     "deny": [],
     "ask": []

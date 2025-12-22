@@ -1,14 +1,85 @@
 export default [
+  // Dashboard
   {
-    title: 'Sistema NDD',
-    icon: { icon: 'tabler-truck' },
-    open: true,
+    title: 'Dashboard',
+    to: 'ndd-dashboard',
+    icon: { icon: 'tabler-dashboard' },
+  },
+
+  // Operações - Seção header
+  {
+    heading: 'Operações',
+  },
+
+  // Vale Pedágio (submenu)
+  {
+    title: 'Vale Pedágio',
+    icon: { icon: 'tabler-receipt' },
     children: [
       {
-        title: 'Dashboard NDD',
-        to: 'ndd-dashboard',
-        icon: { icon: 'tabler-dashboard' },
+        title: 'Compra SemParar',
+        to: 'compra-viagem',
+        icon: { icon: 'tabler-credit-card' },
       },
+      {
+        title: 'Emissão VPO NDD',
+        to: 'vpo-emissao',
+        icon: { icon: 'tabler-file-invoice' },
+      },
+    ],
+  },
+
+  // Cadastros - Seção header
+  {
+    heading: 'Cadastros',
+  },
+
+  // Transportes (submenu)
+  {
+    title: 'Transportes',
+    icon: { icon: 'tabler-truck' },
+    children: [
+      {
+        title: 'Transportadores',
+        to: 'transportes',
+        icon: { icon: 'tabler-truck-delivery' },
+      },
+      {
+        title: 'Pacotes',
+        to: 'pacotes',
+        icon: { icon: 'tabler-package' },
+      },
+    ],
+  },
+
+  // Rotas (submenu)
+  {
+    title: 'Rotas',
+    icon: { icon: 'tabler-map-2' },
+    children: [
+      {
+        title: 'Rotas Padrão',
+        to: 'rotas-padrao',
+        icon: { icon: 'tabler-route' },
+      },
+      {
+        title: 'Praças de Pedágio',
+        to: 'pracas-pedagio',
+        icon: { icon: 'tabler-coin' },
+      },
+    ],
+  },
+
+  // Administração - Seção header
+  {
+    heading: 'Administração',
+  },
+
+  // Usuários e Acessos (submenu)
+  {
+    title: 'Usuários e Acessos',
+    icon: { icon: 'tabler-users-group' },
+    children: [
       {
         title: 'Usuários',
         to: 'usuarios',
@@ -23,41 +94,26 @@ export default [
         action: 'manage',
         subject: 'roles',
       },
-            {
-        title: 'Emissão VPO NDD',
-        to: 'vpo-emissao',
-        icon: { icon: 'tabler-shopping-cart' },
-      },
-            {
-        title: 'Emissão VPO SemParar',
-        to: 'compra-viagem',
-        icon: { icon: 'tabler-shopping-cart' },
-      },
-            {
-        title: 'Rotas Padrão',
-        to: 'rotas-padrao',
-        icon: { icon: 'tabler-map-route' },
-      },
-            {
-        title: 'Praças de Pedágio',
-        to: 'pracas-pedagio',
-        icon: { icon: 'tabler-coin' },
+    ],
+  },
+
+  // Comunicação (submenu)
+  {
+    title: 'Comunicação',
+    icon: { icon: 'tabler-message-circle' },
+    children: [
+      {
+        title: 'Minhas Notificações',
+        to: 'notificacoes',
+        icon: { icon: 'tabler-bell' },
       },
       {
-        title: 'Transportadores',
-        to: 'transportes',
-        icon: { icon: 'tabler-truck-delivery' },
+        title: 'Gerenciar Notificações',
+        to: 'notificacoes-admin',
+        icon: { icon: 'tabler-bell-ringing' },
+        action: 'manage',
+        subject: 'notifications',
       },
-      {
-        title: 'Pacotes',
-        to: 'pacotes',
-        icon: { icon: 'tabler-package' },
-      },
-    //   {
-    //     title: 'Vale Pedágio',
-    //     to: 'vale-pedagio',
-    //     icon: { icon: 'tabler-route-2' },
-    //   },
     ],
   },
 ]
