@@ -41,28 +41,70 @@ const logout = async () => {
   if (isLoggingOut.value) return
   isLoggingOut.value = true
 
+  console.log('[Logout] Iniciando logout...')
+
   // 1. Chamar backend para invalidar o token (com token ainda presente)
   try {
     await $api(API_ENDPOINTS.authLogout, { method: 'POST' })
+    console.log('[Logout] Token invalidado no servidor')
   }
   catch (error) {
-    console.warn('Erro ao invalidar token no servidor:', error)
+    console.warn('[Logout] Erro ao invalidar token no servidor:', error)
   }
 
   // 2. Resetar abilities CASL
   ability.update([])
+  console.log('[Logout] CASL abilities resetadas')
 
   // 3. Limpar cookies ANTES do redirect
   // Isso é necessário porque o guard não permite ir para /login se estiver logado
-  // Usamos useCookie diretamente - o componente não será destruído porque
-  // userData agora é um ref independente, não o cookie direto
+
+  // Primeiro, limpar via useCookie (limpa no path configurado)
   useCookie('accessToken').value = null
   useCookie('userData').value = null
   useCookie('userAbilityRules').value = null
+  console.log('[Logout] Cookies limpos via useCookie')
+
+  // Segundo, limpar diretamente via document.cookie em TODOS os paths possíveis
+  // Isso garante limpeza mesmo se o cookie foi criado com path diferente
+  const cookieNames = ['accessToken', 'userData', 'userAbilityRules']
+  const pathsToTry = ['/', '/ndd-vuexy', '/ndd-vuexy/public', '/ndd-vuexy/public/build']
+
+  // Adicionar o path atual da URL
+  const currentPath = window.location.pathname.split('/').slice(0, -1).join('/') || '/'
+  if (!pathsToTry.includes(currentPath)) {
+    pathsToTry.push(currentPath)
+  }
+
+  console.log('[Logout] Tentando limpar cookies nos paths:', pathsToTry)
+
+  cookieNames.forEach(name => {
+    pathsToTry.forEach(path => {
+      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=${path};`
+    })
+  })
+  console.log('[Logout] Cookies limpos via document.cookie em múltiplos paths')
+
+  // Verificar se cookies foram realmente limpos
+  console.log('[Logout] document.cookie após limpeza:', document.cookie)
 
   // 4. Redirecionar para login
   // Agora o guard vai permitir porque os cookies foram limpos
-  await router.push({ name: 'login' })
+  console.log('[Logout] Iniciando redirect para login...')
+  console.log('[Logout] Router base:', router.options.history.base)
+
+  try {
+    await router.push({ name: 'login' })
+    console.log('[Logout] Redirect completado')
+  }
+  catch (navError) {
+    console.error('[Logout] Erro no router.push:', navError)
+    // Fallback: usar window.location com o base path do router
+    const basePath = router.options.history.base || ''
+    const loginUrl = `${basePath}/login`
+    console.log('[Logout] Fallback para:', loginUrl)
+    window.location.href = loginUrl
+  }
 }
 
 const userProfileList = [
