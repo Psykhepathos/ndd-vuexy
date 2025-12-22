@@ -71,12 +71,16 @@ export const $api = ofetch.create({
       options.headers.append('Authorization', `Bearer ${accessToken}`)
     }
   },
-  async onResponseError({ response }) {
+  async onResponseError({ request, response }) {
     const status = response.status
     const data = response._data
 
+    // Ignorar 401 em chamadas de logout (é esperado se o token já expirou)
+    const requestUrl = typeof request === 'string' ? request : request?.url || ''
+    const isLogoutRequest = requestUrl.includes('/auth/logout')
+
     // 401 Não Autorizado - Token inválido/expirado
-    if (status === 401) {
+    if (status === 401 && !isLogoutRequest) {
       const accessTokenCookie = useCookie('accessToken')
       const userDataCookie = useCookie('userData')
       const userAbilityRulesCookie = useCookie('userAbilityRules')

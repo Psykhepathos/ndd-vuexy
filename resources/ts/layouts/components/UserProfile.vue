@@ -11,13 +11,24 @@ const userData = useCookie<any>('userData')
 
 /**
  * Função de logout robusta
- * 1. Chama o backend para invalidar o token (best effort)
- * 2. Limpa todos os cookies de autenticação
- * 3. Reseta as abilities CASL
- * 4. Redireciona para login
+ * ORDEM CORRETA:
+ * 1. Chamar backend para invalidar o token (COM o token ainda presente)
+ * 2. Limpar todos os cookies de autenticação
+ * 3. Resetar as abilities CASL
+ * 4. Redirecionar para login
  */
 const logout = async () => {
-  // Limpar cookies de autenticação PRIMEIRO (antes de qualquer navegação)
+  // 1. PRIMEIRO chamar o backend para invalidar o token (ANTES de limpar cookies!)
+  // Isso garante que o token é deletado do banco de dados
+  try {
+    await $api(API_ENDPOINTS.authLogout, { method: 'POST' })
+  }
+  catch (error) {
+    // Ignorar erro - pode ser token já expirado
+    console.warn('Erro ao invalidar token no servidor:', error)
+  }
+
+  // 2. DEPOIS limpar cookies de autenticação
   const accessTokenCookie = useCookie('accessToken')
   const userDataCookie = useCookie('userData')
   const userAbilityCookie = useCookie('userAbilityRules')
@@ -26,19 +37,13 @@ const logout = async () => {
   userDataCookie.value = null
   userAbilityCookie.value = null
 
-  // Resetar abilities CASL
+  // 3. Resetar abilities CASL
   ability.update([])
 
-  // Tentar chamar o backend para invalidar o token (best effort - não bloqueia logout)
-  try {
-    await $api(API_ENDPOINTS.authLogout, { method: 'POST' })
-  }
-  catch (error) {
-    // Ignorar erro - token já foi limpo localmente
-  }
-
-  // Redirecionar para login usando replace (não adiciona ao histórico)
-  router.replace({ name: 'login' })
+  // 4. Redirecionar para login usando hard redirect para garantir limpeza completa
+  const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/')
+  const loginUrl = baseUrl.replace(/\/+$/, '') + '/login'
+  window.location.href = loginUrl
 }
 
 const userProfileList = [
