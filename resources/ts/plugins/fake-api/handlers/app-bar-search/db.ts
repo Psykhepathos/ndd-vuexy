@@ -16,9 +16,9 @@ export const db: DB = {
           title: 'Analytics Dashboard',
         },
         {
-          url: { name: 'dashboards-crm' },
-          icon: 'tabler-file-analytics',
-          title: 'CRM Dashboard',
+          url: { name: 'ndd-dashboard' },
+          icon: 'tabler-truck-delivery',
+          title: 'NDD Dashboard',
         },
         {
           url: { name: 'dashboards-ecommerce' },

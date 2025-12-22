@@ -8,8 +8,8 @@ export default [
         to: 'dashboards-analytics',
       },
       {
-        title: 'CRM',
-        to: 'dashboards-crm',
+        title: 'NDD Dashboard',
+        to: 'ndd-dashboard',
       },
       {
         title: 'E-commerce',

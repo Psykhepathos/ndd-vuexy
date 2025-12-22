@@ -10,15 +10,14 @@ export const redirects: RouteRecordRaw[] = [
     path: '/',
     name: 'index',
     redirect: to => {
-      // TODO: Get type from backend
+      // Redireciona para dashboard NDD ou login
       const userData = useCookie<Record<string, unknown> | null | undefined>('userData')
-      const userRole = userData.value?.role
 
-      if (userRole === 'admin')
-        return { name: 'dashboards-crm' }
-      if (userRole === 'client')
-        return { name: 'access-control' }
+      // Se tem usuario logado, vai para dashboard NDD
+      if (userData.value)
+        return { name: 'ndd-dashboard' }
 
+      // Senao, vai para login
       return { name: 'login', query: to.query }
     },
   },

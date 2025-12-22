@@ -9,9 +9,9 @@ export default [
         icon: { icon: 'tabler-chart-pie-2' },
       },
       {
-        title: 'CRM',
-        to: 'dashboards-crm',
-        icon: { icon: 'tabler-cube' },
+        title: 'NDD Dashboard',
+        to: 'ndd-dashboard',
+        icon: { icon: 'tabler-truck-delivery' },
       },
       {
         title: 'Ecommerce',
