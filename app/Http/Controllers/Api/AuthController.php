@@ -165,7 +165,25 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        $user = $request->user();
+        $user = null;
+        $tokenDeleted = false;
+
+        // Tentar identificar usuário pelo token Bearer (sem exigir autenticação)
+        $bearerToken = $request->bearerToken();
+        if ($bearerToken) {
+            // Sanctum tokens são no formato "id|token"
+            $tokenParts = explode('|', $bearerToken, 2);
+            if (count($tokenParts) === 2) {
+                $tokenId = $tokenParts[0];
+                $token = \Laravel\Sanctum\PersonalAccessToken::find($tokenId);
+
+                if ($token && hash_equals($token->token, hash('sha256', $tokenParts[1]))) {
+                    $user = $token->tokenable;
+                    $token->delete();
+                    $tokenDeleted = true;
+                }
+            }
+        }
 
         // Registrar auditoria de logout
         if ($user) {
@@ -176,13 +194,11 @@ class AuthController extends Controller
             );
         }
 
-        // CORREÇÃO BUG #2: Null-safe operator para evitar erro se token não existir
-        $request->user()?->currentAccessToken()?->delete();
-
         // LGPD logging
         Log::info('Logout realizado', [
             'user_id' => $user?->id,
             'email' => $user?->email,
+            'token_deleted' => $tokenDeleted,
             'ip' => $request->ip(),
             'user_agent' => $request->userAgent(),
             'timestamp' => now()->toIso8601String()

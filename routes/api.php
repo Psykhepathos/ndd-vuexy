@@ -37,10 +37,10 @@ Route::post('auth/verify-setup-token', [AuthController::class, 'verifySetupToken
 Route::post('password-reset-request', [PasswordResetRequestController::class, 'requestReset'])
     ->middleware('throttle:5,1'); // 5 solicitações por minuto por IP
 
-// Logout - DEVE ter auth:sanctum para identificar e invalidar o token correto
-// Se o token já expirou, o frontend já limpou os cookies e redireciona para login
+// Logout - NÃO exige autenticação (funciona mesmo com token expirado)
+// Se tiver token válido no header, o controller deleta do banco
 Route::post('auth/logout', [AuthController::class, 'logout'])
-    ->middleware(['auth:sanctum', 'throttle:10,1']);
+    ->middleware('throttle:10,1');
 
 // Rotas protegidas por autenticação
 Route::middleware(['auth:sanctum'])->group(function () {
