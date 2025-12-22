@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { VNodeRenderer } from '@layouts/components/VNodeRenderer'
 import { themeConfig } from '@themeConfig'
@@ -138,21 +138,29 @@ async function handleSubmit() {
       },
     })
 
-    // Save auth data usando cookies (consistente com o resto do sistema)
-    const accessTokenCookie = useCookie('accessToken')
-    const userDataCookie = useCookie('userData')
-    const userAbilityRulesCookie = useCookie('userAbilityRules')
+    // Save auth data usando cookies (consistente com login.vue)
+    // Determinar o path do cookie baseado no base path do router (importante para subdiretórios)
+    const basePath = router.options.history.base || '/'
+    const cookieOptions = { path: basePath }
 
-    accessTokenCookie.value = data.accessToken
-    userDataCookie.value = JSON.stringify(data.userData)
-    userAbilityRulesCookie.value = JSON.stringify(data.userAbilityRules)
+    // Salvar cookies de autenticação
+    useCookie('userAbilityRules', cookieOptions).value = data.userAbilityRules
+    useCookie('userData', cookieOptions).value = data.userData
+    useCookie('accessToken', cookieOptions).value = data.accessToken
+
+    // Atualizar ability (CASL) ANTES de navegar
+    const ability = useAbility()
+    ability.update(data.userAbilityRules)
 
     successMessage.value = 'Senha configurada com sucesso! Redirecionando...'
 
-    // Redirect to dashboard
+    // Aguardar o próximo tick para garantir que os cookies estejam disponíveis
+    await nextTick()
+
+    // Redirect to dashboard usando replace (evita voltar para esta página)
     setTimeout(() => {
-      router.push({ name: 'ndd-dashboard' })
-    }, 2000)
+      router.replace({ name: 'ndd-dashboard' })
+    }, 1500)
   } catch (error: any) {
     console.error('Erro ao configurar senha:', error)
     errorMessage.value = error?.data?.message || 'Erro ao configurar senha. Tente novamente.'

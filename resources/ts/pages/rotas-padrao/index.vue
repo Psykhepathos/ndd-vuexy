@@ -126,9 +126,9 @@ const normalizeRotaData = (item: any): RotaSemParar => ({
   tempoviagem: Number(item.tempoviagem ?? item.tempoViagem ?? 0),
   flgcd: Boolean(item.flgcd ?? item.flgCD),
   flgretorno: Boolean(item.flgretorno ?? item.flgRetorno),
-  totalmunicipios: Number(item.totalmunicipios ?? 0),
-  datatu: item.datatu || null,
-  resatu: item.resatu || null
+  totalmunicipios: Number(item.totalmunicipios ?? item.totalMunicipios ?? 0),
+  datatu: item.datatu ?? item.datAtu ?? null,
+  resatu: item.resatu ?? item.resAtu ?? null
 })
 
 // Computed para estatísticas
