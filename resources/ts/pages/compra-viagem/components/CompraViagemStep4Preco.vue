@@ -52,32 +52,65 @@ watch(isStepValid, (valid) => {
   emit('stepComplete', valid)
 })
 
+// Watch para quando step3 for alterado (rota mudou)
+watch(() => props.formData.step3Completo, (completo, anteriorCompleto) => {
+  console.log('📊 Step4: step3Completo mudou:', { completo, anteriorCompleto })
+
+  // Se step3 foi marcado como completo E não temos preço calculado, calcular
+  if (completo && !props.formData.preco.calculado) {
+    console.log('📊 Step4: Iniciando cálculo de preço automaticamente')
+    verificarPreco()
+  }
+})
+
 // Methods
 const verificarPreco = async () => {
-  if (!props.formData.pacote.pacote ||
-      !props.formData.rota.rota ||
-      !props.formData.placa.placa ||
-      !props.formData.configuracao.dataInicio ||
-      !props.formData.configuracao.dataFim) {
-    error.value = 'Dados incompletos para calcular preço'
+  // Validar dados necessários
+  if (!props.formData.pacote.pacote) {
+    error.value = 'Pacote não selecionado (Passo 1)'
+    console.error('❌ Step4: Pacote não selecionado')
+    return
+  }
+
+  if (!props.formData.rota.rota) {
+    error.value = 'Rota não selecionada (Passo 3)'
+    console.error('❌ Step4: Rota não selecionada')
+    return
+  }
+
+  if (!props.formData.placa.placa) {
+    error.value = 'Placa não informada (Passo 2)'
+    console.error('❌ Step4: Placa não informada')
+    return
+  }
+
+  if (!props.formData.configuracao.dataInicio || !props.formData.configuracao.dataFim) {
+    error.value = 'Datas não configuradas'
+    console.error('❌ Step4: Datas não configuradas')
     return
   }
 
   loadingPreco.value = true
   error.value = null
 
+  const payload = {
+    codpac: props.formData.pacote.pacote.codpac,
+    cod_rota: props.formData.rota.rota.sPararRotID,
+    qtd_eixos: props.formData.placa.eixos,
+    placa: props.formData.placa.placa,
+    data_inicio: props.formData.configuracao.dataInicio,
+    data_fim: props.formData.configuracao.dataFim
+  }
+
+  console.log('💰 Step4: Verificando preço...', payload)
+
   try {
     const data = await $api('/compra-viagem/verificar-preco', {
       method: 'POST',
-      body: {
-        codpac: props.formData.pacote.pacote.codpac,
-        cod_rota: props.formData.rota.rota.sPararRotID,
-        qtd_eixos: props.formData.placa.eixos,
-        placa: props.formData.placa.placa,
-        data_inicio: props.formData.configuracao.dataInicio,
-        data_fim: props.formData.configuracao.dataFim
-      }
+      body: payload
     })
+
+    console.log('💰 Step4: Resposta verificar-preco:', data)
 
     if (!data.success) {
       throw new Error(data.message || data.error || 'Erro ao calcular preço')
@@ -96,16 +129,32 @@ const verificarPreco = async () => {
       step4Completo: true
     }
 
+    console.log('✅ Step4: Preço calculado com sucesso:', {
+      valor: data.data.valor,
+      pracas: data.data.pracas?.length || 0
+    })
+
     emit('update:formData', updated)
 
   } catch (err: any) {
-    error.value = getErrorMessage(err)
+    console.error('❌ Step4: Erro ao verificar preço:', err)
+
+    // Extrair mensagem de erro do backend
+    const errorData = err?.data || err?.response?._data
+    if (errorData?.error) {
+      error.value = errorData.error
+    } else {
+      error.value = getErrorMessage(err)
+    }
+
   } finally {
     loadingPreco.value = false
   }
 }
 
 const recalcular = () => {
+  console.log('🔄 Step4: Recalculando preço...')
+
   const updated: CompraViagemFormData = {
     ...props.formData,
     preco: {
@@ -125,7 +174,14 @@ const recalcular = () => {
 
 // Lifecycle
 onMounted(() => {
-  if (!props.formData.preco.calculado && props.formData.step3Completo) {
+  console.log('🚀 Step4 montado', {
+    step3Completo: props.formData.step3Completo,
+    precoCalculado: props.formData.preco.calculado,
+    rota: props.formData.rota.rota?.sPararRotID
+  })
+
+  // Calcular automaticamente se step3 está completo e não tem preço
+  if (props.formData.step3Completo && !props.formData.preco.calculado) {
     verificarPreco()
   }
 })
@@ -176,9 +232,10 @@ onMounted(() => {
       density="compact"
       class="mb-4"
     >
-      <div class="d-flex align-center justify-space-between flex-wrap gap-2">
-        <span class="text-caption">{{ error }}</span>
-        <VBtn size="x-small" variant="text" @click="recalcular">
+      <div class="d-flex flex-column gap-2">
+        <span class="text-body-2">{{ error }}</span>
+        <VBtn size="small" variant="tonal" color="error" @click="recalcular">
+          <VIcon icon="tabler-refresh" size="16" class="me-1" />
           Tentar novamente
         </VBtn>
       </div>

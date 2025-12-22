@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { $api } from '@/utils/api'
-import type { CompraViagemFormData, RotaCompraViagem } from '../types'
+import { $api, getErrorMessage } from '@/utils/api'
+import type { CompraViagemFormData } from '../types'
 
 // Props & Emits
 const props = defineProps<{
@@ -11,16 +11,18 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:formData': [value: CompraViagemFormData]
   'stepComplete': [complete: boolean]
-  'rotaValidada': [] // Emitir quando rota for validada (para auto-calcular preço)
+  'rotaValidada': []
 }>()
 
 // State
 const loadingRotas = ref(false)
+const loadingValidacao = ref(false)
 const rotasOptions = ref<any[]>([])
 const selectedRota = ref<number | null>(null)
 const modoCD = ref(false)
 const modoRetorno = ref(false)
 const loadingRotaMunicipios = ref(false)
+const erroValidacao = ref<string | null>(null)
 
 // Computed
 const isStepValid = computed(() => {
@@ -34,36 +36,26 @@ watch(isStepValid, (valid) => {
 
 // Recarregar rotas quando modo CD muda
 watch(modoCD, async () => {
-  selectedRota.value = null
-  const updated: CompraViagemFormData = {
-    ...props.formData,
-    rota: {
-      ...props.formData.rota,
-      rota: null,
-      municipios: [],
-      modoCD: modoCD.value
-    },
-    step3Completo: false
-  }
-  emit('update:formData', updated)
+  // Limpar tudo ao mudar modo
+  limparRota()
   await carregarTodasRotas()
 })
 
 watch(modoRetorno, () => {
-  const updated: CompraViagemFormData = {
-    ...props.formData,
-    rota: {
-      ...props.formData.rota,
-      modoRetorno: modoRetorno.value
-    }
+  // Se já tem rota selecionada e mudou retorno, precisa revalidar
+  if (props.formData.rota.rota) {
+    limparRota()
   }
-  emit('update:formData', updated)
 })
 
 // Methods
 const carregarTodasRotas = async () => {
   loadingRotas.value = true
+  erroValidacao.value = null
+
   try {
+    console.log('📋 Carregando rotas...', { modoCD: modoCD.value })
+
     const data = await $api('/compra-viagem/rotas', {
       query: {
         search: '',
@@ -75,54 +67,104 @@ const carregarTodasRotas = async () => {
       throw new Error(data.message || 'Erro ao buscar rotas')
     }
 
-    // data.data já está no formato correto do backend (value, title, subtitle, flgcd, flgretorno)
     rotasOptions.value = data.data || []
+    console.log(`✅ ${rotasOptions.value.length} rotas carregadas`)
 
-  } catch (error) {
-    console.error('Erro ao carregar rotas:', error)
+  } catch (error: any) {
+    console.error('❌ Erro ao carregar rotas:', error)
     rotasOptions.value = []
+    erroValidacao.value = getErrorMessage(error)
   } finally {
     loadingRotas.value = false
   }
 }
 
 const selecionarRota = async (rotaIdValue: number | null) => {
+  // Limpar erro anterior
+  erroValidacao.value = null
+
   if (!rotaIdValue) {
     limparRota()
     return
   }
 
+  // Verificar se tem pacote selecionado
+  if (!props.formData.pacote.pacote?.codpac) {
+    erroValidacao.value = 'Selecione um pacote primeiro (Passo 1)'
+    selectedRota.value = null
+    return
+  }
+
+  loadingValidacao.value = true
+
   try {
-    // VALIDAR ROTA PRIMEIRO
+    console.log('🔍 Validando rota...', {
+      codpac: props.formData.pacote.pacote.codpac,
+      cod_rota: rotaIdValue,
+      flgcd: modoCD.value,
+      flgretorno: modoRetorno.value
+    })
+
+    // VALIDAR ROTA NO BACKEND
     const data = await $api('/compra-viagem/validar-rota', {
       method: 'POST',
       body: {
-        codpac: props.formData.pacote.pacote?.codpac,
+        codpac: props.formData.pacote.pacote.codpac,
         cod_rota: rotaIdValue,
         flgcd: modoCD.value,
         flgretorno: modoRetorno.value
       }
     })
 
-    if (!data.success) {
-      console.error('Erro ao validar rota:', data.error)
-      selectedRota.value = null
-      return
-    }
-
-    console.log('✅ Rota validada com sucesso')
+    // Se chegou aqui sem exceção, validação passou
+    console.log('✅ Rota validada com sucesso:', data)
 
     // Buscar dados da rota selecionada nas options
     const rotaSelecionada = rotasOptions.value.find(r => r.value === rotaIdValue)
     if (!rotaSelecionada) {
-      console.error('Rota não encontrada nas opções')
+      erroValidacao.value = 'Rota não encontrada nas opções'
+      selectedRota.value = null
       return
     }
 
     // Carregar municípios da rota
-    await carregarMunicipiosRota(rotaIdValue)
+    await carregarMunicipiosRota(rotaIdValue, rotaSelecionada)
 
-    // Atualizar formData
+  } catch (error: any) {
+    console.error('❌ Erro ao validar rota:', error)
+
+    // Extrair mensagem de erro do backend
+    const errorData = error?.data || error?.response?._data
+    if (errorData?.error) {
+      erroValidacao.value = errorData.error
+    } else {
+      erroValidacao.value = getErrorMessage(error)
+    }
+
+    // Limpar seleção
+    selectedRota.value = null
+
+  } finally {
+    loadingValidacao.value = false
+  }
+}
+
+const carregarMunicipiosRota = async (rotaIdValue: number, rotaSelecionada: any) => {
+  loadingRotaMunicipios.value = true
+
+  try {
+    console.log('🗺️ Carregando municípios da rota', rotaIdValue)
+
+    const data = await $api(`/semparar-rotas/${rotaIdValue}/municipios`)
+
+    if (!data.success) {
+      throw new Error(data.message || 'Erro ao carregar municípios')
+    }
+
+    const municipios = data.data.municipios || []
+    console.log(`✅ ${municipios.length} municípios carregados`)
+
+    // Atualizar formData com rota E municípios
     const updated: CompraViagemFormData = {
       ...props.formData,
       rota: {
@@ -133,61 +175,40 @@ const selecionarRota = async (rotaIdValue: number | null) => {
           flgCD: rotaSelecionada.flgcd,
           flgRetorno: rotaSelecionada.flgretorno
         },
-        municipios: props.formData.rota.municipios, // Será preenchido em carregarMunicipiosRota
+        municipios,
         modoCD: modoCD.value,
         modoRetorno: modoRetorno.value
       },
-      step3Completo: true
+      // LIMPAR dados do step 4 quando muda rota
+      preco: {
+        valor: 0,
+        numeroViagem: '',
+        nomeRotaSemParar: '',
+        codRotaSemParar: '',
+        pracas: [],
+        calculado: false
+      },
+      step3Completo: true,
+      step4Completo: false
     }
 
     emit('update:formData', updated)
-
-    // Emitir evento para auto-calcular preço (Step 4)
     emit('rotaValidada')
 
-  } catch (error) {
-    console.error('Erro ao selecionar rota:', error)
+  } catch (error: any) {
+    console.error('❌ Erro ao carregar municípios:', error)
+    erroValidacao.value = getErrorMessage(error)
     selectedRota.value = null
-  }
-}
-
-const carregarMunicipiosRota = async (rotaIdValue: number) => {
-  if (!rotaIdValue) {
-    return
-  }
-
-  loadingRotaMunicipios.value = true
-  try {
-    const data = await $api(`/semparar-rotas/${rotaIdValue}/municipios`)
-
-    if (!data.success) {
-      throw new Error(data.message || 'Erro ao carregar municípios')
-    }
-
-    const municipios = data.data.municipios || []
-
-    // Atualizar formData com municípios
-    const updated: CompraViagemFormData = {
-      ...props.formData,
-      rota: {
-        ...props.formData.rota,
-        municipios
-      }
-    }
-
-    emit('update:formData', updated)
-
-    console.log(`🗺️ ${municipios.length} municípios carregados`)
-
-  } catch (error) {
-    console.error('Erro ao carregar municípios:', error)
   } finally {
     loadingRotaMunicipios.value = false
   }
 }
 
 const limparRota = () => {
+  console.log('🧹 Limpando rota selecionada')
+
   selectedRota.value = null
+  erroValidacao.value = null
 
   const updated: CompraViagemFormData = {
     ...props.formData,
@@ -197,14 +218,25 @@ const limparRota = () => {
       modoCD: modoCD.value,
       modoRetorno: modoRetorno.value
     },
-    step3Completo: false
+    // LIMPAR também dados do step 4
+    preco: {
+      valor: 0,
+      numeroViagem: '',
+      nomeRotaSemParar: '',
+      codRotaSemParar: '',
+      pracas: [],
+      calculado: false
+    },
+    step3Completo: false,
+    step4Completo: false
   }
 
   emit('update:formData', updated)
 }
 
-// Lifecycle - Carregar rotas ao montar + inicializar com dados existentes
+// Lifecycle
 onMounted(async () => {
+  console.log('🚀 Step3 montado')
   await carregarTodasRotas()
 
   // Inicializar com dados existentes se houver
@@ -226,6 +258,21 @@ onMounted(async () => {
       Escolha a rota SemParar para a viagem
     </p>
 
+    <!-- Erro de Validação -->
+    <VAlert
+      v-if="erroValidacao"
+      type="error"
+      variant="tonal"
+      class="mb-4"
+      closable
+      @click:close="erroValidacao = null"
+    >
+      <template #prepend>
+        <VIcon icon="tabler-alert-circle" />
+      </template>
+      {{ erroValidacao }}
+    </VAlert>
+
     <!-- Switches de Modo -->
     <VRow class="mb-4">
       <VCol cols="6">
@@ -235,7 +282,7 @@ onMounted(async () => {
           label="Modo CD (TCD)"
           hide-details
           density="compact"
-          :disabled="props.formData.step3Completo"
+          :disabled="props.formData.step3Completo || loadingValidacao"
         />
       </VCol>
 
@@ -246,17 +293,17 @@ onMounted(async () => {
           label="Retorno"
           hide-details
           density="compact"
-          :disabled="props.formData.step3Completo"
+          :disabled="props.formData.step3Completo || loadingValidacao"
         />
       </VCol>
     </VRow>
 
     <!-- Autocomplete de Rotas -->
     <VAutocomplete
-      :key="`rota-autocomplete-${modoCD}`"
+      :key="`rota-autocomplete-${modoCD}-${modoRetorno}`"
       v-model="selectedRota"
       :items="rotasOptions"
-      :loading="loadingRotas"
+      :loading="loadingRotas || loadingValidacao"
       :disabled="props.formData.step3Completo"
       item-title="title"
       item-value="value"

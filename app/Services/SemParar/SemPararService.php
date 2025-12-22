@@ -5,6 +5,7 @@ namespace App\Services\SemParar;
 use Exception;
 use Illuminate\Support\Facades\Log;
 use App\Services\SemParar\XmlBuilders\PontosParadaBuilder;
+use App\Services\ProgressService;
 
 /**
  * SemPararService - High-level wrapper for SemParar business operations
@@ -20,6 +21,16 @@ class SemPararService
     protected SemPararSoapClient $soapClient;
 
     /**
+     * Progress service for status lookup
+     */
+    protected ?ProgressService $progressService = null;
+
+    /**
+     * Cache de descrições de status SemParar
+     */
+    protected static array $statusCache = [];
+
+    /**
      * Initialize service with SOAP client
      *
      * CORREÇÃO BUG #19: Timeout de 10s é adequado para SOAP SemParar
@@ -28,9 +39,71 @@ class SemPararService
      * - Se timeout constante, aumentar para 15s em SemPararSoapClient
      * - Monitorar logs de timeout para ajustes futuros
      */
-    public function __construct(SemPararSoapClient $soapClient = null)
+    public function __construct(?SemPararSoapClient $soapClient = null)
     {
         $this->soapClient = $soapClient ?? new SemPararSoapClient();
+    }
+
+    /**
+     * Buscar descrição do status de erro SemParar na tabela PUB.semPararStatus
+     *
+     * @param int $codStatus Código do status
+     * @return string Descrição do erro ou mensagem padrão
+     */
+    protected function getStatusDescription(int $codStatus): string
+    {
+        // Verificar cache primeiro
+        if (isset(self::$statusCache[$codStatus])) {
+            return self::$statusCache[$codStatus];
+        }
+
+        try {
+            // Lazy load ProgressService
+            if ($this->progressService === null) {
+                $this->progressService = app(ProgressService::class);
+            }
+
+            $sql = "SELECT TOP 1 codStatus, desStatus FROM PUB.semPararStatus WHERE codStatus = " . intval($codStatus);
+            $result = $this->progressService->executeCustomQuery($sql);
+
+            if ($result['success'] && !empty($result['data']['results'])) {
+                $status = $result['data']['results'][0];
+                $descricao = $status['desStatus'] ?? $status['desstatus'] ?? "Erro SemParar código {$codStatus}";
+
+                // Cachear para próximas consultas
+                self::$statusCache[$codStatus] = $descricao;
+
+                Log::info('[SemParar] Status description found', [
+                    'cod_status' => $codStatus,
+                    'descricao' => $descricao
+                ]);
+
+                return $descricao;
+            }
+
+            Log::warning('[SemParar] Status description not found in database', ['cod_status' => $codStatus]);
+            return "Erro SemParar código {$codStatus} - Contate o suporte";
+
+        } catch (Exception $e) {
+            Log::error('[SemParar] Error fetching status description', [
+                'cod_status' => $codStatus,
+                'error' => $e->getMessage()
+            ]);
+            return "Erro SemParar código {$codStatus}";
+        }
+    }
+
+    /**
+     * Formatar mensagem de erro com descrição do status
+     *
+     * @param int $status Código do status
+     * @param string $operacao Nome da operação que falhou
+     * @return string Mensagem formatada
+     */
+    protected function formatStatusError(int $status, string $operacao = 'operação'): string
+    {
+        $descricao = $this->getStatusDescription($status);
+        return "Erro na {$operacao}: {$descricao} (código {$status})";
     }
 
     /**
@@ -226,12 +299,14 @@ class SemPararService
             // Check status
             $status = $response->status ?? 0;
             if ($status !== 0) {
+                $errorMessage = $this->formatStatusError($status, 'roteirização de praças');
                 Log::error('[SemParar] Roteirização retornou erro', [
                     'status' => $status,
-                    'status_mensagem' => $response->statusMensagem ?? null
+                    'status_mensagem' => $response->statusMensagem ?? null,
+                    'error_message' => $errorMessage
                 ]);
 
-                throw new Exception("Erro SemParar status {$status}: " . ($response->statusMensagem ?? 'Erro desconhecido'));
+                throw new Exception($errorMessage);
             }
 
             Log::info('[SemParar] Roteirização concluída', [
@@ -306,7 +381,12 @@ class SemPararService
             $status = $response->status ?? 0;
 
             if ($status !== 0 || !$codRotaSemParar) {
-                throw new Exception("Erro ao cadastrar rota temporária. Status: {$status}");
+                $errorMessage = $this->formatStatusError($status, 'cadastro de rota temporária');
+                Log::error('[SemParar] Erro ao cadastrar rota temporária', [
+                    'status' => $status,
+                    'error_message' => $errorMessage
+                ]);
+                throw new Exception($errorMessage);
             }
 
             Log::info('[SemParar] Rota temporária cadastrada', [
@@ -391,7 +471,12 @@ class SemPararService
             $status = $response->status ?? 0;
 
             if ($status !== 0) {
-                throw new Exception("Erro ao obter custo da rota. Status: {$status}");
+                $errorMessage = $this->formatStatusError($status, 'obtenção de custo da rota');
+                Log::error('[SemParar] Custo da rota retornou erro', [
+                    'status' => $status,
+                    'error_message' => $errorMessage
+                ]);
+                throw new Exception($errorMessage);
             }
 
             Log::info('[SemParar] Custo da rota obtido', [
@@ -519,12 +604,14 @@ class SemPararService
             // Check status
             $status = $response->status ?? 0;
             if ($status !== 0) {
+                $errorMessage = $this->formatStatusError($status, 'compra de viagem');
                 Log::error('[SemParar] Compra de viagem retornou erro', [
                     'status' => $status,
-                    'status_mensagem' => $response->statusMensagem ?? null
+                    'status_mensagem' => $response->statusMensagem ?? null,
+                    'error_message' => $errorMessage
                 ]);
 
-                throw new Exception("Erro SemParar status {$status}: " . ($response->statusMensagem ?? 'Erro desconhecido'));
+                throw new Exception($errorMessage);
             }
 
             // Extract trip code from response
@@ -625,12 +712,14 @@ class SemPararService
 
             // Check for errors
             if ($status !== 0) {
+                $errorMessage = $this->formatStatusError($status, 'obtenção de recibo');
                 Log::error('[SemParar] Erro ao obter recibo', [
                     'status' => $status,
-                    'status_mensagem' => $statusMensagem
+                    'status_mensagem' => $statusMensagem,
+                    'error_message' => $errorMessage
                 ]);
 
-                throw new \Exception("Erro SemParar status {$status}: {$statusMensagem}");
+                throw new \Exception($errorMessage);
             }
 
             // Convert SOAP response object to array
@@ -1011,12 +1100,14 @@ class SemPararService
             $statusMensagem = (string)($response->statusMensagem ?? 'Erro desconhecido');
 
             if ($status !== 0) {
+                $errorMessage = $this->formatStatusError($status, 'cancelamento de viagem');
                 Log::error('[SemParar] Erro ao cancelar viagem', [
                     'status' => $status,
-                    'status_mensagem' => $statusMensagem
+                    'status_mensagem' => $statusMensagem,
+                    'error_message' => $errorMessage
                 ]);
 
-                throw new \Exception("Erro SemParar status {$status}: {$statusMensagem}");
+                throw new \Exception($errorMessage);
             }
 
             Log::info('[SemParar] Viagem cancelada com sucesso', [
@@ -1133,12 +1224,14 @@ class SemPararService
             $statusMensagem = (string)($response->statusMensagem ?? 'Erro desconhecido');
 
             if ($status !== 0) {
+                $errorMessage = $this->formatStatusError($status, 'reemissão de viagem');
                 Log::error('[SemParar] Erro ao reemitir viagem', [
                     'status' => $status,
-                    'status_mensagem' => $statusMensagem
+                    'status_mensagem' => $statusMensagem,
+                    'error_message' => $errorMessage
                 ]);
 
-                throw new \Exception("Erro SemParar status {$status}: {$statusMensagem}");
+                throw new \Exception($errorMessage);
             }
 
             Log::info('[SemParar] Viagem reemitida com sucesso', [
