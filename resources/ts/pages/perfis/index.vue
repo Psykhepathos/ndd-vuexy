@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { showSuccess, showError } from '@/utils/api'
+import { ref, onMounted } from 'vue'
+import { $api, showSuccess, showError, handleApiError } from '@/utils/api'
 
 interface Permission {
   id: number
@@ -42,8 +42,6 @@ interface Statistics {
   custom: number
   topRoles: Role[]
 }
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 
 // State
 const roles = ref<Role[]>([])
@@ -126,19 +124,12 @@ async function fetchRoles() {
       params.append('q', search.value)
     }
 
-    const token = localStorage.getItem('accessToken')
-    const response = await fetch(`${API_BASE}/roles?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-      },
-    })
-    const data = await response.json()
+    const data = await $api(`/roles?${params}`)
     roles.value = data.roles
     totalRoles.value = data.totalRoles
   } catch (error) {
     console.error('Erro ao carregar perfis:', error)
-    showError('Erro ao carregar perfis')
+    handleApiError(error, 'Erro ao carregar perfis')
   } finally {
     loading.value = false
   }
@@ -146,35 +137,21 @@ async function fetchRoles() {
 
 async function fetchStatistics() {
   try {
-    const token = localStorage.getItem('accessToken')
-    const response = await fetch(`${API_BASE}/roles/statistics`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-      },
-    })
-    statistics.value = await response.json()
+    statistics.value = await $api('/roles/statistics')
   } catch (error) {
     console.error('Erro ao carregar estatísticas:', error)
-    showError('Erro ao carregar estatísticas')
+    handleApiError(error, 'Erro ao carregar estatísticas')
   }
 }
 
 async function fetchPermissions() {
   try {
-    const token = localStorage.getItem('accessToken')
-    const response = await fetch(`${API_BASE}/roles/permissions`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-      },
-    })
-    const data = await response.json()
+    const data = await $api('/roles/permissions')
     permissionGroups.value = data.groups
     allPermissions.value = data.allPermissions
   } catch (error) {
     console.error('Erro ao carregar permissões:', error)
-    showError('Erro ao carregar permissões')
+    handleApiError(error, 'Erro ao carregar permissões')
   }
 }
 
@@ -216,14 +193,7 @@ async function openPermissionsDialog(role: Role) {
 
   // Buscar permissões do role
   try {
-    const token = localStorage.getItem('accessToken')
-    const response = await fetch(`${API_BASE}/roles/${role.id}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-      },
-    })
-    const data = await response.json()
+    const data = await $api(`/roles/${role.id}`)
 
     // Mapear nomes de permissões para IDs
     const permNames = data.permissions || []
@@ -232,7 +202,7 @@ async function openPermissionsDialog(role: Role) {
       .map(p => p.id)
   } catch (error) {
     console.error('Erro ao carregar permissões do perfil:', error)
-    showError('Erro ao carregar permissões do perfil')
+    handleApiError(error, 'Erro ao carregar permissões do perfil')
     selectedRolePermissions.value = []
   }
 
@@ -242,25 +212,14 @@ async function openPermissionsDialog(role: Role) {
 // CRUD operations
 async function saveRole() {
   try {
-    const token = localStorage.getItem('accessToken')
     const url = editMode.value
-      ? `${API_BASE}/roles/${selectedRole.value?.id}`
-      : `${API_BASE}/roles`
+      ? `/roles/${selectedRole.value?.id}`
+      : '/roles'
 
-    const response = await fetch(url, {
+    await $api(url, {
       method: editMode.value ? 'PUT' : 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify(formRole.value),
+      body: formRole.value,
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || 'Erro ao salvar perfil')
-    }
 
     dialogRole.value = false
     showSuccess(editMode.value ? 'Perfil atualizado com sucesso!' : 'Perfil criado com sucesso!')
@@ -268,7 +227,7 @@ async function saveRole() {
     fetchStatistics()
   } catch (error: any) {
     console.error('Erro ao salvar perfil:', error)
-    showError(error.message || 'Erro ao salvar perfil')
+    handleApiError(error, 'Erro ao salvar perfil')
   }
 }
 
@@ -276,19 +235,9 @@ async function deleteRole() {
   if (!selectedRole.value) return
 
   try {
-    const token = localStorage.getItem('accessToken')
-    const response = await fetch(`${API_BASE}/roles/${selectedRole.value.id}`, {
+    await $api(`/roles/${selectedRole.value.id}`, {
       method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-      },
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || 'Erro ao excluir perfil')
-    }
 
     dialogDelete.value = false
     showSuccess('Perfil excluído com sucesso!')
@@ -296,7 +245,7 @@ async function deleteRole() {
     fetchStatistics()
   } catch (error: any) {
     console.error('Erro ao excluir perfil:', error)
-    showError(error.message || 'Erro ao excluir perfil')
+    handleApiError(error, 'Erro ao excluir perfil')
   }
 }
 
@@ -304,28 +253,17 @@ async function savePermissions() {
   if (!selectedRole.value) return
 
   try {
-    const token = localStorage.getItem('accessToken')
-    const response = await fetch(`${API_BASE}/roles/${selectedRole.value.id}/sync-permissions`, {
+    await $api(`/roles/${selectedRole.value.id}/sync-permissions`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({ permissions: selectedRolePermissions.value }),
+      body: { permissions: selectedRolePermissions.value },
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || 'Erro ao salvar permissões')
-    }
 
     dialogPermissions.value = false
     showSuccess('Permissões salvas com sucesso!')
     fetchRoles()
   } catch (error: any) {
     console.error('Erro ao salvar permissões:', error)
-    showError(error.message || 'Erro ao salvar permissões')
+    handleApiError(error, 'Erro ao salvar permissões')
   }
 }
 

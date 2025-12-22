@@ -67,10 +67,6 @@ export const $api = ofetch.create({
   async onRequest({ request, options }) {
     const accessToken = useCookie('accessToken').value
 
-    // Debug: Log token status para diagnóstico (remover em produção)
-    const url = typeof request === 'string' ? request : (request as any)?.url || 'unknown'
-    console.log('[API] Request:', url, '| Token presente:', !!accessToken)
-
     if (accessToken) {
       options.headers = options.headers || new Headers()
       options.headers.append('Authorization', `Bearer ${accessToken}`)
