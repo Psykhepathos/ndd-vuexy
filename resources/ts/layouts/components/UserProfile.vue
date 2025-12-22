@@ -41,8 +41,11 @@ const logout = async () => {
   ability.update([])
 
   // 4. Redirecionar para login usando hard redirect para garantir limpeza completa
-  const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/')
-  const loginUrl = baseUrl.replace(/\/+$/, '') + '/login'
+  // Usar pathname atual para detectar o subdiretório correto (ex: /ndd-vuexy/public/)
+  const currentPath = window.location.pathname
+  // Extrair base path removendo a rota atual (ex: /ndd-vuexy/public/dashboard -> /ndd-vuexy/public)
+  const basePath = currentPath.replace(/\/[^/]*$/, '') || ''
+  const loginUrl = window.location.origin + basePath + '/login'
   window.location.href = loginUrl
 }
 

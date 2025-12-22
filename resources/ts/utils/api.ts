@@ -100,9 +100,10 @@ export const $api = ofetch.create({
           showWarning('Sessão expirada. Faça login novamente.')
 
           // Usar hard redirect para garantir que cookies são limpos antes da navegação
-          // Isso evita que o router guard veja cookies antigos e redirecione para not-authorized
-          const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/')
-          const loginUrl = baseUrl.replace(/\/+$/, '') + '/login'
+          // Detectar base path do pathname atual (ex: /ndd-vuexy/public/dashboard -> /ndd-vuexy/public)
+          const currentPath = window.location.pathname
+          const basePath = currentPath.replace(/\/[^/]*$/, '') || ''
+          const loginUrl = window.location.origin + basePath + '/login'
           window.location.href = loginUrl
         }
 
