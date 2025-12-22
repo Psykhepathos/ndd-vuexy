@@ -71,11 +71,20 @@ const login = async () => {
 
     const { accessToken, userData, userAbilityRules, passwordResetRequired } = res
 
-    useCookie('userAbilityRules').value = userAbilityRules
+    // Determinar o path do cookie baseado no base path do router (importante para subdiretórios)
+    const basePath = router.options.history.base || '/'
+
+    // Se "Lembrar de mim" estiver marcado, cookies duram 30 dias, senão expiram ao fechar browser
+    const cookieOptions = {
+      path: basePath,
+      ...(rememberMe.value ? { maxAge: 60 * 60 * 24 * 30 } : {}), // 30 dias em segundos
+    }
+
+    useCookie('userAbilityRules', cookieOptions).value = userAbilityRules
     ability.update(userAbilityRules)
 
-    useCookie('userData').value = userData
-    useCookie('accessToken').value = accessToken
+    useCookie('userData', cookieOptions).value = userData
+    useCookie('accessToken', cookieOptions).value = accessToken
 
     await nextTick(() => {
       // Se precisar trocar a senha, redirecionar para página de alteração
