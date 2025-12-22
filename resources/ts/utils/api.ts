@@ -64,8 +64,13 @@ export const handleApiError = (error: any, defaultMessage?: string): string => {
 
 export const $api = ofetch.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-  async onRequest({ options }) {
+  async onRequest({ request, options }) {
     const accessToken = useCookie('accessToken').value
+
+    // Debug: Log token status para diagnóstico (remover em produção)
+    const url = typeof request === 'string' ? request : (request as any)?.url || 'unknown'
+    console.log('[API] Request:', url, '| Token presente:', !!accessToken)
+
     if (accessToken) {
       options.headers = options.headers || new Headers()
       options.headers.append('Authorization', `Bearer ${accessToken}`)
