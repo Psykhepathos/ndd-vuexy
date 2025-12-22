@@ -93,7 +93,7 @@ const confirmarCompra = async () => {
 
       // Dados do preço calculado
       nome_rota_semparar: props.formData.preco.nomeRotaSemParar,
-      cod_rota_semparar: props.formData.preco.codRotaSemParar,
+      cod_rota_semparar: String(props.formData.preco.codRotaSemParar), // Backend espera string
       valor_viagem: props.formData.preco.valor,
 
       // Modos da rota
