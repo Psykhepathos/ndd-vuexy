@@ -2262,8 +2262,36 @@ class ProgressService
 
             // Geocodificar todos de uma vez
             try {
-                $coordsMap = $geocodingService->getCoordenadasLote($municipiosParaGeocoding);
-                Log::info('Resultado do geocoding em lote', ['coords_map_keys' => array_keys($coordsMap), 'total' => count($coordsMap)]);
+                $geocodingResults = $geocodingService->getCoordenadasLote($municipiosParaGeocoding);
+
+                // CORREÇÃO BUG: Converter array de resultados para mapa por código IBGE
+                // O getCoordenadasLote retorna array com estrutura:
+                // [['codigo_ibge' => '3106705', 'coordenadas' => ['lat' => x, 'lon' => y]], ...]
+                $coordsMap = [];
+                foreach ($geocodingResults as $index => $result) {
+                    $codigoIbge = $result['codigo_ibge'] ?? null;
+                    $coordenadas = $result['coordenadas'] ?? null;
+
+                    Log::debug('Processando resultado geocoding', [
+                        'index' => $index,
+                        'codigo_ibge' => $codigoIbge,
+                        'codigo_ibge_type' => gettype($codigoIbge),
+                        'tem_coordenadas' => $coordenadas !== null,
+                        'coordenadas' => $coordenadas
+                    ]);
+
+                    if ($codigoIbge !== null && $coordenadas !== null) {
+                        // Garantir que a chave é string para match correto
+                        $coordsMap[(string)$codigoIbge] = $coordenadas;
+                    }
+                }
+
+                Log::info('Resultado do geocoding em lote - mapa construído', [
+                    'total_resultados' => count($geocodingResults),
+                    'com_coordenadas' => count($coordsMap),
+                    'coords_map_keys' => array_keys($coordsMap),
+                    'primeiro_resultado_raw' => $geocodingResults[0] ?? 'vazio'
+                ]);
             } catch (\Exception $e) {
                 Log::warning('Erro ao geocodificar municípios em lote', ['error' => $e->getMessage()]);
                 $coordsMap = [];
@@ -2273,7 +2301,17 @@ class ProgressService
             foreach ($resultMunicipios['data']['results'] as $mun) {
                 $cdibge = (string) $mun['cdibge']; // Converter para string para bater com chave do $coordsMap
                 $coords = $coordsMap[$cdibge] ?? null;
-                Log::debug('Mapeando município para pontos', ['cdibge' => $cdibge, 'cdibge_type' => gettype($cdibge), 'coords' => $coords, 'coords_found' => $coords !== null]);
+
+                // Debug detalhado para encontrar mismatch
+                Log::debug('Mapeando município para pontos', [
+                    'cdibge_procurado' => $cdibge,
+                    'cdibge_type' => gettype($cdibge),
+                    'cdibge_len' => strlen($cdibge),
+                    'coords_map_tem_chave' => array_key_exists($cdibge, $coordsMap),
+                    'coords_map_keys_disponiveis' => array_keys($coordsMap),
+                    'coords' => $coords,
+                    'coords_found' => $coords !== null
+                ]);
 
                 $pontos[] = [
                     'cod_ibge' => $cdibge,
