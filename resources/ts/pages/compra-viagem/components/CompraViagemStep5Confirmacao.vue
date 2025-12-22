@@ -81,10 +81,7 @@ const confirmarCompra = async () => {
   success.value = false
 
   try {
-    // Gera UUID único para idempotência (previne double-click)
-    const idempotencyKey = crypto.randomUUID()
-
-    // Preparar dados da compra
+    // Preparar dados da compra (igual ao Progress compraRota.p)
     const payload = {
       // Dados obrigatórios
       codpac: props.formData.pacote.pacote?.codpac,
@@ -101,10 +98,7 @@ const confirmarCompra = async () => {
 
       // Modos da rota
       flgcd: props.formData.rota.modoCD,
-      flgretorno: props.formData.rota.modoRetorno,
-
-      // CORREÇÃO #7: Idempotência - UUID único para prevenir duplicatas
-      idempotency_key: idempotencyKey
+      flgretorno: props.formData.rota.modoRetorno
     }
 
     console.log('🛒 Enviando compra:', payload)

@@ -102,7 +102,7 @@ class AuthController extends Controller
                     'accessToken' => $token,
                     'userData' => [
                         'id' => $user->id,
-                        'name' => $user->name,
+                        'fullName' => $user->name,
                         'email' => $user->email,
                         'role' => $user->role,
                         'avatar' => null,
@@ -121,7 +121,7 @@ class AuthController extends Controller
                 'accessToken' => $token,
                 'userData' => [
                     'id' => $user->id,
-                    'name' => $user->name,
+                    'fullName' => $user->name,
                     'email' => $user->email,
                     'role' => $user->role,
                     'avatar' => null,
@@ -497,7 +497,7 @@ class AuthController extends Controller
             'accessToken' => $token,
             'userData' => [
                 'id' => $user->id,
-                'name' => $user->name,
+                'fullName' => $user->name,
                 'email' => $user->email,
                 'role' => $user->role,
                 'avatar' => null,
