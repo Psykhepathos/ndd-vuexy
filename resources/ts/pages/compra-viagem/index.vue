@@ -93,12 +93,12 @@ const headers = [
   { title: 'CANCEL', key: 'cancelado', sortable: false, width: '80px' },
   { title: 'PLACA', key: 'placa', sortable: false, width: '90px' },
   { title: 'VALOR', key: 'valor', sortable: false, width: '100px' },
-  { title: 'ROTA', key: 'rota_nome', sortable: false, width: '280px' },
+  { title: 'ROTA', key: 'rota_nome', sortable: false, width: '180px' },
   { title: 'TRSP', key: 'transportador', sortable: false, width: '150px', class: 'd-none d-lg-table-cell' },
   { title: 'DATA COMPRA', key: 'data_compra', sortable: true, width: '110px' },
   { title: 'COD ROT SP', key: 'cod_rota_create_sp', sortable: false, width: '100px', class: 'd-none d-xl-table-cell' },
   { title: 'RESP', key: 'responsavel_compra', sortable: false, width: '90px', class: 'd-none d-xl-table-cell' },
-  { title: 'AÇÕES', key: 'actions', sortable: false, width: '200px' }
+  { title: 'AÇÕES', key: 'actions', sortable: false, width: '80px' }
 ]
 
 // ============================================================================
@@ -831,9 +831,13 @@ onMounted(() => {
 
           <!-- Rota -->
           <template #item.rota_nome="{ item }">
-            <div class="text-body-2">
+            <span
+              class="text-body-2 d-inline-block text-truncate"
+              style="max-width: 160px"
+              :title="item.rota_nome"
+            >
               {{ item.rota_nome }}
-            </div>
+            </span>
           </template>
 
           <!-- Transportador -->
@@ -866,78 +870,50 @@ onMounted(() => {
 
           <!-- Ações -->
           <template #item.actions="{ item }">
-            <div class="d-flex gap-1">
-              <!-- Ver detalhes -->
-              <VBtn
-                icon
-                variant="text"
-                color="default"
-                size="small"
-                @click="verDetalhes(item.cod_viagem)"
-              >
-                <VIcon icon="tabler-eye" />
-                <VTooltip
-                  activator="parent"
-                  location="top"
-                >
-                  Ver Detalhes
-                </VTooltip>
-              </VBtn>
+            <VBtn
+              icon
+              variant="text"
+              size="small"
+              @click="verDetalhes(item.cod_viagem)"
+            >
+              <VIcon icon="tabler-eye" />
+            </VBtn>
 
-              <!-- Baixar recibo -->
-              <VBtn
-                icon
-                variant="text"
-                color="primary"
-                size="small"
-                :disabled="item.cancelado"
-                @click="baixarRecibo(item.cod_viagem)"
-              >
-                <VIcon icon="tabler-download" />
-                <VTooltip
-                  activator="parent"
-                  location="top"
+            <VMenu location="bottom end">
+              <template #activator="{ props }">
+                <VBtn
+                  icon
+                  variant="text"
+                  size="small"
+                  v-bind="props"
                 >
-                  Baixar Recibo
-                </VTooltip>
-              </VBtn>
+                  <VIcon icon="tabler-dots-vertical" />
+                </VBtn>
+              </template>
 
-              <!-- Reemitir -->
-              <VBtn
-                icon
-                variant="text"
-                color="warning"
-                size="small"
-                :disabled="item.cancelado"
-                @click="reemitirViagem(item.cod_viagem)"
-              >
-                <VIcon icon="tabler-refresh" />
-                <VTooltip
-                  activator="parent"
-                  location="top"
-                >
-                  Reemitir
-                </VTooltip>
-              </VBtn>
-
-              <!-- Cancelar -->
-              <VBtn
-                icon
-                variant="text"
-                color="error"
-                size="small"
-                :disabled="item.cancelado"
-                @click="cancelarViagem(item.cod_viagem)"
-              >
-                <VIcon icon="tabler-x" />
-                <VTooltip
-                  activator="parent"
-                  location="top"
-                >
-                  Cancelar
-                </VTooltip>
-              </VBtn>
-            </div>
+              <VList density="compact">
+                <VListItem
+                  prepend-icon="tabler-download"
+                  title="Baixar Recibo"
+                  :disabled="item.cancelado"
+                  @click="baixarRecibo(item.cod_viagem)"
+                />
+                <VListItem
+                  prepend-icon="tabler-refresh"
+                  title="Reemitir"
+                  :disabled="item.cancelado"
+                  @click="reemitirViagem(item.cod_viagem)"
+                />
+                <VDivider />
+                <VListItem
+                  prepend-icon="tabler-x"
+                  title="Cancelar"
+                  class="text-error"
+                  :disabled="item.cancelado"
+                  @click="cancelarViagem(item.cod_viagem)"
+                />
+              </VList>
+            </VMenu>
           </template>
 
           <!-- Empty state -->

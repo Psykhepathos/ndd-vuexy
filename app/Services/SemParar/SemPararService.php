@@ -1095,15 +1095,21 @@ class SemPararService
                 'response' => $soapClient->__getLastResponse()
             ]);
 
-            // Extract status
-            $status = (int)($response->status ?? 999);
-            $statusMensagem = (string)($response->statusMensagem ?? 'Erro desconhecido');
+            // CORREÇÃO: cancelarViagem retorna diretamente o status (int), não um objeto
+            // Response é: <cancelarViagemReturn xsi:type="xsd:int">0</cancelarViagemReturn>
+            // 0 = sucesso, outros = erro
+            $status = is_object($response) ? (int)($response->status ?? 999) : (int)$response;
+
+            Log::debug('[SemParar] Status cancelamento', [
+                'response_type' => gettype($response),
+                'response_value' => $response,
+                'status_parsed' => $status
+            ]);
 
             if ($status !== 0) {
                 $errorMessage = $this->formatStatusError($status, 'cancelamento de viagem');
                 Log::error('[SemParar] Erro ao cancelar viagem', [
                     'status' => $status,
-                    'status_mensagem' => $statusMensagem,
                     'error_message' => $errorMessage
                 ]);
 

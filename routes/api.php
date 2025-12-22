@@ -318,8 +318,9 @@ Route::middleware(['api', 'auth:sanctum'])->group(function () {
             ->middleware('permission:configuracoes.edit');
 
         // FASE 2A - Purchase (CRÍTICO - operação financeira)
+        // Aumentado para 30/min para evitar bloqueio durante testes
         Route::post('comprar-viagem', [SemPararController::class, 'comprarViagem'])
-            ->middleware(['throttle:10,1', 'permission:compra_viagem.create']);
+            ->middleware(['throttle:30,1', 'permission:compra_viagem.create']);
 
         // FASE 2C - Receipt
         Route::post('obter-recibo', [SemPararController::class, 'obterRecibo'])
@@ -521,8 +522,9 @@ Route::middleware(['api', 'auth:sanctum'])->group(function () {
             ->middleware(['throttle:30,1', 'permission:compra_viagem.view']);
 
         // Compra de viagem (CRÍTICO - Operação financeira)
+        // Aumentado para 30/min para evitar bloqueio durante testes
         Route::post('comprar', [CompraViagemController::class, 'comprarViagem'])
-            ->middleware(['throttle:10,1', 'permission:compra_viagem.create']);
+            ->middleware(['throttle:30,1', 'permission:compra_viagem.create']);
 
         // Debug: Análise completa do fluxo
         Route::post('debug-flow', [\App\Http\Controllers\Api\DebugSemPararController::class, 'debugFlow'])

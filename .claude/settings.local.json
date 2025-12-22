@@ -55,7 +55,9 @@
       "Bash(Select-String -Path \"C:\\\\Users\\\\15857\\\\Desktop\\\\NDD\\\\ndd-vuexy\\\\storage\\\\logs\\\\laravel.log\" -Pattern \"roteirizarPracasPedagio|SOAP Request|SOAP Response|status.*808|Roteirização retornou erro\" -Context 2,5)",
       "Bash(Select-Object -Last 100)",
       "Bash(Select-Object -Last 200)",
-      "Bash(Select-String -Pattern \"Resultado do geocoding\" -Context 2,5)"
+      "Bash(Select-String -Pattern \"Resultado do geocoding\" -Context 2,5)",
+      "Bash(php artisan cache:clear:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []
