@@ -1,6 +1,6 @@
 # Indice de Documentacao - NDD Vuexy
 
-**Ultima Atualizacao:** 2025-12-19
+**Ultima Atualizacao:** 2025-12-22
 
 ## Estrutura
 
@@ -47,7 +47,8 @@ docs/
 ### Leia Primeiro
 1. **[CLAUDE.md](../CLAUDE.md)** - Guia completo de desenvolvimento
 2. **[README.md](../README.md)** - Visao geral do projeto
-3. **[integracoes/ndd-cargo/INDEX.md](integracoes/ndd-cargo/INDEX.md)** - Documentacao VPO
+3. **[COMPARATIVO_VPO_SEMPARAR_VS_NDDCARGO.md](COMPARATIVO_VPO_SEMPARAR_VS_NDDCARGO.md)** - Comparativo dos 2 sistemas VPO
+4. **[integracoes/ndd-cargo/INDEX.md](integracoes/ndd-cargo/INDEX.md)** - Documentacao VPO NDD Cargo
 
 ---
 

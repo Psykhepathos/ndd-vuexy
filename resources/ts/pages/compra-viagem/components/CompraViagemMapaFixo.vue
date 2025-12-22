@@ -139,12 +139,14 @@ const atualizarMapa = async () => {
         id: `pedagio-${praca.id}`,
         lat: praca.lat,
         lon: praca.lon,
-        tipo: 'pedagio',
-        label: praca.nome,
+        tipo: praca.match_incerto ? 'pedagio-incerto' : 'pedagio',
+        label: praca.nome || praca.praca || 'Pedágio',
         popup: `<strong>🚧 Pedágio</strong><br>` +
-               `${praca.nome}<br>` +
-               `${praca.cidade} - ${praca.uf}<br>` +
-               `R$ ${praca.valor.toFixed(2)}`
+               `${praca.nome || praca.praca || 'Pedágio'}<br>` +
+               `${praca.rodovia ? praca.rodovia + ' km ' + praca.km + '<br>' : ''}` +
+               `${praca.cidade || praca.municipio_antt || ''} ${praca.uf || praca.uf_antt ? '- ' + (praca.uf || praca.uf_antt) : ''}<br>` +
+               `${praca.valor ? 'R$ ' + praca.valor.toFixed(2) : ''}` +
+               `${praca.match_incerto ? '<br><small style="color: orange;">⚠️ Localização aproximada</small>' : ''}`
       })
     }
   })
@@ -205,6 +207,10 @@ const criarIconeCustomizado = (marker: MapMarker): L.DivIcon => {
   } else if (marker.tipo === 'pedagio') {
     bgColor = '#FFC107' // Amarelo
     icon = 'tabler-road'
+  } else if (marker.tipo === 'pedagio-incerto') {
+    bgColor = '#FF9800' // Laranja para match incerto
+    icon = 'tabler-road'
+    opacity = 0.8
   }
 
   return L.divIcon({

@@ -13,10 +13,12 @@ export const setupGuards = (router: _RouterTyped<RouteNamedMap & { [key: string]
       return
 
     /**
-     * Check if user is logged in by checking if token & user data exists in local storage
-     * Feel free to update this logic to suit your needs
+     * Check if user is logged in by checking if BOTH token AND user data exist
+     * Se apenas um existir, consideramos como sessão inválida/expirada
      */
-    const isLoggedIn = !!(useCookie('userData').value && useCookie('accessToken').value)
+    const userData = useCookie('userData').value
+    const accessToken = useCookie('accessToken').value
+    const isLoggedIn = !!(userData && accessToken)
 
     /*
       If user is logged in and is trying to access login like page, redirect to home
@@ -30,18 +32,21 @@ export const setupGuards = (router: _RouterTyped<RouteNamedMap & { [key: string]
         return undefined
     }
 
+    // Se não está logado (sem token ou sem userData), sempre vai para login
+    // Isso evita mostrar "not-authorized" quando a sessão expirou
+    if (!isLoggedIn) {
+      return {
+        name: 'login',
+        query: {
+          ...to.query,
+          to: to.fullPath !== '/' ? to.path : undefined,
+        },
+      }
+    }
+
+    // Usuário está logado mas pode não ter permissão para a rota específica
     if (!canNavigate(to) && to.matched.length) {
-      /* eslint-disable indent */
-      return isLoggedIn
-        ? { name: 'not-authorized' }
-        : {
-            name: 'login',
-            query: {
-              ...to.query,
-              to: to.fullPath !== '/' ? to.path : undefined,
-            },
-          }
-      /* eslint-enable indent */
+      return { name: 'not-authorized' }
     }
   })
 }

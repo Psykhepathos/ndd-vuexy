@@ -99,13 +99,20 @@ export interface PracaPedagio {
   cidade: string
   uf: string
   valor: number
-  lat?: number
-  lon?: number
+  lat?: number | null
+  lon?: number | null
   // Campos adicionais da API SemParar
   praca?: string
   rodovia?: string
   km?: number
   concessionaria?: string
+  // Campos do matching com ANTT
+  match_incerto?: boolean
+  match_source?: 'rodovia_km' | 'nome' | 'none'
+  praca_antt?: string
+  municipio_antt?: string
+  uf_antt?: string
+  concessionaria_antt?: string
 }
 
 // ============================================================================

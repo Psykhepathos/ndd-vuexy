@@ -81,6 +81,7 @@ export const $api = ofetch.create({
       const userDataCookie = useCookie('userData')
       const userAbilityRulesCookie = useCookie('userAbilityRules')
 
+      // Limpar todos os cookies de autenticação
       accessTokenCookie.value = null
       userDataCookie.value = null
       userAbilityRulesCookie.value = null
@@ -93,12 +94,17 @@ export const $api = ofetch.create({
                             window.location.pathname.includes('/login/')
         if (!isLoginPage) {
           showWarning('Sessão expirada. Faça login novamente.')
-          router.push({ name: 'login' })
+
+          // Usar hard redirect para garantir que cookies são limpos antes da navegação
+          // Isso evita que o router guard veja cookies antigos e redirecione para not-authorized
+          const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/')
+          const loginUrl = baseUrl.replace(/\/+$/, '') + '/login'
+          window.location.href = loginUrl
         }
 
         setTimeout(() => {
           isRedirecting = false
-        }, 1000)
+        }, 2000)
       }
     }
 

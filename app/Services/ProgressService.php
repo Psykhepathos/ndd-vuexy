@@ -2432,6 +2432,17 @@ class ProgressService
                 'nome_rota' => $priceResult['nome_rota']
             ]);
 
+            // Enriquecer praças com coordenadas da ANTT para exibição no mapa
+            $pracas = $resultRoteirizar['pracas'] ?? [];
+            if (!empty($pracas)) {
+                $matchingService = app(\App\Services\PracaPedagioMatchingService::class);
+                $pracas = $matchingService->matchPracasComANTT($pracas);
+                Log::info('Praças enriquecidas com coordenadas ANTT', [
+                    'total' => count($pracas),
+                    'com_coordenadas' => count(array_filter($pracas, fn($p) => !empty($p['lat'])))
+                ]);
+            }
+
             return [
                 'success' => true,
                 'data' => [
@@ -2441,7 +2452,7 @@ class ProgressService
                     'cod_rota' => $idRotaTemporaria,
                     'rota_temporaria' => $nomeRotaTemporaria,
                     'id_rota_temporaria' => $idRotaTemporaria,
-                    'pracas' => $resultRoteirizar['pracas'] ?? [], // Adicionar praças para exibição
+                    'pracas' => $pracas, // Praças com coordenadas para exibição no mapa
                     'total_pracas' => count($pracasIds),
                     'placa' => strtoupper($placa),
                     'data_inicio' => $dataInicio,
