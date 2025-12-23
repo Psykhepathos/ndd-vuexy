@@ -36,6 +36,12 @@ class NddCargoSoapClient
     private const PROCESS_CODE_EMITIR_VPO = 2019;
 
     /**
+     * ProcessCode para Cancelamento de Operação Vale Pedágio (CAVP)
+     * @see docs/integracoes/ndd-cargo/CANCELAMENTO_VPO.md
+     */
+    private const PROCESS_CODE_CANCELAR_VPO = 2020;
+
+    /**
      * MessageType (sempre 100 para Request)
      */
     private const MESSAGE_TYPE_REQUEST = 100;
@@ -177,6 +183,65 @@ class NddCargoSoapClient
 
         } catch (\Exception $e) {
             Log::error('Erro ao emitir VPO via NDD Cargo', [
+                'erro' => $e->getMessage(),
+                'guid' => $guid
+            ]);
+
+            return [
+                'success' => false,
+                'data' => null,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Envia cancelamento de VPO (síncrono)
+     *
+     * @param string $xmlAssinado XML de negócio já assinado digitalmente (cancelarOperacaoValePedagio_envio)
+     * @param string $guid UUID da transação
+     * @return array ['success' => bool, 'data' => array|null, 'error' => string|null]
+     *               data contém: ['uuid' => string, 'raw_response' => string]
+     */
+    public function cancelarVPO(string $xmlAssinado, string $guid): array
+    {
+        try {
+            // Construir CrossTalk Message (síncrono - ExchangePattern 7)
+            $crossTalkMessage = $this->buildCrossTalkMessage(
+                processCode: self::PROCESS_CODE_CANCELAR_VPO,
+                messageType: self::MESSAGE_TYPE_REQUEST,
+                exchangePattern: self::EXCHANGE_PATTERN_SYNC,
+                guid: $guid
+            );
+
+            // Construir envelope SOAP
+            $soapEnvelope = $this->buildSoapEnvelope($crossTalkMessage, $xmlAssinado);
+
+            // Enviar requisição
+            $response = $this->sendSoapRequest($soapEnvelope);
+
+            if (!$response['success']) {
+                return $response;
+            }
+
+            $sendResult = $response['data'];
+
+            Log::info('Cancelamento VPO enviado com sucesso', [
+                'guid' => $guid,
+                'response_size' => strlen($sendResult ?? '')
+            ]);
+
+            return [
+                'success' => true,
+                'data' => [
+                    'uuid' => $guid,
+                    'raw_response' => $sendResult
+                ],
+                'error' => null
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Erro ao cancelar VPO via NDD Cargo', [
                 'erro' => $e->getMessage(),
                 'guid' => $guid
             ]);

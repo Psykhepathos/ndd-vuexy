@@ -482,9 +482,13 @@ Route::middleware(['api', 'auth:sanctum'])->group(function () {
         Route::get('{uuid}', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'consultar'])
             ->middleware(['throttle:120,1', 'permission:vpo_emissao.view']);
 
-        // Cancelar emissão
+        // Cancelar emissão (local - apenas marca como cancelada)
         Route::post('{uuid}/cancelar', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'cancelar'])
             ->middleware(['throttle:30,1', 'permission:vpo_emissao.create']);
+
+        // Cancelar emissão na NDD Cargo (envia cancelamento real)
+        Route::post('{uuid}/cancelar-ndd-cargo', [\App\Http\Controllers\Api\VpoEmissaoController::class, 'cancelarNddCargo'])
+            ->middleware(['throttle:10,1', 'permission:vpo_emissao.cancel']);
     });
 
     // Compra de Viagem SemParar

@@ -7,6 +7,7 @@ use App\Models\VpoTransportadorCache;
 use App\Services\ProgressService;
 use App\Services\NddCargo\XmlBuilders\VpoXmlBuilder;
 use App\Services\NddCargo\XmlBuilders\RoteirizadorXmlBuilder;
+use App\Services\NddCargo\XmlBuilders\CancelamentoVpoXmlBuilder;
 use App\Services\NddCargo\NddCargoSoapClient;
 use App\Services\NddCargo\DigitalSignature;
 use Illuminate\Support\Facades\Log;
@@ -24,6 +25,7 @@ class VpoEmissaoService
     protected VpoDataSyncService $vpoSyncService;
     protected VpoXmlBuilder $vpoXmlBuilder;
     protected RoteirizadorXmlBuilder $roteirizadorXmlBuilder;
+    protected CancelamentoVpoXmlBuilder $cancelamentoVpoXmlBuilder;
     protected ?DigitalSignature $digitalSignature = null;
 
     public function __construct(
@@ -31,13 +33,15 @@ class VpoEmissaoService
         NddCargoSoapClient $nddCargoSoapClient,
         VpoDataSyncService $vpoSyncService,
         VpoXmlBuilder $vpoXmlBuilder,
-        RoteirizadorXmlBuilder $roteirizadorXmlBuilder
+        RoteirizadorXmlBuilder $roteirizadorXmlBuilder,
+        CancelamentoVpoXmlBuilder $cancelamentoVpoXmlBuilder
     ) {
         $this->progressService = $progressService;
         $this->nddCargoSoapClient = $nddCargoSoapClient;
         $this->vpoSyncService = $vpoSyncService;
         $this->vpoXmlBuilder = $vpoXmlBuilder;
         $this->roteirizadorXmlBuilder = $roteirizadorXmlBuilder;
+        $this->cancelamentoVpoXmlBuilder = $cancelamentoVpoXmlBuilder;
     }
 
     /**
@@ -305,7 +309,8 @@ class VpoEmissaoService
     }
 
     /**
-     * Cancelar emissao
+     * Cancelar emissao (local - sem comunicar NDD Cargo)
+     * Use cancelarEmissaoNddCargo() para cancelar também na NDD Cargo
      */
     public function cancelarEmissao(string $uuid): array
     {
@@ -327,6 +332,241 @@ class VpoEmissaoService
         } catch (\Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Cancelar emissão VPO na NDD Cargo
+     *
+     * IMPORTANTE: Este método envia o cancelamento para a NDD Cargo!
+     * Só pode ser cancelada uma emissão que foi concluída com sucesso (status = 'completed')
+     *
+     * @param string $uuid UUID da emissão
+     * @param string $motivoCancelamento Motivo do cancelamento (1-500 chars)
+     * @param array $options Opções adicionais:
+     *        - identificacao_tipo: 'ndvp' ou 'ide' (default: 'ide')
+     *        - ndvp_numero: Número NDVP (se tipo = ndvp)
+     *        - ndvp_cod_verificador: Código verificador NDVP (se tipo = ndvp)
+     * @return array ['success' => bool, 'data' => VpoEmissao|null, 'error' => string|null]
+     */
+    public function cancelarEmissaoNddCargo(string $uuid, string $motivoCancelamento, array $options = []): array
+    {
+        try {
+            $emissao = VpoEmissao::byUuid($uuid)->first();
+
+            if (!$emissao) {
+                return ['success' => false, 'data' => null, 'error' => 'Emissão não encontrada'];
+            }
+
+            // Só pode cancelar emissões concluídas
+            if ($emissao->status !== 'completed') {
+                return [
+                    'success' => false,
+                    'data' => $emissao,
+                    'error' => "Só é possível cancelar emissões concluídas. Status atual: {$emissao->status}"
+                ];
+            }
+
+            // Se já foi cancelada na NDD Cargo, retornar erro
+            if ($emissao->cancelled_at && $emissao->ndd_cancellation_response) {
+                return [
+                    'success' => false,
+                    'data' => $emissao,
+                    'error' => 'Esta emissão já foi cancelada anteriormente'
+                ];
+            }
+
+            Log::info("VPO Cancelamento: Iniciando", [
+                'uuid' => $uuid,
+                'motivo' => $motivoCancelamento,
+                'emissao_id' => $emissao->id
+            ]);
+
+            // Carregar certificado
+            $this->loadCertificate();
+
+            // Obter CNPJ do transportador
+            $vpoData = $emissao->getVpoData();
+            $cnpjContratante = $vpoData['cpf_cnpj'] ?? config('nddcargo.cnpj_empresa');
+
+            // Determinar tipo de identificação
+            $identificacaoTipo = $options['identificacao_tipo'] ?? 'ide';
+
+            // Construir XML de cancelamento
+            if ($identificacaoTipo === 'ndvp') {
+                // Usando NDVP (Número de Declaração de Vale-Pedágio)
+                $ndvpNumero = $options['ndvp_numero'] ?? '';
+                $ndvpCodVerificador = $options['ndvp_cod_verificador'] ?? '';
+
+                if (empty($ndvpNumero) || empty($ndvpCodVerificador)) {
+                    return [
+                        'success' => false,
+                        'data' => $emissao,
+                        'error' => 'Para cancelamento por NDVP, informe ndvp_numero e ndvp_cod_verificador'
+                    ];
+                }
+
+                $xmlData = $this->cancelamentoVpoXmlBuilder->buildByNdvp(
+                    $ndvpNumero,
+                    $ndvpCodVerificador,
+                    $motivoCancelamento,
+                    $cnpjContratante
+                );
+            } else {
+                // Usando IDE (número/série internos) - padrão
+                // O número é o UUID da emissão (ou pode ser outro identificador interno)
+                $numero = $options['ide_numero'] ?? $emissao->uuid;
+                $serie = $options['ide_serie'] ?? config('nddcargo.serie_padrao', '1016');
+
+                $xmlData = $this->cancelamentoVpoXmlBuilder->buildByIde(
+                    $numero,
+                    $serie,
+                    $motivoCancelamento,
+                    $cnpjContratante
+                );
+            }
+
+            $xml = $xmlData['xml'];
+            $cancelamentoUuid = $xmlData['uuid'];
+
+            Log::info("VPO Cancelamento: XML construído", [
+                'uuid' => $uuid,
+                'cancelamento_uuid' => $cancelamentoUuid,
+                'identificacao_tipo' => $identificacaoTipo,
+                'xml_size' => strlen($xml)
+            ]);
+
+            // Assinar XML digitalmente
+            $xmlAssinado = $this->digitalSignature->signXml($xml, $cancelamentoUuid);
+
+            Log::info("VPO Cancelamento: XML assinado", [
+                'uuid' => $uuid,
+                'xml_assinado_size' => strlen($xmlAssinado)
+            ]);
+
+            // Enviar para NDD Cargo
+            $soapResponse = $this->nddCargoSoapClient->cancelarVPO($xmlAssinado, $cancelamentoUuid);
+
+            if (!$soapResponse['success']) {
+                Log::error("VPO Cancelamento: Erro SOAP", [
+                    'uuid' => $uuid,
+                    'error' => $soapResponse['error']
+                ]);
+
+                return [
+                    'success' => false,
+                    'data' => $emissao,
+                    'error' => 'Erro ao comunicar com NDD Cargo: ' . ($soapResponse['error'] ?? 'Desconhecido')
+                ];
+            }
+
+            $rawResponse = $soapResponse['data']['raw_response'] ?? '';
+
+            Log::info("VPO Cancelamento: Resposta recebida", [
+                'uuid' => $uuid,
+                'response_size' => strlen($rawResponse),
+                'preview' => substr($rawResponse, 0, 500)
+            ]);
+
+            // Verificar se o cancelamento foi aceito
+            $cancelamentoAceito = $this->verificarCancelamentoAceito($rawResponse);
+
+            if (!$cancelamentoAceito['success']) {
+                Log::warning("VPO Cancelamento: Rejeitado pela NDD Cargo", [
+                    'uuid' => $uuid,
+                    'motivo' => $cancelamentoAceito['error']
+                ]);
+
+                return [
+                    'success' => false,
+                    'data' => $emissao,
+                    'error' => 'Cancelamento rejeitado: ' . $cancelamentoAceito['error']
+                ];
+            }
+
+            // Atualizar emissão com dados do cancelamento
+            $emissao->update([
+                'status' => 'cancelled',
+                'cancelled_at' => now(),
+                'cancellation_reason' => $motivoCancelamento,
+                'ndd_cancellation_request' => $xmlAssinado,
+                'ndd_cancellation_response' => [
+                    'raw' => $rawResponse,
+                    'protocolo' => $cancelamentoAceito['protocolo'] ?? null,
+                    'accepted_at' => now()->toIso8601String()
+                ]
+            ]);
+
+            Log::info("VPO Cancelamento: Concluído com sucesso", [
+                'uuid' => $uuid,
+                'emissao_id' => $emissao->id,
+                'protocolo_cancelamento' => $cancelamentoAceito['protocolo'] ?? 'N/A'
+            ]);
+
+            return [
+                'success' => true,
+                'data' => $emissao->fresh(),
+                'error' => null
+            ];
+
+        } catch (\Exception $e) {
+            Log::error("VPO Cancelamento: Exceção", [
+                'uuid' => $uuid,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'data' => null,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Verifica se o cancelamento foi aceito pela NDD Cargo
+     *
+     * @param string $response Resposta XML da NDD Cargo
+     * @return array ['success' => bool, 'protocolo' => string|null, 'error' => string|null]
+     */
+    protected function verificarCancelamentoAceito(string $response): array
+    {
+        if (empty($response)) {
+            return ['success' => false, 'protocolo' => null, 'error' => 'Resposta vazia da NDD Cargo'];
+        }
+
+        // Verificar ResponseCode 200 (sucesso)
+        if (preg_match('/<ResponseCode>(\d+)<\/ResponseCode>/i', $response, $matches)) {
+            $code = (int) $matches[1];
+
+            if ($code === 200) {
+                // Extrair protocolo de cancelamento se disponível
+                $protocolo = null;
+                if (preg_match('/<protocolo>([^<]+)<\/protocolo>/i', $response, $m) ||
+                    preg_match('/&lt;protocolo&gt;([^&]+)&lt;\/protocolo&gt;/i', $response, $m)) {
+                    $protocolo = trim($m[1]);
+                }
+
+                return ['success' => true, 'protocolo' => $protocolo, 'error' => null];
+            }
+
+            if ($code === 202) {
+                // Ainda processando (improvável para cancelamento, mas possível)
+                return ['success' => false, 'protocolo' => null, 'error' => 'Cancelamento em processamento (202)'];
+            }
+
+            // Erro - extrair mensagem
+            $errorMessage = $this->extrairMensagemErro($response);
+            return ['success' => false, 'protocolo' => null, 'error' => $errorMessage];
+        }
+
+        // Se não tem ResponseCode, verificar por outros indicadores
+        if (str_contains($response, 'sucesso') || str_contains($response, 'cancelado')) {
+            return ['success' => true, 'protocolo' => null, 'error' => null];
+        }
+
+        // Padrão: assumir falha se não conseguiu determinar
+        return ['success' => false, 'protocolo' => null, 'error' => 'Não foi possível determinar o resultado do cancelamento'];
     }
 
     // === HELPERS ===

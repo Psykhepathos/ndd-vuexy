@@ -101,6 +101,12 @@ const errorMessage = ref<string | null>(null)
 const selectedEmissao = ref<VpoEmissao | null>(null)
 const showDetailDialog = ref(false)
 
+// Cancelamento NDD Cargo
+const showCancelDialog = ref(false)
+const emissaoParaCancelar = ref<VpoEmissao | null>(null)
+const motivoCancelamento = ref('')
+const cancelamentoLoading = ref(false)
+
 // Computed - Headers seguindo padrão Vuexy (sem align)
 const headers = [
   { title: 'ID', key: 'id', sortable: true, width: '70px' },
@@ -288,6 +294,72 @@ const recarregarEmissao = async (uuid: string) => {
     }
   } catch (error) {
     console.error('Erro ao recarregar emissão:', error)
+  }
+}
+
+/**
+ * Abre o dialog de cancelamento para uma emissão concluída
+ */
+const abrirDialogCancelamento = (emissao: VpoEmissao) => {
+  emissaoParaCancelar.value = emissao
+  motivoCancelamento.value = ''
+  showCancelDialog.value = true
+}
+
+/**
+ * Cancela uma emissão VPO na NDD Cargo
+ * POST /api/vpo/emissao/{uuid}/cancelar-ndd-cargo
+ */
+const cancelarEmissaoNddCargo = async () => {
+  if (!emissaoParaCancelar.value || !motivoCancelamento.value.trim()) {
+    showSnackbar('Por favor, informe o motivo do cancelamento', 'warning')
+    return
+  }
+
+  cancelamentoLoading.value = true
+
+  try {
+    const response = await apiFetch(`/vpo/emissao/${emissaoParaCancelar.value.uuid}/cancelar-ndd-cargo`, {
+      method: 'POST',
+      body: JSON.stringify({
+        motivo: motivoCancelamento.value.trim(),
+        identificacao_tipo: 'ide',
+      }),
+    })
+
+    const data = await response.json()
+
+    if (data.success) {
+      showSnackbar('Emissão cancelada com sucesso na NDD Cargo', 'success')
+
+      // Atualizar a emissão na lista
+      const index = emissoes.value.findIndex(e => e.id === emissaoParaCancelar.value?.id)
+      if (index !== -1 && data.data) {
+        emissoes.value[index] = {
+          ...emissoes.value[index],
+          status: 'cancelled',
+          ...data.data
+        }
+      }
+
+      // Se está selecionada no dialog de detalhes, atualizar também
+      if (selectedEmissao.value?.id === emissaoParaCancelar.value?.id) {
+        selectedEmissao.value = emissoes.value[index]
+      }
+
+      // Fechar dialog e recarregar stats
+      showCancelDialog.value = false
+      emissaoParaCancelar.value = null
+      motivoCancelamento.value = ''
+      carregarStats()
+    } else {
+      showSnackbar(data.message || 'Erro ao cancelar emissão', 'error')
+    }
+  } catch (error) {
+    console.error('Erro ao cancelar emissão:', error)
+    showSnackbar('Erro de conexão ao cancelar emissão', 'error')
+  } finally {
+    cancelamentoLoading.value = false
   }
 }
 
@@ -704,6 +776,19 @@ onMounted(() => {
               </VTooltip>
             </VBtn>
 
+            <!-- Botão Cancelar (apenas para emissões concluídas) -->
+            <VBtn
+              v-if="item.status === 'completed'"
+              icon
+              size="small"
+              variant="text"
+              color="error"
+              @click="abrirDialogCancelamento(item)"
+            >
+              <VIcon icon="tabler-x" />
+              <VTooltip activator="parent" location="top">Cancelar VPO</VTooltip>
+            </VBtn>
+
             <!-- Botão Ver Detalhes -->
             <VBtn
               icon
@@ -940,7 +1025,7 @@ onMounted(() => {
                       <td class="text-caption">{{ praca.cnp || praca.codigo || praca.codigoPraca || '-' }}</td>
                       <td>{{ praca.nomePraca || praca.nome || '-' }}</td>
                       <td class="text-caption">{{ praca.rodovia || '-' }}</td>
-                      <td class="text-right text-success">{{ formatCurrency(praca.valorPraca || praca.valor) }}</td>
+                      <td class="text-right text-success">{{ formatCurrency(praca.valorPraca ?? praca.valor ?? null) }}</td>
                     </tr>
                   </tbody>
                 </VTable>
@@ -1062,12 +1147,87 @@ onMounted(() => {
             <VIcon :icon="selectedEmissao.status === 'failed' ? 'tabler-refresh-alert' : 'tabler-refresh'" start />
             {{ selectedEmissao.status === 'failed' ? 'Reconsultar NDD Cargo' : 'Consultar Resultado NDD' }}
           </VBtn>
+
+          <!-- Botão Cancelar (apenas para emissões concluídas) -->
+          <VBtn
+            v-if="selectedEmissao.status === 'completed'"
+            color="error"
+            variant="tonal"
+            @click="showDetailDialog = false; abrirDialogCancelamento(selectedEmissao)"
+          >
+            <VIcon icon="tabler-x" start />
+            Cancelar VPO
+          </VBtn>
           <VSpacer />
           <VBtn
             variant="outlined"
             @click="showDetailDialog = false"
           >
             Fechar
+          </VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <!-- Dialog de Cancelamento NDD Cargo -->
+    <VDialog
+      v-model="showCancelDialog"
+      max-width="500"
+      persistent
+    >
+      <VCard v-if="emissaoParaCancelar">
+        <VCardTitle class="d-flex align-center gap-2 pa-4 bg-error">
+          <VIcon icon="tabler-alert-triangle" color="white" />
+          <span class="text-white">Cancelar Emissão VPO</span>
+        </VCardTitle>
+
+        <VCardText class="pa-4">
+          <VAlert
+            type="warning"
+            variant="tonal"
+            class="mb-4"
+          >
+            <VAlertTitle>Atenção!</VAlertTitle>
+            Esta ação enviará o cancelamento para a NDD Cargo e não poderá ser desfeita.
+          </VAlert>
+
+          <div class="mb-4">
+            <p class="text-body-1 mb-2"><strong>Emissão:</strong> #{{ emissaoParaCancelar.id }}</p>
+            <p class="text-body-2 mb-1"><strong>Pacote:</strong> {{ emissaoParaCancelar.codpac }}</p>
+            <p class="text-body-2 mb-1"><strong>Placa:</strong> {{ emissaoParaCancelar.vpo_data?.placa }}</p>
+            <p class="text-body-2 mb-1"><strong>Custo:</strong> {{ formatCurrency(emissaoParaCancelar.custo_total) }}</p>
+          </div>
+
+          <VTextarea
+            v-model="motivoCancelamento"
+            label="Motivo do cancelamento *"
+            placeholder="Informe o motivo do cancelamento (obrigatório)"
+            rows="3"
+            counter="500"
+            maxlength="500"
+            :rules="[v => !!v || 'Motivo é obrigatório', v => v.length <= 500 || 'Máximo 500 caracteres']"
+          />
+        </VCardText>
+
+        <VDivider />
+
+        <VCardActions class="pa-4">
+          <VBtn
+            variant="outlined"
+            :disabled="cancelamentoLoading"
+            @click="showCancelDialog = false"
+          >
+            Voltar
+          </VBtn>
+          <VSpacer />
+          <VBtn
+            color="error"
+            :loading="cancelamentoLoading"
+            :disabled="!motivoCancelamento.trim()"
+            @click="cancelarEmissaoNddCargo"
+          >
+            <VIcon icon="tabler-x" start />
+            Confirmar Cancelamento
           </VBtn>
         </VCardActions>
       </VCard>

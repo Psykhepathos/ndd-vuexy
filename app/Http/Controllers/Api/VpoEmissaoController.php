@@ -150,9 +150,12 @@ class VpoEmissaoController extends Controller
     }
 
     /**
-     * 3. Cancelar emissão
+     * 3. Cancelar emissão (local - apenas marca como cancelada)
      *
      * POST /api/vpo/emissao/{uuid}/cancelar
+     *
+     * Use para cancelar emissões que ainda não foram concluídas na NDD Cargo.
+     * Para cancelar emissões já concluídas, use o endpoint /cancelar-ndd-cargo
      */
     public function cancelar(string $uuid): JsonResponse
     {
@@ -169,6 +172,89 @@ class VpoEmissaoController extends Controller
             'success' => true,
             'data' => $result['data']->getSummary(),
             'message' => 'Emissão cancelada'
+        ]);
+    }
+
+    /**
+     * 3.1 Cancelar emissão na NDD Cargo (envia cancelamento real)
+     *
+     * POST /api/vpo/emissao/{uuid}/cancelar-ndd-cargo
+     *
+     * Body: {
+     *   "motivo": "Motivo do cancelamento (obrigatório, 1-500 chars)",
+     *   "identificacao_tipo": "ide" ou "ndvp" (opcional, default: ide),
+     *   "ndvp_numero": "123456789012" (obrigatório se tipo = ndvp),
+     *   "ndvp_cod_verificador": "1234" (obrigatório se tipo = ndvp),
+     *   "ide_numero": "uuid-ou-numero" (opcional, default: uuid da emissão),
+     *   "ide_serie": "1016" (opcional, default: config nddcargo.serie_padrao)
+     * }
+     *
+     * IMPORTANTE: Este endpoint envia o cancelamento para a NDD Cargo!
+     * Só funciona para emissões com status = 'completed'
+     */
+    public function cancelarNddCargo(Request $request, string $uuid): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'motivo' => 'required|string|min:1|max:500',
+            'identificacao_tipo' => 'nullable|string|in:ide,ndvp',
+            'ndvp_numero' => 'nullable|string|max:20',
+            'ndvp_cod_verificador' => 'nullable|string|max:10',
+            'ide_numero' => 'nullable|string|max:100',
+            'ide_serie' => 'nullable|string|max:10',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validação falhou',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Montar options
+        $options = [
+            'identificacao_tipo' => $request->input('identificacao_tipo', 'ide'),
+        ];
+
+        if ($request->filled('ndvp_numero')) {
+            $options['ndvp_numero'] = $request->input('ndvp_numero');
+        }
+        if ($request->filled('ndvp_cod_verificador')) {
+            $options['ndvp_cod_verificador'] = $request->input('ndvp_cod_verificador');
+        }
+        if ($request->filled('ide_numero')) {
+            $options['ide_numero'] = $request->input('ide_numero');
+        }
+        if ($request->filled('ide_serie')) {
+            $options['ide_serie'] = $request->input('ide_serie');
+        }
+
+        Log::info('VpoEmissaoController: Solicitação de cancelamento NDD Cargo', [
+            'uuid' => $uuid,
+            'motivo' => $request->input('motivo'),
+            'options' => $options,
+            'user_id' => auth()->id(),
+            'ip' => $request->ip()
+        ]);
+
+        $result = $this->emissaoService->cancelarEmissaoNddCargo(
+            $uuid,
+            $request->input('motivo'),
+            $options
+        );
+
+        if (!$result['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['error'],
+                'data' => $result['data'] ? $result['data']->getSummary() : null
+            ], 400);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $result['data']->getSummary(),
+            'message' => 'Emissão cancelada na NDD Cargo com sucesso'
         ]);
     }
 

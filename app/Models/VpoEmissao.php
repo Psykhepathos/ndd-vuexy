@@ -51,6 +51,12 @@ class VpoEmissao extends Model
         'completed_at',
         'failed_at',
 
+        // Cancelamento
+        'cancelled_at',
+        'cancellation_reason',
+        'ndd_cancellation_request',
+        'ndd_cancellation_response',
+
         // Metadados
         'usuario_id',
         'ip_address',
@@ -74,6 +80,8 @@ class VpoEmissao extends Model
         'polled_at' => 'datetime',
         'completed_at' => 'datetime',
         'failed_at' => 'datetime',
+        'cancelled_at' => 'datetime',
+        'ndd_cancellation_response' => 'array',
     ];
 
     // === RELATIONSHIPS ===
