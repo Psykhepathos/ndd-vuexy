@@ -206,7 +206,7 @@ const demoList = [
               rel="noopener noreferrer"
               class="font-weight-bold ms-1 text-white"
             >Diogo Fontoura</a>,
-            Feito com ❤️ para uma melhor web.
+            Feito para uma melhor web.
           </div>
 
           <div class="d-flex gap-x-6">

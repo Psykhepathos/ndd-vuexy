@@ -256,12 +256,14 @@ class SemPararRotaController extends Controller
             Log::error('Erro na API ao atualizar rota SemParar', [
                 'id' => $id,
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
                 'data' => $request->all()
             ]);
 
+            // Retornar mensagem específica para debug (Progress não tem transações)
             return response()->json([
                 'success' => false,
-                'message' => 'Erro interno do servidor',
+                'message' => 'Erro ao salvar rota: ' . $e->getMessage(),
                 'data' => null
             ], 500);
         }

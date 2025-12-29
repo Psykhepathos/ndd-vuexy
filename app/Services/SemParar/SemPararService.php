@@ -45,6 +45,17 @@ class SemPararService
     }
 
     /**
+     * Obtém instância do ProgressService (lazy loading)
+     */
+    protected function getProgressService(): ProgressService
+    {
+        if ($this->progressService === null) {
+            $this->progressService = app(ProgressService::class);
+        }
+        return $this->progressService;
+    }
+
+    /**
      * Buscar descrição do status de erro SemParar na tabela PUB.semPararStatus
      *
      * @param int $codStatus Código do status
@@ -58,13 +69,8 @@ class SemPararService
         }
 
         try {
-            // Lazy load ProgressService
-            if ($this->progressService === null) {
-                $this->progressService = app(ProgressService::class);
-            }
-
             $sql = "SELECT TOP 1 codStatus, desStatus FROM PUB.semPararStatus WHERE codStatus = " . intval($codStatus);
-            $result = $this->progressService->executeCustomQuery($sql);
+            $result = $this->getProgressService()->executeCustomQuery($sql);
 
             if ($result['success'] && !empty($result['data']['results'])) {
                 $status = $result['data']['results'][0];
@@ -1056,11 +1062,12 @@ class SemPararService
      * @param string $codViagem Trip code to cancel
      * @return array Success/error message
      */
-    public function cancelarViagem(string $codViagem): array
+    public function cancelarViagem(string $codViagem, ?string $responsavel = null): array
     {
         try {
             Log::info('[SemParar] Cancelando viagem', [
-                'cod_viagem' => $codViagem
+                'cod_viagem' => $codViagem,
+                'responsavel' => $responsavel
             ]);
 
             // Get SOAP client and token
@@ -1116,16 +1123,36 @@ class SemPararService
                 throw new \Exception($errorMessage);
             }
 
-            Log::info('[SemParar] Viagem cancelada com sucesso', [
+            Log::info('[SemParar] Viagem cancelada com sucesso no SemParar', [
                 'cod_viagem' => $codViagem
             ]);
+
+            // Atualizar tabela Progress para marcar como cancelada
+            $progressUpdateResult = null;
+            try {
+                $progressService = $this->getProgressService();
+                $progressUpdateResult = $progressService->marcarViagemCancelada($codViagem, $responsavel);
+
+                if (!$progressUpdateResult['success']) {
+                    Log::warning('[SemParar] Viagem cancelada no SemParar mas falhou ao atualizar Progress', [
+                        'cod_viagem' => $codViagem,
+                        'progress_error' => $progressUpdateResult['error'] ?? 'Erro desconhecido'
+                    ]);
+                }
+            } catch (\Exception $progressEx) {
+                Log::warning('[SemParar] Viagem cancelada no SemParar mas erro ao atualizar Progress', [
+                    'cod_viagem' => $codViagem,
+                    'error' => $progressEx->getMessage()
+                ]);
+            }
 
             return [
                 'success' => true,
                 'message' => 'Viagem cancelada com sucesso',
                 'cod_viagem' => $codViagem,
                 'status' => $status,
-                'status_mensagem' => $statusMensagem
+                'status_mensagem' => 'Cancelamento realizado com sucesso',
+                'progress_atualizado' => $progressUpdateResult['success'] ?? false
             ];
 
         } catch (\SoapFault $e) {

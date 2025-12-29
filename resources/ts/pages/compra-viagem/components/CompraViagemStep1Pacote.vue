@@ -83,14 +83,21 @@ const selecionarPacote = async (pacoteItem: any) => {
   loadingEntregas.value = true
 
   try {
-    // Buscar itinerário do pacote
-    const response = await apiPost(getApiUrl('/pacotes/itinerario'), {
-      codPac: pacote.codpac
-    })
-    const data = await response.json()
+    // Buscar itinerário do pacote E rota sugerida em paralelo
+    // (Progress compraRota.p linhas 432-463: busca rota via semPararIntrot)
+    const [itinerarioResponse, validacaoResponse] = await Promise.all([
+      apiPost(getApiUrl('/pacotes/itinerario'), { codPac: pacote.codpac }),
+      apiPost(getApiUrl('/compra-viagem/validar-pacote'), {
+        codpac: pacote.codpac,
+        flgcd: false  // Modo padrão, será atualizado no Step 3 se necessário
+      })
+    ])
 
-    if (data.success && data.data) {
-      const todasEntregas: any[] = data.data.pedidos || []
+    const itinerarioData = await itinerarioResponse.json()
+    const validacaoData = await validacaoResponse.json()
+
+    if (itinerarioData.success && itinerarioData.data) {
+      const todasEntregas: any[] = itinerarioData.data.pedidos || []
 
       // Processar coordenadas GPS
       // @ts-expect-error - Tipo any sendo convertido para EntregaPacote (safe cast)
@@ -114,19 +121,28 @@ const selecionarPacote = async (pacoteItem: any) => {
         e => e.lat !== null && e.lon !== null && !isNaN(e.lat!) && !isNaN(e.lon!)
       )
 
-      // Atualizar form data + AUTO-PREENCHER PLACA
+      // Extrair rota sugerida da validação (se disponível)
+      // Progress compraRota.p linha 446: assign vRota:screen-value = semPararRot.desSPararRot
+      let rotaSugerida = null
+      if (validacaoData.success && validacaoData.data?.rota_sugerida) {
+        rotaSugerida = validacaoData.data.rota_sugerida
+        console.log('Rota sugerida encontrada:', rotaSugerida)
+      }
+
+      // Atualizar form data + AUTO-PREENCHER PLACA + ROTA SUGERIDA
       const updated: CompraViagemFormData = {
         ...props.formData,
         pacote: {
           pacote,
           entregas: entregasProcessadas,
-          entregas_com_gps: entregasComGpsValido
+          entregas_com_gps: entregasComGpsValido,
+          rotaSugerida  // Nova propriedade para auto-preenchimento no Step 3
         },
         placa: {
-          placa: data.data.placa || '',
+          placa: itinerarioData.data.placa || '',
           descricao: '', // Será preenchida na validação do Step 2
           eixos: 2,      // Será atualizada na validação do Step 2
-          proprietario: data.data.transportador || '',
+          proprietario: itinerarioData.data.transportador || '',
           tag: ''        // Será preenchida na validação do Step 2
         },
         step1Completo: true
@@ -147,7 +163,8 @@ const limparPacote = () => {
     pacote: {
       pacote: null,
       entregas: [],
-      entregas_com_gps: []
+      entregas_com_gps: [],
+      rotaSugerida: null  // Limpar também a rota sugerida
     },
     step1Completo: false
   }

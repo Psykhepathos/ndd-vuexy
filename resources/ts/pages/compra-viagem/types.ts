@@ -16,10 +16,19 @@ export interface PacoteCompraViagem {
   datforpac: string
 }
 
+export interface RotaSugerida {
+  spararrotid: number
+  desspararrot: string
+  flgcd: boolean
+  flgretorno: boolean
+  tempoviagem: number
+}
+
 export interface PacoteData {
   pacote: PacoteCompraViagem | null
   entregas: EntregaPacote[]
   entregas_com_gps: EntregaPacote[]
+  rotaSugerida?: RotaSugerida | null  // Rota sugerida via introt (Progress compraRota.p linha 432-463)
 }
 
 export interface EntregaPacote {

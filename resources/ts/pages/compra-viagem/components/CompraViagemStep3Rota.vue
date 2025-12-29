@@ -245,6 +245,35 @@ onMounted(async () => {
     modoRetorno.value = props.formData.rota.modoRetorno
     selectedRota.value = props.formData.rota.rota.sPararRotID
   }
+  // AUTO-PREENCHIMENTO: Se há rota sugerida e nenhuma rota selecionada ainda
+  // (Progress compraRota.p linhas 432-463: auto-preenche via semPararIntrot)
+  else if (props.formData.pacote.rotaSugerida && !props.formData.rota.rota) {
+    const rotaSugerida = props.formData.pacote.rotaSugerida
+    console.log('🎯 Auto-preenchendo rota sugerida:', rotaSugerida)
+
+    // Ajustar modo CD/Retorno baseado na rota sugerida
+    modoCD.value = rotaSugerida.flgcd || false
+    modoRetorno.value = rotaSugerida.flgretorno || false
+
+    // Recarregar rotas com o modo correto se necessário
+    if (modoCD.value) {
+      await carregarTodasRotas()
+    }
+
+    // Aguardar um tick para garantir que as rotas foram carregadas
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    // Selecionar a rota sugerida automaticamente
+    const rotaId = rotaSugerida.spararrotid
+    if (rotaId && rotasOptions.value.some(r => r.value === rotaId)) {
+      console.log('✅ Selecionando rota sugerida automaticamente:', rotaId)
+      selectedRota.value = rotaId
+      // Chamar selecionarRota para validar e carregar municípios
+      await selecionarRota(rotaId)
+    } else {
+      console.warn('⚠️ Rota sugerida não encontrada nas opções:', rotaId)
+    }
+  }
 })
 </script>
 
@@ -257,6 +286,25 @@ onMounted(async () => {
     <p class="text-body-2 text-medium-emphasis mb-6">
       Escolha a rota SemParar para a viagem
     </p>
+
+    <!-- Rota Sugerida (Progress compraRota.p linhas 432-463) -->
+    <VAlert
+      v-if="props.formData.pacote.rotaSugerida && !props.formData.step3Completo"
+      type="info"
+      variant="tonal"
+      class="mb-4"
+    >
+      <template #prepend>
+        <VIcon icon="tabler-bulb" />
+      </template>
+      <strong>Rota sugerida:</strong> {{ props.formData.pacote.rotaSugerida.desspararrot }}
+      <span v-if="props.formData.pacote.rotaSugerida.flgcd" class="ms-2">
+        <VChip size="x-small" color="primary">CD</VChip>
+      </span>
+      <span v-if="props.formData.pacote.rotaSugerida.flgretorno" class="ms-2">
+        <VChip size="x-small" color="warning">Retorno</VChip>
+      </span>
+    </VAlert>
 
     <!-- Erro de Validação -->
     <VAlert

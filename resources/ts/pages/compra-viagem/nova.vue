@@ -72,7 +72,8 @@ const formData = ref<CompraViagemFormData>({
   pacote: {
     pacote: null,
     entregas: [],
-    entregas_com_gps: []
+    entregas_com_gps: [],
+    rotaSugerida: null  // Rota sugerida via introt (Progress compraRota.p linha 432-463)
   },
   placa: {
     placa: '',

@@ -658,7 +658,7 @@ class CompraViagemController extends Controller
             $validated = $request->validate([
                 'codpac' => 'required|integer|min:1',  // NOVO: código do pacote
                 'cod_rota' => 'required|integer',
-                'qtd_eixos' => 'required|integer|min:2|max:9',
+                'qtd_eixos' => 'required|integer|min:2|max:10',  // Progress compraRota.p linha 401: min 2, max 10
                 'placa' => 'required|string|size:7',
                 'data_inicio' => 'required|date',
                 'data_fim' => 'required|date|after_or_equal:data_inicio'
@@ -1021,59 +1021,18 @@ class CompraViagemController extends Controller
             $codtrn = $pacote['data']['codtrn'];
 
             // ========================================================================
-            // CORREÇÃO #2: RE-VALIDAÇÃO DE EIXOS (Proteção contra Manipulação)
+            // EIXOS PERSONALIZADOS (igual Progress compraRota.p linhas 386-418)
             // ========================================================================
-            // Re-valida veículo no SemParar para obter número de eixos real
-            // Previne manipulação de eixos no frontend (usuário alterando no dialog)
-            $validacaoPlaca = $this->progressService->validateVehicleStatusSemParar(
-                $validated['placa'],
-                false  // false = chamada SOAP real
-            );
+            // Progress permite que o usuário personalize o número de eixos no dialog
+            // antes de confirmar. O sistema aceita valores entre 2-10.
+            // Validação já foi feita no request (min:2, max:9)
+            $eixosParaCompra = $validated['qtd_eixos'];
 
-            if (!$validacaoPlaca['success']) {
-                // CORREÇÃO #6: Sanitiza dados sensíveis no log (LGPD)
-                Log::error('Falha ao re-validar veículo antes da compra', $this->sanitizeLogData([
-                    'placa' => $validated['placa'],
-                    'error' => $validacaoPlaca['error'] ?? 'Erro desconhecido'
-                ]));
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Falha ao validar veículo',
-                    'error' => 'Não foi possível validar o veículo no sistema SemParar. Tente novamente.',
-                    'code' => 'VEICULO_VALIDACAO_FALHOU'
-                ], 500);
-            }
-
-            $eixosReais = $validacaoPlaca['data']['eixos'];
-
-            // Verifica se número de eixos foi alterado (possível fraude)
-            if ($validated['qtd_eixos'] != $eixosReais) {
-                // CORREÇÃO #6: Sanitiza dados sensíveis no log (LGPD)
-                Log::warning('Tentativa de manipulação de eixos detectada e bloqueada', $this->sanitizeLogData([
-                    'placa' => $validated['placa'],
-                    'eixos_reais' => $eixosReais,
-                    'eixos_informados' => $validated['qtd_eixos'],
-                    'codpac' => $validated['codpac']
-                ]));
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Número de eixos incorreto',
-                    'error' => sprintf(
-                        'O veículo de placa %s possui %d eixos, não %d. Por favor, valide novamente a placa.',
-                        $validated['placa'],
-                        $eixosReais,
-                        $validated['qtd_eixos']
-                    ),
-                    'code' => 'EIXOS_INVALIDOS',
-                    'eixos_corretos' => $eixosReais
-                ], 400);
-            }
-
-            Log::info('Eixos validados com sucesso', [
+            // Log informativo se eixos foram personalizados
+            Log::info('Eixos para compra (pode ser personalizado pelo usuário)', [
                 'placa' => $validated['placa'],
-                'eixos' => $eixosReais
+                'eixos_informados' => $eixosParaCompra,
+                'codpac' => $validated['codpac']
             ]);
 
             // Comprar viagem no SemParar (real ou simulada)
@@ -1088,7 +1047,7 @@ class CompraViagemController extends Controller
                 $resultadoCompra = $this->semPararService->comprarViagem(
                     $validated['nome_rota_semparar'],
                     $validated['placa'],
-                    $eixosReais,  // CORREÇÃO: Usa eixos validados, não do frontend
+                    $eixosParaCompra,  // Usa eixos personalizados pelo usuário (igual Progress)
                     $validated['data_inicio'],
                     $validated['data_fim'],
                     (string)$validated['codpac'] // item_fin1 = codpac (igual Progress linha 836)
@@ -1190,8 +1149,60 @@ class CompraViagemController extends Controller
                 }
             }
 
-            // PASSO 3: TODO - Gerar recibo (linha 890-916)
-            // criaRecibo() via Python API
+            // ========================================================================
+            // PASSO 3: Gerar recibo via Python Flask (Progress compraRota.p linha 890-916)
+            // ========================================================================
+            // Progress pergunta: "DESEJA IMPRIMIR O RECIBO?"
+            // Aqui geramos automaticamente e deixamos o frontend perguntar se quer imprimir
+            $reciboGerado = false;
+            $reciboErro = null;
+
+            try {
+                // Buscar telefone e email do transportador (Progress: formataCelular linha 655-677)
+                $telefone = $this->progressService->getTelefoneFormatadoTransportador($codtrn);
+                $emailTransportador = $this->progressService->getEmailTransportador($codtrn);
+
+                // Usar email do usuário logado se transportador não tiver
+                $email = $emailTransportador ?: (request()->user()->email ?? '');
+
+                if ($telefone) {
+                    Log::info('Gerando recibo da viagem', [
+                        'cod_viagem' => $numeroViagem,
+                        'codtrn' => $codtrn,
+                        'telefone' => substr($telefone, 0, 6) . '****',  // Log parcial por LGPD
+                        'has_email' => !empty($email)
+                    ]);
+
+                    // Chamar serviço de geração de recibo (Progress: criaRecibo linha 608-653)
+                    // flgImprime = false por padrão - usuário pode imprimir depois
+                    $resultadoRecibo = $this->semPararService->gerarRecibo(
+                        $numeroViagem,
+                        $telefone,
+                        $email,
+                        false  // flgImprime - será true quando usuário clicar em "Imprimir"
+                    );
+
+                    if ($resultadoRecibo['success']) {
+                        $reciboGerado = true;
+                        Log::info('Recibo gerado com sucesso', ['cod_viagem' => $numeroViagem]);
+                    } else {
+                        $reciboErro = $resultadoRecibo['error'] ?? 'Erro desconhecido';
+                        Log::warning('Falha ao gerar recibo (não crítico)', [
+                            'cod_viagem' => $numeroViagem,
+                            'error' => $reciboErro
+                        ]);
+                    }
+                } else {
+                    $reciboErro = 'Transportador sem telefone cadastrado';
+                    Log::warning('Não foi possível gerar recibo - sem telefone', ['codtrn' => $codtrn]);
+                }
+            } catch (\Exception $e) {
+                $reciboErro = $e->getMessage();
+                Log::error('Exceção ao gerar recibo (não crítico)', [
+                    'cod_viagem' => $numeroViagem,
+                    'error' => $e->getMessage()
+                ]);
+            }
 
             // CORREÇÃO #6: Sanitiza dados sensíveis no log (LGPD) - mantém valor em info de sucesso
             Log::info('Compra de viagem concluída com sucesso', $this->sanitizeLogData([
@@ -1211,10 +1222,17 @@ class CompraViagemController extends Controller
                 'data' => [
                     'numero_viagem' => $numeroViagem,
                     'codpac' => $validated['codpac'],
+                    'codtrn' => $codtrn,  // Para impressão posterior
                     'rota' => $validated['nome_rota_semparar'],
                     'placa' => $validated['placa'],
                     'valor' => $validated['valor_viagem'],
-                    'data_compra' => now()->format('Y-m-d H:i:s')
+                    'data_compra' => now()->format('Y-m-d H:i:s'),
+                    // Dados do recibo (Progress compraRota.p linha 890-916)
+                    'recibo' => [
+                        'gerado' => $reciboGerado,
+                        'erro' => $reciboErro,
+                        'pode_imprimir' => $reciboGerado || $numeroViagem !== null
+                    ]
                 ],
                 'test_mode' => !$this->ALLOW_SOAP_PURCHASE,
                 'warning' => $this->ALLOW_SOAP_PURCHASE
@@ -1269,6 +1287,92 @@ class CompraViagemController extends Controller
                 'success' => false,
                 'message' => 'Erro interno no processamento. Contate o suporte.',
                 'error_id' => $errorId
+            ], 500);
+        }
+    }
+
+    /**
+     * Imprimir recibo de viagem
+     * Progress: compraRota.p linha 890-916 + Rota.cls::criaRecibo
+     *
+     * Fluxo simplificado que busca telefone automaticamente pelo codtrn
+     */
+    public function imprimirRecibo(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'cod_viagem' => 'required|string|min:1|max:50',
+                'codtrn' => 'required|integer|min:1',
+                'flg_imprime' => 'nullable|boolean'
+            ]);
+
+            // Buscar telefone do transportador (Progress: formataCelular)
+            $telefone = $this->progressService->getTelefoneFormatadoTransportador($validated['codtrn']);
+
+            if (!$telefone) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Transportador sem telefone cadastrado. Não é possível enviar por WhatsApp.',
+                    'code' => 'SEM_TELEFONE'
+                ], 400);
+            }
+
+            // Buscar email do transportador ou usar do usuário logado
+            $emailTransportador = $this->progressService->getEmailTransportador($validated['codtrn']);
+            $email = $emailTransportador ?: (request()->user()->email ?? '');
+
+            // Log de auditoria (LGPD)
+            Log::info('Impressão de recibo solicitada', [
+                'user_id' => request()->user()->id ?? null,
+                'cod_viagem' => $validated['cod_viagem'],
+                'codtrn' => $validated['codtrn'],
+                'ip' => request()->ip()
+            ]);
+
+            // Chamar serviço de geração de recibo
+            $resultado = $this->semPararService->gerarRecibo(
+                $validated['cod_viagem'],
+                $telefone,
+                $email,
+                $validated['flg_imprime'] ?? true  // Default: imprimir
+            );
+
+            if (!$resultado['success']) {
+                return response()->json([
+                    'success' => false,
+                    'error' => $resultado['error'] ?? 'Erro ao gerar recibo',
+                    'code' => 'ERRO_RECIBO'
+                ], 500);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Recibo gerado e enviado com sucesso',
+                'data' => [
+                    'cod_viagem' => $validated['cod_viagem'],
+                    'enviado_para' => [
+                        'whatsapp' => substr($telefone, 0, 6) . '****',  // Mascarado por LGPD
+                        'email' => !empty($email) ? '***@***' : null
+                    ]
+                ]
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Dados inválidos',
+                'errors' => $e->errors()
+            ], 422);
+
+        } catch (\Exception $e) {
+            Log::error('Erro ao imprimir recibo', [
+                'error' => $e->getMessage(),
+                'cod_viagem' => $request->input('cod_viagem')
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Erro ao processar impressão do recibo'
             ], 500);
         }
     }

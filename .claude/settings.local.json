@@ -59,7 +59,8 @@
       "Bash(php artisan cache:clear:*)",
       "Bash(git checkout:*)",
       "Bash(pnpm run build)",
-      "Bash(Select-String -Pattern \"vpo-emissao|configurar-senha\")"
+      "Bash(Select-String -Pattern \"vpo-emissao|configurar-senha\")",
+      "Bash(Select-String -Pattern \"erro|error|exception|semparar|rota|municipio\" -CaseSensitive:$false)"
     ],
     "deny": [],
     "ask": []

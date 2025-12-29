@@ -20,6 +20,10 @@ const loading = ref(false)
 const success = ref(false)
 const error = ref<string | null>(null)
 const codViagem = ref<string | null>(null)
+const codtrn = ref<number | null>(null)  // Para impressão de recibo
+const reciboGerado = ref(false)
+const reciboErro = ref<string | null>(null)
+const imprimindoRecibo = ref(false)
 
 // Computed
 const resumo = computed(() => {
@@ -111,7 +115,14 @@ const confirmarCompra = async () => {
     }
 
     codViagem.value = data.data?.numero_viagem || data.data?.cod_viagem || 'N/A'
+    codtrn.value = data.data?.codtrn || props.formData.pacote.pacote?.codtrn || null
     success.value = true
+
+    // Capturar status do recibo (Progress compraRota.p linha 890-916)
+    if (data.data?.recibo) {
+      reciboGerado.value = data.data.recibo.gerado
+      reciboErro.value = data.data.recibo.erro
+    }
 
     console.log(`✅ Viagem comprada com sucesso: ${codViagem.value}`)
 
@@ -132,6 +143,45 @@ const voltarParaInicio = () => {
 
 const irParaListagem = () => {
   router.push({ name: 'compra-viagem' })
+}
+
+/**
+ * Imprimir recibo da viagem (Progress compraRota.p linha 890-916)
+ * Chama o endpoint que envia para WhatsApp e Email
+ */
+const imprimirRecibo = async () => {
+  if (!codViagem.value || !codtrn.value) {
+    reciboErro.value = 'Dados da viagem não disponíveis'
+    return
+  }
+
+  imprimindoRecibo.value = true
+  reciboErro.value = null
+
+  try {
+    console.log('🖨️ Imprimindo recibo...', { cod_viagem: codViagem.value, codtrn: codtrn.value })
+
+    const response = await apiPost(getApiUrl('/compra-viagem/imprimir-recibo'), {
+      cod_viagem: codViagem.value,
+      codtrn: codtrn.value,
+      flg_imprime: true
+    })
+
+    const data = await response.json()
+
+    if (!data.success) {
+      throw new Error(data.error || 'Erro ao imprimir recibo')
+    }
+
+    reciboGerado.value = true
+    console.log('✅ Recibo enviado com sucesso')
+
+  } catch (err: any) {
+    console.error('❌ Erro ao imprimir recibo:', err)
+    reciboErro.value = err.message || 'Erro ao processar impressão'
+  } finally {
+    imprimindoRecibo.value = false
+  }
 }
 </script>
 
@@ -168,23 +218,54 @@ const irParaListagem = () => {
               </VCard>
             </div>
 
-            <div class="d-flex gap-4">
-              <VBtn
-                color="success"
-                variant="tonal"
-                prepend-icon="tabler-refresh"
-                @click="voltarParaInicio"
-              >
-                Nova Compra
-              </VBtn>
+            <!-- Botões de Ação -->
+            <div class="d-flex flex-column gap-4 align-center">
+              <!-- Botão de Imprimir Recibo (Progress compraRota.p linha 890-916) -->
+              <div class="d-flex flex-column align-center gap-2 mb-2">
+                <VBtn
+                  color="warning"
+                  size="large"
+                  :loading="imprimindoRecibo"
+                  :disabled="reciboGerado"
+                  prepend-icon="tabler-printer"
+                  @click="imprimirRecibo"
+                >
+                  {{ reciboGerado ? 'Recibo Enviado' : 'Imprimir Recibo' }}
+                </VBtn>
 
-              <VBtn
-                color="primary"
-                prepend-icon="tabler-list"
-                @click="irParaListagem"
-              >
-                Ver Viagens
-              </VBtn>
+                <!-- Status do recibo -->
+                <div v-if="reciboGerado" class="text-caption text-success d-flex align-center gap-1">
+                  <VIcon icon="tabler-check" size="16" />
+                  Recibo enviado para WhatsApp/Email
+                </div>
+                <div v-else-if="reciboErro" class="text-caption text-error d-flex align-center gap-1">
+                  <VIcon icon="tabler-alert-circle" size="16" />
+                  {{ reciboErro }}
+                </div>
+                <div v-else class="text-caption text-medium-emphasis">
+                  Enviar recibo por WhatsApp e Email
+                </div>
+              </div>
+
+              <!-- Botões de navegação -->
+              <div class="d-flex gap-4">
+                <VBtn
+                  color="success"
+                  variant="tonal"
+                  prepend-icon="tabler-refresh"
+                  @click="voltarParaInicio"
+                >
+                  Nova Compra
+                </VBtn>
+
+                <VBtn
+                  color="primary"
+                  prepend-icon="tabler-list"
+                  @click="irParaListagem"
+                >
+                  Ver Viagens
+                </VBtn>
+              </div>
             </div>
           </div>
         </VCardText>

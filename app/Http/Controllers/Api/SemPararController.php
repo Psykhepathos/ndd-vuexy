@@ -689,8 +689,8 @@ class SemPararController extends Controller
         ]);
 
         try {
-            // Call SemParar service
-            $result = $this->semPararService->cancelarViagem($codViagem);
+            // Call SemParar service (passa email do usuário como responsável)
+            $result = $this->semPararService->cancelarViagem($codViagem, $user->email);
 
             // CORREÇÃO #7: Log do resultado (operação irreversível!)
             Log::warning('Cancelamento de viagem ' . ($result['success'] ? 'concluído' : 'falhou'), [

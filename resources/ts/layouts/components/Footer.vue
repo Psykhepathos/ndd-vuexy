@@ -4,13 +4,7 @@
     <span class="d-flex align-center text-medium-emphasis">
       &copy;
       {{ new Date().getFullYear() }}
-      Feito com
-      <VIcon
-        icon="tabler-heart-filled"
-        color="error"
-        size="1.25rem"
-        class="mx-1"
-      />
+      Feito
       por <a
         href="https://github.com/Psykhepathos"
         target="_blank"

@@ -530,6 +530,10 @@ Route::middleware(['api', 'auth:sanctum'])->group(function () {
         Route::post('comprar', [CompraViagemController::class, 'comprarViagem'])
             ->middleware(['throttle:30,1', 'permission:compra_viagem.create']);
 
+        // Impressão de recibo (Progress compraRota.p linha 890-916)
+        Route::post('imprimir-recibo', [CompraViagemController::class, 'imprimirRecibo'])
+            ->middleware(['throttle:10,1', 'permission:compra_viagem.generate_pdf']);
+
         // Debug: Análise completa do fluxo
         Route::post('debug-flow', [\App\Http\Controllers\Api\DebugSemPararController::class, 'debugFlow'])
             ->middleware(['throttle:10,1', 'permission:configuracoes.edit']);
