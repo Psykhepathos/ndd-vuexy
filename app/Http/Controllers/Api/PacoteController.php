@@ -286,12 +286,18 @@ class PacoteController extends Controller
     public function autocomplete(Request $request): JsonResponse
     {
         $request->validate([
-            'search' => 'nullable|string|max:50'
+            'search' => 'nullable|string|max:100'  // Aumentado para suportar label completo
         ]);
 
         $search = $request->get('search', '');
 
         try {
+            // CORREÇÃO: Extrair código numérico do formato label "#3094225 - NOME (STATUS)"
+            // O frontend pode enviar o label completo quando usuário digita/cola
+            if (!empty($search) && preg_match('/^#?(\d+)/', $search, $matches)) {
+                $search = $matches[1];  // Extrai apenas o número
+            }
+
             // CORREÇÃO BUG #21: SQL injection no autocomplete - usar prepared statements
             // CORREÇÃO BUG #24: TOP 20 é adequado para autocomplete
             // UX best practice: Limitar resultados para não sobrecarregar dropdown

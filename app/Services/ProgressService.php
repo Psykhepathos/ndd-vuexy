@@ -2720,24 +2720,40 @@ class ProgressService
     /**
      * Busca rota sugerida via pacsoc (pacote sócio)
      * Progress: compraRota.p linha 433-440
+     *
+     * Fluxo Progress:
+     * 1. find first pacsoc where pacsoc.codpacsoc = pacote.codpac
+     * 2. find first b_pacote where b_pacote.codpac = pacsoc.codpac
+     * 3. find first introt of b_pacote (usa o pacote pai)
      */
     public function getRotaSugeridaPorPacsoc(int $codpac): ?array
     {
         try {
-            // Busca pacsoc
+            // Busca pacsoc (pacote sócio) - verifica se pacote atual é um sócio
             $sql = "SELECT TOP 1 codpac FROM PUB.pacsoc WHERE codpacsoc = {$codpac}";
             $result = $this->executeCustomQuery($sql);
 
-            if (empty($result['data'])) {
+            if (!$result['success'] || empty($result['data']['results'])) {
+                Log::debug('Pacote não é pacsoc', ['codpac' => $codpac]);
                 return null;
             }
 
-            $codpacPai = $result['data'][0]['codpac'];
+            $codpacPai = $result['data']['results'][0]['codpac'] ?? null;
+
+            if (!$codpacPai) {
+                Log::debug('codpac pai não encontrado', ['codpac' => $codpac]);
+                return null;
+            }
+
+            Log::debug('Pacote sócio encontrado', ['codpac' => $codpac, 'codpac_pai' => $codpacPai]);
 
             // Busca rota do pacote pai
             return $this->getRotaSugeridaPorIntrot($codpacPai, false);
         } catch (Exception $e) {
-            Log::error('Erro ao buscar rota por pacsoc', ['codpac' => $codpac, 'error' => $e->getMessage()]);
+            Log::error('Erro ao buscar rota por pacsoc', [
+                'codpac' => $codpac,
+                'error' => $e->getMessage()
+            ]);
             return null;
         }
     }
@@ -2745,24 +2761,40 @@ class ProgressService
     /**
      * Busca rota sugerida via semPararIntrot
      * Progress: compraRota.p linha 441-463
+     *
+     * Fluxo Progress:
+     * 1. find first introt of pacote -> pega codrot do pacote
+     * 2. for each semPararIntrot where semPararIntrot.codrot = introt.codrot
+     * 3. first sempararrot where sempararrot.sPararRotID = semPararIntrot.sPararRotID
      */
     public function getRotaSugeridaPorIntrot(int $codpac, bool $flgRetorno = false): ?array
     {
         try {
-            // Busca codrot do pacote
-            $sql = "SELECT TOP 1 codrot FROM PUB.pacote WHERE codpac = {$codpac}";
+            // PASSO 1: Busca codrot do pacote (via tabela introt)
+            // Progress: find first introt of pacote no-lock
+            $sql = "SELECT TOP 1 i.codrot FROM PUB.introt i WHERE i.codpac = {$codpac}";
             $result = $this->executeCustomQuery($sql);
 
-            if (empty($result['data'])) {
+            if (!$result['success'] || empty($result['data']['results'])) {
+                Log::debug('Nenhum introt encontrado para pacote', ['codpac' => $codpac]);
                 return null;
             }
 
-            $codrot = $result['data'][0]['codrot'];
+            $codrot = $result['data']['results'][0]['codrot'] ?? null;
 
-            // Busca rota SemParar via semPararIntrot
+            if (!$codrot) {
+                Log::debug('codrot vazio para pacote', ['codpac' => $codpac]);
+                return null;
+            }
+
+            Log::debug('codrot encontrado', ['codpac' => $codpac, 'codrot' => $codrot]);
+
+            // PASSO 2: Busca rota SemParar via semPararIntrot
+            // Progress: for each semPararIntrot where semPararIntrot.codrot = introt.codrot
+            // Filtro de retorno: index(sempararrot.desSPararRot,"RETORNO") = 0 ou > 0
             $filtroRetorno = $flgRetorno
                 ? "AND CHARINDEX('RETORNO', r.desSPararRot) > 0"
-                : "AND (CHARINDEX('RETORNO', r.desSPararRot) = 0 OR CHARINDEX('RETORNO', r.desSPararRot) IS NULL)";
+                : "AND (CHARINDEX('RETORNO', r.desSPararRot) = 0 OR r.desSPararRot NOT LIKE '%RETORNO%')";
 
             $sql = "SELECT TOP 1 r.sPararRotID, r.desSPararRot, r.flgCD, r.flgRetorno, r.tempoViagem " .
                    "FROM PUB.semPararIntrot si " .
@@ -2770,18 +2802,34 @@ class ProgressService
                    "WHERE si.codrot = " . $this->escapeSqlString($codrot) . " " .
                    $filtroRetorno;
 
+            Log::debug('SQL rota sugerida', ['sql' => $sql]);
+
             $result = $this->executeCustomQuery($sql);
 
-            if (empty($result['data'])) {
+            if (!$result['success'] || empty($result['data']['results'])) {
+                Log::debug('Nenhuma rota encontrada via semPararIntrot', [
+                    'codpac' => $codpac,
+                    'codrot' => $codrot,
+                    'flgRetorno' => $flgRetorno
+                ]);
                 return null;
             }
 
-            return $result['data'][0];
+            $rota = $result['data']['results'][0];
+            Log::info('Rota sugerida encontrada', [
+                'codpac' => $codpac,
+                'codrot' => $codrot,
+                'rota_id' => $rota['spararrotid'] ?? $rota['sPararRotID'] ?? 'N/A',
+                'rota_nome' => $rota['desspararrot'] ?? $rota['desSPararRot'] ?? 'N/A'
+            ]);
+
+            return $rota;
         } catch (Exception $e) {
             Log::error('Erro ao buscar rota por introt', [
                 'codpac' => $codpac,
                 'flgRetorno' => $flgRetorno,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
             return null;
         }
