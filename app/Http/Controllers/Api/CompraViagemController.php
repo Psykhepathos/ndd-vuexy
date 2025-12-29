@@ -223,18 +223,45 @@ class CompraViagemController extends Controller
                 'allow_soap_purchase' => $this->ALLOW_SOAP_PURCHASE
             ]);
 
+            // BUSCAR ROTA SUGERIDA PRIMEIRO (independente de validação TCD)
+            // Progress: compraRota.p linha 432-475 - busca rota antes de qualquer validação
+            $rotaSugerida = null;
+
+            // Tenta pacsoc primeiro (pacote sociedade)
+            $rotaPacsoc = $this->progressService->getRotaSugeridaPorPacsoc($validated['codpac']);
+            if ($rotaPacsoc) {
+                $rotaSugerida = $rotaPacsoc;
+                Log::info('Rota sugerida encontrada via pacsoc', ['rota' => $rotaSugerida]);
+            }
+
+            // Se não achou por pacsoc, tenta via codrot do pacote
+            if (!$rotaSugerida) {
+                $rotaIntrot = $this->progressService->getRotaSugeridaPorIntrot($validated['codpac'], false);
+                if ($rotaIntrot) {
+                    $rotaSugerida = $rotaIntrot;
+                    Log::info('Rota sugerida encontrada via introt', ['rota' => $rotaSugerida]);
+                }
+            }
+
             // VALIDAÇÃO 1: Verifica se pacote é TCD (Progress: compraRota.p linha 216-227)
+            // CORREÇÃO: Mesmo retornando erro, incluir rota sugerida para o frontend usar
             if (!$validated['flgcd']) {
                 $isTCD = $this->progressService->isPacoteTCD($validated['codpac']);
                 if ($isTCD) {
-                    Log::warning('Tentativa de usar pacote TCD em modo normal', [
-                        'codpac' => $validated['codpac']
+                    Log::warning('Pacote é TCD - informando ao frontend', [
+                        'codpac' => $validated['codpac'],
+                        'rota_sugerida' => $rotaSugerida ? ($rotaSugerida['desspararrot'] ?? 'N/A') : null
                     ]);
 
+                    // Retorna sucesso=false mas inclui rota sugerida para auto-preenchimento
                     return response()->json([
                         'success' => false,
                         'error' => 'Pacote é TCD. Utilize o modo CD para este pacote.',
-                        'code' => 'PACOTE_TCD'
+                        'code' => 'PACOTE_TCD',
+                        'data' => [
+                            'is_tcd' => true,
+                            'rota_sugerida' => $rotaSugerida
+                        ]
                     ], 400);
                 }
             }
@@ -252,26 +279,11 @@ class CompraViagemController extends Controller
                     'code' => $result['code'] ?? 'UNKNOWN'
                 ]);
 
+                // Incluir rota sugerida mesmo em caso de erro
+                $result['data'] = $result['data'] ?? [];
+                $result['data']['rota_sugerida'] = $rotaSugerida;
+
                 return response()->json($result, 400);
-            }
-
-            // VALIDAÇÃO 3: Busca rota sugerida (Progress: compraRota.p linha 432-475)
-            $rotaSugerida = null;
-
-            // Tenta pacsoc primeiro
-            $rotaPacsoc = $this->progressService->getRotaSugeridaPorPacsoc($validated['codpac']);
-            if ($rotaPacsoc) {
-                $rotaSugerida = $rotaPacsoc;
-                Log::info('Rota sugerida encontrada via pacsoc', ['rota' => $rotaSugerida]);
-            }
-
-            // Se não achou por pacsoc, tenta introt
-            if (!$rotaSugerida) {
-                $rotaIntrot = $this->progressService->getRotaSugeridaPorIntrot($validated['codpac'], false);
-                if ($rotaIntrot) {
-                    $rotaSugerida = $rotaIntrot;
-                    Log::info('Rota sugerida encontrada via introt', ['rota' => $rotaSugerida]);
-                }
             }
 
             // Adiciona rota sugerida ao resultado

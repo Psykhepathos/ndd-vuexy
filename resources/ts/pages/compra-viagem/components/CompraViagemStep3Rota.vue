@@ -23,6 +23,7 @@ const modoCD = ref(false)
 const modoRetorno = ref(false)
 const loadingRotaMunicipios = ref(false)
 const erroValidacao = ref<string | null>(null)
+const isAutoPreenchendo = ref(false)  // Flag para ignorar watchers durante auto-preenchimento
 
 // Computed
 const isStepValid = computed(() => {
@@ -34,14 +35,22 @@ watch(isStepValid, (valid) => {
   emit('stepComplete', valid)
 })
 
-// Recarregar rotas quando modo CD muda
+// Recarregar rotas quando modo CD muda (ignorar durante auto-preenchimento)
 watch(modoCD, async () => {
+  if (isAutoPreenchendo.value) {
+    console.log('🔒 Ignorando watch modoCD durante auto-preenchimento')
+    return
+  }
   // Limpar tudo ao mudar modo
   limparRota()
   await carregarTodasRotas()
 })
 
 watch(modoRetorno, () => {
+  if (isAutoPreenchendo.value) {
+    console.log('🔒 Ignorando watch modoRetorno durante auto-preenchimento')
+    return
+  }
   // Se já tem rota selecionada e mudou retorno, precisa revalidar
   if (props.formData.rota.rota) {
     limparRota()
@@ -237,12 +246,14 @@ const limparRota = () => {
 // Lifecycle
 onMounted(async () => {
   console.log('🚀 Step3 montado')
-  await carregarTodasRotas()
+  console.log('📦 formData.pacote:', props.formData.pacote)
+  console.log('🎯 rotaSugerida:', props.formData.pacote?.rotaSugerida)
 
   // Inicializar com dados existentes se houver
   if (props.formData.rota.rota) {
     modoCD.value = props.formData.rota.modoCD
     modoRetorno.value = props.formData.rota.modoRetorno
+    await carregarTodasRotas()
     selectedRota.value = props.formData.rota.rota.sPararRotID
   }
   // AUTO-PREENCHIMENTO: Se há rota sugerida e nenhuma rota selecionada ainda
@@ -251,28 +262,65 @@ onMounted(async () => {
     const rotaSugerida = props.formData.pacote.rotaSugerida
     console.log('🎯 Auto-preenchendo rota sugerida:', rotaSugerida)
 
-    // Ajustar modo CD/Retorno baseado na rota sugerida
-    modoCD.value = rotaSugerida.flgcd || false
-    modoRetorno.value = rotaSugerida.flgretorno || false
+    // ATIVAR FLAG para ignorar watchers durante auto-preenchimento
+    isAutoPreenchendo.value = true
 
-    // Recarregar rotas com o modo correto se necessário
-    if (modoCD.value) {
+    try {
+      // CORREÇÃO: Ajustar modo CD/Retorno ANTES de carregar as rotas
+      // Se a rota sugerida é CD, precisa marcar modoCD = true para que ela apareça na lista
+      modoCD.value = rotaSugerida.flgcd || false
+      modoRetorno.value = rotaSugerida.flgretorno || false
+
+      console.log('🔧 Flags ajustados para rota sugerida:', {
+        modoCD: modoCD.value,
+        modoRetorno: modoRetorno.value
+      })
+
+      // Carregar rotas COM os flags corretos
       await carregarTodasRotas()
-    }
 
-    // Aguardar um tick para garantir que as rotas foram carregadas
-    await new Promise(resolve => setTimeout(resolve, 100))
+      // Aguardar um tick para garantir que as rotas foram carregadas
+      await new Promise(resolve => setTimeout(resolve, 100))
 
-    // Selecionar a rota sugerida automaticamente
-    const rotaId = rotaSugerida.spararrotid
-    if (rotaId && rotasOptions.value.some(r => r.value === rotaId)) {
-      console.log('✅ Selecionando rota sugerida automaticamente:', rotaId)
-      selectedRota.value = rotaId
-      // Chamar selecionarRota para validar e carregar municípios
-      await selecionarRota(rotaId)
-    } else {
-      console.warn('⚠️ Rota sugerida não encontrada nas opções:', rotaId)
+      // Selecionar a rota sugerida automaticamente
+      const rotaId = rotaSugerida.spararrotid
+      console.log('🔍 Buscando rota sugerida nas opções:', {
+        rotaId,
+        totalRotas: rotasOptions.value.length
+      })
+
+      // Verificar se a rota sugerida está nas opções carregadas
+      let rotaEncontrada = rotasOptions.value.some(r => r.value === rotaId)
+
+      // Se não encontrou, adicionar manualmente a rota sugerida às opções
+      if (!rotaEncontrada && rotaId) {
+        console.log('📌 Adicionando rota sugerida às opções manualmente')
+        rotasOptions.value.unshift({
+          value: rotaId,
+          title: rotaSugerida.desspararrot,
+          subtitle: `${rotaSugerida.flgcd ? 'CD' : 'Rota'} | ${rotaSugerida.tempoviagem || 0} dias`,
+          flgcd: rotaSugerida.flgcd,
+          flgretorno: rotaSugerida.flgretorno,
+          tempoviagem: rotaSugerida.tempoviagem
+        })
+        rotaEncontrada = true
+      }
+
+      if (rotaEncontrada) {
+        console.log('✅ Selecionando rota sugerida automaticamente:', rotaId)
+        selectedRota.value = rotaId
+        // Chamar selecionarRota para validar e carregar municípios
+        await selecionarRota(rotaId)
+      } else {
+        console.warn('⚠️ Rota sugerida não encontrada nas opções:', rotaId)
+      }
+    } finally {
+      // DESATIVAR FLAG após auto-preenchimento
+      isAutoPreenchendo.value = false
     }
+  } else {
+    // Sem rota sugerida - carrega rotas normais
+    await carregarTodasRotas()
   }
 })
 </script>

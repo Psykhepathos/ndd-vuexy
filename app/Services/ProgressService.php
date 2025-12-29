@@ -2762,39 +2762,44 @@ class ProgressService
      * Busca rota sugerida via semPararIntrot
      * Progress: compraRota.p linha 441-463
      *
-     * Fluxo Progress:
-     * 1. find first introt of pacote -> pega codrot do pacote
-     * 2. for each semPararIntrot where semPararIntrot.codrot = introt.codrot
+     * Fluxo Progress CORRIGIDO:
+     * 1. Busca codrot do PACOTE (pacote.codrot)
+     * 2. for each semPararIntrot where semPararIntrot.codrot = pacote.codrot
      * 3. first sempararrot where sempararrot.sPararRotID = semPararIntrot.sPararRotID
+     *
+     * CORREÇÃO: A tabela introt NÃO tem campo codpac. O codrot vem direto do pacote.
      */
     public function getRotaSugeridaPorIntrot(int $codpac, bool $flgRetorno = false): ?array
     {
         try {
-            // PASSO 1: Busca codrot do pacote (via tabela introt)
-            // Progress: find first introt of pacote no-lock
-            $sql = "SELECT TOP 1 i.codrot FROM PUB.introt i WHERE i.codpac = {$codpac}";
+            // PASSO 1: Busca codrot diretamente do pacote
+            // Progress: find first pacote where codpac = X -> pacote.codrot
+            $sql = "SELECT TOP 1 p.codrot FROM PUB.pacote p WHERE p.codpac = {$codpac}";
             $result = $this->executeCustomQuery($sql);
 
             if (!$result['success'] || empty($result['data']['results'])) {
-                Log::debug('Nenhum introt encontrado para pacote', ['codpac' => $codpac]);
+                Log::debug('Pacote não encontrado ou sem codrot', ['codpac' => $codpac]);
                 return null;
             }
 
             $codrot = $result['data']['results'][0]['codrot'] ?? null;
 
-            if (!$codrot) {
+            if (!$codrot || trim($codrot) === '') {
                 Log::debug('codrot vazio para pacote', ['codpac' => $codpac]);
                 return null;
             }
 
-            Log::debug('codrot encontrado', ['codpac' => $codpac, 'codrot' => $codrot]);
+            Log::debug('codrot encontrado no pacote', ['codpac' => $codpac, 'codrot' => $codrot]);
 
             // PASSO 2: Busca rota SemParar via semPararIntrot
-            // Progress: for each semPararIntrot where semPararIntrot.codrot = introt.codrot
+            // Progress: for each semPararIntrot where semPararIntrot.codrot = pacote.codrot
             // Filtro de retorno: index(sempararrot.desSPararRot,"RETORNO") = 0 ou > 0
+            // CORREÇÃO: Progress index() retorna posição (0 = não encontrado, >0 = posição)
+            // Para NÃO-RETORNO: index() = 0 significa que "RETORNO" não está no nome
+            // Para RETORNO: index() > 0 significa que "RETORNO" está no nome
             $filtroRetorno = $flgRetorno
-                ? "AND CHARINDEX('RETORNO', r.desSPararRot) > 0"
-                : "AND (CHARINDEX('RETORNO', r.desSPararRot) = 0 OR r.desSPararRot NOT LIKE '%RETORNO%')";
+                ? "AND r.desSPararRot LIKE '%RETORNO%'"
+                : "AND r.desSPararRot NOT LIKE '%RETORNO%'";
 
             $sql = "SELECT TOP 1 r.sPararRotID, r.desSPararRot, r.flgCD, r.flgRetorno, r.tempoViagem " .
                    "FROM PUB.semPararIntrot si " .

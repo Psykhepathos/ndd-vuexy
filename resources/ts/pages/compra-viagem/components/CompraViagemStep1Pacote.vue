@@ -123,10 +123,29 @@ const selecionarPacote = async (pacoteItem: any) => {
 
       // Extrair rota sugerida da validação (se disponível)
       // Progress compraRota.p linha 446: assign vRota:screen-value = semPararRot.desSPararRot
+      // CORREÇÃO: Backend agora retorna rota_sugerida mesmo quando pacote é TCD
+      console.log('📝 Resposta validação pacote:', validacaoData)
       let rotaSugerida = null
-      if (validacaoData.success && validacaoData.data?.rota_sugerida) {
+      let isTCD = false
+
+      // Captura rota sugerida independente do status de sucesso
+      if (validacaoData.data?.rota_sugerida) {
         rotaSugerida = validacaoData.data.rota_sugerida
-        console.log('Rota sugerida encontrada:', rotaSugerida)
+        console.log('✅ Rota sugerida encontrada:', rotaSugerida)
+      }
+
+      // Verifica se pacote é TCD
+      if (validacaoData.code === 'PACOTE_TCD' || validacaoData.data?.is_tcd) {
+        isTCD = true
+        console.log('⚠️ Pacote é TCD - modo CD será necessário no Step 3')
+      }
+
+      if (!rotaSugerida) {
+        console.warn('⚠️ Nenhuma rota sugerida no response:', {
+          success: validacaoData.success,
+          hasData: !!validacaoData.data,
+          rotaSugerida: validacaoData.data?.rota_sugerida
+        })
       }
 
       // Atualizar form data + AUTO-PREENCHER PLACA + ROTA SUGERIDA
