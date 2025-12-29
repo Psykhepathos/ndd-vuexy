@@ -58,7 +58,8 @@
       "Bash(Select-String -Pattern \"Resultado do geocoding\" -Context 2,5)",
       "Bash(php artisan cache:clear:*)",
       "Bash(git checkout:*)",
-      "Bash(pnpm run build)"
+      "Bash(pnpm run build)",
+      "Bash(Select-String -Pattern \"vpo-emissao|configurar-senha\")"
     ],
     "deny": [],
     "ask": []

@@ -41,6 +41,9 @@ const form = ref({
 const isPasswordVisible = ref(false)
 const isConfirmPasswordVisible = ref(false)
 
+// CASL Ability - inicializar no nível superior (como no login.vue)
+const ability = useAbility()
+
 // Validation
 const passwordRules = [
   (v: string) => !!v || 'Senha é obrigatória',
@@ -149,7 +152,6 @@ async function handleSubmit() {
     useCookie('accessToken', cookieOptions).value = data.accessToken
 
     // Atualizar ability (CASL) ANTES de navegar
-    const ability = useAbility()
     ability.update(data.userAbilityRules)
 
     successMessage.value = 'Senha configurada com sucesso! Redirecionando...'

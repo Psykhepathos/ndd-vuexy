@@ -452,13 +452,14 @@ class AuthController extends Controller
             ], 404);
         }
 
-        // Verificar se token expirou (24 horas)
-        if ($user->setup_token_expires_at && $user->setup_token_expires_at->isPast()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Token expirado. Solicite um novo link ao administrador.'
-            ], 410);
-        }
+        // TODO: Reativar expiração de token quando sistema estiver estável
+        // Verificar se token expirou (24 horas) - DESABILITADO TEMPORARIAMENTE
+        // if ($user->setup_token_expires_at && $user->setup_token_expires_at->isPast()) {
+        //     return response()->json([
+        //         'success' => false,
+        //         'message' => 'Token expirado. Solicite um novo link ao administrador.'
+        //     ], 410);
+        // }
 
         // Configurar senha
         $user->update([
@@ -538,14 +539,16 @@ class AuthController extends Controller
             ], 404);
         }
 
-        if ($user->setup_token_expires_at && $user->setup_token_expires_at->isPast()) {
-            return response()->json([
-                'success' => false,
-                'valid' => false,
-                'message' => 'Token expirado.',
-                'expired' => true
-            ], 410);
-        }
+        // TODO: Reativar expiração de token quando sistema estiver estável
+        // Verificação de expiração - DESABILITADO TEMPORARIAMENTE
+        // if ($user->setup_token_expires_at && $user->setup_token_expires_at->isPast()) {
+        //     return response()->json([
+        //         'success' => false,
+        //         'valid' => false,
+        //         'message' => 'Token expirado.',
+        //         'expired' => true
+        //     ], 410);
+        // }
 
         return response()->json([
             'success' => true,
