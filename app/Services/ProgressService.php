@@ -1169,6 +1169,67 @@ class ProgressService
         return null;
     }
 
+    /**
+     * Converte coordenadas GPS no formato Progress (arqrdnt) para decimal
+     * Segue EXATAMENTE a lógica do Rota.cls formatCoordinates (linhas 1020-1033)
+     *
+     * Formatos suportados:
+     * - "20,8683S" → -20.8683 (latitude sul)
+     * - "46,6521W" → -46.6521 (longitude oeste)
+     * - "-20.8683" → -20.8683 (já numérico)
+     * - "20.8683" → 20.8683 (já numérico)
+     * - "208683543" → -20.8683543 (formato antigo itinerario.p)
+     *
+     * @param mixed $coordinate Coordenada no formato Progress
+     * @return float|null Coordenada em formato decimal
+     */
+    private function formatCoordinatesProgress($coordinate): ?float
+    {
+        if ($coordinate === null || $coordinate === '') {
+            return null;
+        }
+
+        // Se já é float/int, retorna direto
+        if (is_numeric($coordinate) && !is_string($coordinate)) {
+            return (float)$coordinate;
+        }
+
+        $coord = trim((string)$coordinate);
+
+        // Formato Rota.cls: "20,8683S" ou "46,6521W"
+        // Se termina com S ou W, é negativo (sul ou oeste)
+        $isNegative = false;
+        if (preg_match('/[SW]$/i', $coord)) {
+            $isNegative = true;
+            $coord = preg_replace('/[SWswNnEe]$/', '', $coord);
+        } elseif (preg_match('/[NE]$/i', $coord)) {
+            $coord = preg_replace('/[NnEe]$/', '', $coord);
+        }
+
+        // Substituir vírgula por ponto
+        $coord = str_replace(',', '.', $coord);
+
+        // Tentar parse como float
+        if (is_numeric($coord)) {
+            $value = (float)$coord;
+            // Se já era negativo e encontramos S/W, manter negativo
+            // Se não era negativo e encontramos S/W, tornar negativo
+            if ($isNegative && $value > 0) {
+                $value = -$value;
+            }
+            return $value;
+        }
+
+        // Formato antigo itinerario.p: "208683543" → -20.8683543
+        $cleanCoord = preg_replace('/[^0-9]/', '', $coord);
+        if (strlen($cleanCoord) >= 8) {
+            $formatted = '-' . substr($cleanCoord, 0, 2) . '.' . substr($cleanCoord, 2);
+            return (float)$formatted;
+        }
+
+        return null;
+    }
+
     // ================================
     // MÉTODOS PARA ROTAS SEM PARAR
     // ================================
@@ -2395,59 +2456,100 @@ class ProgressService
                 'geocodificados' => count(array_filter($pontos, fn($p) => $p['latitude'] !== '0'))
             ]);
 
-            // PASSO 2.5: Buscar entregas do pacote com GPS (Rota.cls linha 716-797)
+            // PASSO 2.5: Buscar entregas do pacote com GPS (Rota.cls retornoCa linhas 276-393)
             // Só busca entregas se NÃO for rota CD (flgCD)
-            // ⚠️ IMPORTANTE: Para SemParar, enviamos apenas PRIMEIRA e ÚLTIMA entrega (não todas)
+            // ✅ CORREÇÃO: Query simplificada seguindo EXATAMENTE a lógica do Progress Rota.cls
             if (!$flgCD) {
-                Log::info('Buscando entregas do pacote com GPS', ['codpac' => $codPac]);
+                Log::info('Buscando entregas do pacote com GPS (query simplificada como Rota.cls)', ['codpac' => $codPac]);
 
-                $itinerario = $this->getItinerarioPacote($codPac);
+                // Query EXATA como Progress: carga -> pedido -> arqrdnt
+                // Rota.cls linha 321-333: FOR EACH carga OF pacote, EACH pedido OF carga, FIRST arqrdnt WHERE arqrdnt.asdped = pedido.asdped
+                $sqlEntregas = "SELECT ped.numseqped, ard.latitute, ard.longitude, ard.cidade " .
+                    "FROM PUB.carga car " .
+                    "INNER JOIN PUB.pedido ped ON ped.codcar = car.codcar " .
+                    "LEFT JOIN PUB.arqrdnt ard ON ard.asdped = ped.asdped " .
+                    "WHERE car.codpac = {$codPac} " .
+                    "AND ped.valtotateped > 0 AND ped.tipped != 'RAS' " .
+                    "ORDER BY ped.numseqped";
 
-                if ($itinerario['success'] && !empty($itinerario['data']['entregas'])) {
-                    $entregas = $itinerario['data']['entregas'];
+                try {
+                    // ✅ IMPORTANTE: Usar JDBC (executeCustomQuery), não ODBC (DB::connection)
+                    $resultEntregas = $this->executeCustomQuery($sqlEntregas);
 
-                    // Filtrar entregas com GPS válido
-                    $entregasComGPS = array_filter($entregas, function($entrega) {
-                        return !empty($entrega['gps_lat']) && !empty($entrega['gps_lon'])
-                            && $entrega['gps_lat'] !== null && $entrega['gps_lon'] !== null;
-                    });
+                    if (!$resultEntregas['success']) {
+                        Log::warning('Erro ao buscar entregas do pacote', [
+                            'codpac' => $codPac,
+                            'error' => $resultEntregas['error'] ?? 'Erro desconhecido'
+                        ]);
+                        $entregasRaw = [];
+                    } else {
+                        $entregasRaw = $resultEntregas['data']['results'] ?? [];
+                    }
 
-                    // Reindexar array após filter
-                    $entregasComGPS = array_values($entregasComGPS);
+                    Log::info('Entregas brutas encontradas', ['total' => count($entregasRaw)]);
 
-                    // ⚠️ CORREÇÃO: Enviar apenas PRIMEIRA e ÚLTIMA entrega ao SemParar
-                    // Progress: compraRota.p - "pego a primeira e a ultima"
-                    if (count($entregasComGPS) > 0) {
-                        // Primeira entrega
-                        $primeiraEntrega = $entregasComGPS[0];
-                        $pontos[] = [
-                            'cod_ibge' => '0',  // Entregas usam GPS, não IBGE
-                            'desc' => $primeiraEntrega['desend'] ?? $primeiraEntrega['razcli'],
-                            'latitude' => $primeiraEntrega['gps_lat'],
-                            'longitude' => $primeiraEntrega['gps_lon']
-                        ];
+                    // Processar entregas com GPS válido e remover duplicatas (como Rota.cls faz)
+                    $entregasComGPS = [];
+                    $cidadesJaAdicionadas = [];
+                    $coordsJaAdicionadas = [];
 
-                        // Última entrega (se for diferente da primeira)
-                        if (count($entregasComGPS) > 1) {
-                            $ultimaEntrega = $entregasComGPS[count($entregasComGPS) - 1];
-                            $pontos[] = [
-                                'cod_ibge' => '0',
-                                'desc' => $ultimaEntrega['desend'] ?? $ultimaEntrega['razcli'],
-                                'latitude' => $ultimaEntrega['gps_lat'],
-                                'longitude' => $ultimaEntrega['gps_lon']
-                            ];
+                    foreach ($entregasRaw as $entrega) {
+                        // Rota.cls formatCoordinates: converte "20,8683S" → "-20.8683"
+                        // JDBC retorna array associativo, não objeto
+                        $lat = $this->formatCoordinatesProgress($entrega['latitute'] ?? null);
+                        $lon = $this->formatCoordinatesProgress($entrega['longitude'] ?? null);
+
+                        // Pular se sem GPS
+                        if ($lat === null || $lon === null || $lat === 0.0 || $lon === 0.0) {
+                            continue;
                         }
 
-                        Log::info('Entregas adicionadas para SemParar (apenas primeira e última)', [
-                            'total_entregas_com_gps' => count($entregasComGPS),
-                            'enviadas_para_semparar' => count($entregasComGPS) > 1 ? 2 : 1,
-                            'total_pontos' => count($pontos)
-                        ]);
-                    } else {
-                        Log::info('Nenhuma entrega com GPS válido encontrada', ['codpac' => $codPac]);
+                        // Rota.cls linha 336-340: Verificar duplicatas por coordenada OU cidade
+                        $coordKey = round($lat, 4) . ',' . round($lon, 4);
+                        $cidade = strtoupper(trim($entrega['cidade'] ?? ''));
+
+                        // Se já existe essa coordenada ou cidade, pula
+                        if (isset($coordsJaAdicionadas[$coordKey]) || ($cidade && isset($cidadesJaAdicionadas[$cidade]))) {
+                            continue;
+                        }
+
+                        $entregasComGPS[] = [
+                            'numseqped' => $entrega['numseqped'],
+                            'lat' => $lat,
+                            'lon' => $lon,
+                            'cidade' => $cidade
+                        ];
+
+                        $coordsJaAdicionadas[$coordKey] = true;
+                        if ($cidade) {
+                            $cidadesJaAdicionadas[$cidade] = true;
+                        }
                     }
-                } else {
-                    Log::info('Nenhuma entrega encontrada no itinerário', ['codpac' => $codPac]);
+
+                    Log::info('Entregas com GPS válido após deduplicação', [
+                        'total_raw' => count($entregasRaw),
+                        'com_gps_unicas' => count($entregasComGPS)
+                    ]);
+
+                    // Adicionar TODAS as entregas únicas aos pontos (como Rota.cls faz)
+                    foreach ($entregasComGPS as $entrega) {
+                        $pontos[] = [
+                            'cod_ibge' => '0',  // Entregas usam GPS, não IBGE
+                            'desc' => $entrega['cidade'] ?: "Entrega {$entrega['numseqped']}",
+                            'latitude' => (string)$entrega['lat'],
+                            'longitude' => (string)$entrega['lon']
+                        ];
+                    }
+
+                    Log::info('Entregas adicionadas para SemParar', [
+                        'total_entregas_com_gps' => count($entregasComGPS),
+                        'total_pontos' => count($pontos)
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('Erro ao buscar entregas do pacote', [
+                        'codpac' => $codPac,
+                        'error' => $e->getMessage()
+                    ]);
                 }
             } else {
                 Log::info('Rota é CD (Centro de Distribuição), não busca entregas do pacote');
